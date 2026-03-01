@@ -1,0 +1,128 @@
+
+16
+Laryngeal Registration 
+Revisited
+!is text is deliberately focused on voice acoustics, with minimal 
+reference to other crucial biomechanical aspects of voice pedagogy 
+(anatomy, breathing, etc.), all of which are important in their own right 
+and interact signi/f_icantly with the acoustics of production. However, 
+laryngeal registration is so directly involved in and interactive with 
+voice source acoustics, it will receive some brief attention here. From an 
+acoustic point of view, what is needed from the voice source is a clean, 
+relatively clear excitation of the vocal tract air column with a spectral slope 
+appropriate to the range and dynamic level required for the situation. !e 
+singer must also be capable of traversing the range without perceptibly 
+abrupt changes in the source spectral slope, even when crossing from 
+one vibrational mechanism to another, such as from “chest” to “head. ” 
+Acoustic interaction and feedback are o/f_ten involved in smoothing these 
+transitions, but we should /f_irst consider the necessary muscular valve 
+adjustments themselves.
+Muscle Action
+A prominent theory postulates that the two primary, mutually antagonistic 
+muscular functions of the larynx that shape and tauten the vocal folds—
+the shortening, thickening TA ’s and the lengthening, thinning CT’s—
+cooperate in an overlapping middle range to achieve a smooth “baton 
+exchange” by very gradually shi/f_ting the proportions of their involvement, 
+PRAA.indb   141PRAA.indb   141 7/10/2025   4:38:58 PM7/10/2025   4:38:58 PM
+Practical Vocal Acoustics  142
+Laryngeal Registration Revisited
+all while the muscles that approximate the vocal folds typically maintain 
+competent, comfortable closure. !ough perceptually smooth register 
+transitions are heard in performances of excellent singers, a perfectly 
+smooth transfer of muscle activity, in which one group tapers involvement 
+gradually down to zero, has rarely been measured. !ere is almost always 
+a point at which a binary toggle from greater to thinner vocal fold 
+contact is measurable, even when accomplished essentially inaudibly. 
+!ere is probably an aerodynamic or acoustic factor at play that triggers 
+this observable change. Nevertheless, it is both an important goal and a 
+fruitful strategy to practice absolute perceptual smoothness of laryngeal 
+registration across range.
+Downstream Resistors and  
+Semi-Occluded Vocal Tracts
+One eﬀective approach to smoothing range negotiation is to glissando 
+across the entire range using some helpful downstream resistor or semi-
+occluded vocal tract articulation. A downstream resistor is any articulator 
+position or function that requires or resists air&ow and is downstream 
+from the vocal folds, that is, nearer to or at the lips. If the resistor is a 
+vibrator, like a tongue or lip trill, it will require steady air&ow and pressure 
+to maintain oscillation. !e vocal folds must allow enough &ow through 
+the glottis to be in balance with the downstream resistor, whose semi-
+occlusion generates a back pressure that bene/f_icially reduces the upstream 
+transglottal pressure diﬀerence. A semi-occluded articulation at or near 
+the lips or at the dorsum/palatal narrowing can increase inertive reactance, 
+lowering the phonation threshold pressure (the amount of pressure needed 
+to bring the vocal folds into vibration). Either strategy reduces pressed 
+phonation. Downstream resistors or semi-occluded articulations that can 
+be used in glissandi for smoothing laryngeal register shi/f_ts include:
+ 1) Tongue trills
+ 2) Lip trills/raspberries/blubbering
+ 3) Phonating through a short straw
+ 4) A buzzy hum or buzzing through a lightly bite-held lower lip 
+(modi/f_ied [v])
+PRAA.indb   142PRAA.indb   142 7/10/2025   4:38:58 PM7/10/2025   4:38:58 PM
+ Laryngeal Registration Revisited 143
+ 5) “Kazooing” through a tiny [w] or fricative [β] (“puﬀy cheeks”)
+ 6) Open-mouthed [ŋ] or other nasal consonants such as [n m]
+Motivating Laryngeal Stability
+With any of these glissandi, care should be taken to facilitate a &exible, 
+comfortable stability in which the larynx does not rise appreciably when 
+approaching the primary register transition zone (ca. B3-G4). !is can 
+be helped by motivating the phonation in that transitional range with 
+expressive in&ection or with aﬀects that stabilize the throat shape and 
+laryngeal depth, such as:
+ 1) Self-pitying whimper
+ 2) “Up to no good but pleased with yourself ” mischief
+ 3) Suppressed laughter
+ 4) Sobbiness
+ 5) Hilarity
+!ese aﬀects can apparently be done rather strongly without the risk of 
+injury or even of muscle rigidity. As with yawning, these aﬀective actions 
+are physically self-limiting, with muscles working in supple antagonism to 
+inherent tissue elasticity. !ough the student may be instinctively inclined 
+to relax aﬀective positioning when opening for the upper range, resonance 
+and vocal tract structural poise are better served by strengthening the 
+aﬀect with ascent as occurs “in the wild. ” !e expressional migration of 
+aﬀect motivates pitch change.
+Laryngeal Registration Goals
+!e goals of laryngeal registration are a clean, clear, light voice source 
+“buzz” that migrates from buzzier to smoother throughout the entire 
+compass, with no pressure surges, minimal pressure increase, and with a 
+stable larynx and throat space. Maintaining throat poise when ascending 
+through the zona di passaggio  may need to be more deliberate . Since 
+semi-occluded exercises are not executed on open-mouthed vowels, they 
+PRAA.indb   143PRAA.indb   143 7/10/2025   4:38:58 PM7/10/2025   4:38:58 PM
+Practical Vocal Acoustics  144
+moderate some of the acoustic eﬀects that might otherwise destabilize 
+register transitions. !is allows the focus of attention to be exclusively on 
+the smoothness and ease of a voice source that is acoustically organized 
+across the range.
+Glissandoing on a vowel poses more challenges but would be the next 
+step a/f_ter downstream resistors. It is usually easier to glissando on naturally 
+convergent vowels, such as [i], provided the mouth is opened gradually 
+and su#ciently to formant track 1 fo a/f_ter arrival in whoop timbre for 
+pitches above fR1. All vowels will necessarily migrate in timbre across range 
+with an increase in the vowel’s complementary tone color relative to its 
+identifying target tone color. !e complementary tone color for most 
+vowels is the lower, /f_irst formant contribution, which adds a warming, 
+rounding, and possibly neutralizing element. Language targets, originating 
+at speech range, cannot be aggressively maintained without risking higher 
+pressure and glottal resistance levels. Nonetheless, intelligible diction is 
+possible for most voices surprisingly high. Pitches sung above the treble 
+clef will have reduced vowel de/f_inition options.
+The Use of Nasalance
+!e use of a subtle amount of nasalance can assist with training laryngeal 
+register transitions across range, at least in SOVT vocal explorations. 
+Nasalance broadens and weakens the intensity of the /f_irst resonance and 
+the percentage of its resultant warming, rounding, /f_irst formant tone 
+color contribution (Sundberg et al. 2016). !is has two eﬀects: a weaker 
+/f_irst resonance reduces its potential to acoustically destabilize phonation 
+at laryngeal register shi/f_ts; its weakening also creates the impression 
+of strengthening the timbral singer’s formant cluster contribution, 
+brightening the overall timbral mix percept. !ough smooth laryngeal 
+registration can be successfully negotiated and trained without the use 
+of nasalance, judicious use of it in early training can be a very bene/f_icial 
+exploratory strategy. Its persistence in the /f_inished product of unampli/f_ied 
+singing is controverted as potentially compromising overall power (Perna 
+2020) and risking an undesirable percept of actual nasality.
+PRAA.indb   144PRAA.indb   144 7/10/2025   4:38:58 PM7/10/2025   4:38:58 PM
+Practical Vocal Acoustics

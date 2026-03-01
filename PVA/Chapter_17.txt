@@ -1,0 +1,1642 @@
+
+17
+Instructional Technology
+As mentioned in the introduction, instructional technology is now 
+readily available, inexpensive, and rather user-friendly. Each application 
+or program does take some training to understand its most appropriate 
+uses. Other texts have written more extensively on this, but this chapter 
+will give a summary of two instruments and their use.
+The Madde Voice Synthesizer
+!roughout this text, explorations using the Madde [m ɑdːə] voice 
+synthesizer have been recommended to illustrate both aurally and visually 
+various aspects of vocal acoustics. !is author considers Madde to be a 
+most helpful tool for vocal acoustics explanations ( Figure 17.1 ). It is a 
+free shareware product from Swedish engineer Svante Granqvist and is 
+programmable to represent any voice type on any vowel singing any pitch 
+within a standard keyboard. Madde clearly displays both harmonics  (with 
+numbered lines) and formants (with shaded bands) above a keyboard, 
+an especially musician-friendly feature. !is format provides the 
+simplest, most direct way to model and explain to students the eﬀects of 
+harmonic:resonance interactions so crucial to acoustic vocal registration. 
+Madde can also be useful for occasional explanations in the studio and 
+even for audio demonstrations of harmonic:resonance interactions and 
+the passive vowel migrations that accompany them, but it is especially 
+well-suited for voice pedagogy classes. Madde can be used to illustrate 
+(1) the eﬀect of the sung pitch on the number of harmonics available for 
+resonation per primary audible range, (2) the roll-oﬀ (tilt) in power of the 
+PRAA.indb   145PRAA.indb   145 7/10/2025   4:38:58 PM7/10/2025   4:38:58 PM
+Practical Vocal Acoustics  146
+Instructional Technology
+source harmonics, (3) the eﬀect of the presence or absence of resonances/
+formants, and (4) the aural eﬀects of all harmonic:resonance interactions.
+Limitations of Madde
+Madde and Modes of Phonation
+Madde can roughly model diﬀerent vibrational mechanisms (head or 
+chest) by varying the tilt or “roll-oﬀ ” of the voice source (see Appendix 1: 
+Madde Exploration 2) and, to some extent, modes of phonation (pressed, 
+breathy, &ow). However, since the voice source input of harmonics in 
+Madde is always “clean” or noise-free, it cannot accurately model breathy 
+phonation, which typically has an air-noise element. Since no muscles are 
+involved in its voice source, neither can it really model all of the timbral 
+changes that accompany pressed phonation.
+Madde and Non-Linearity
+Madde is strictly linear (non-interactive) and therefore cannot model 
+the eﬀects of non-linearity on the voice source or on resonation. In other 
+Figure 17 .1 Madde voice synthesizer, displaying voice source harmonics 
+(numbered lines) and formants (shaded bands) just above the keyboard.
+PRAA.indb   146PRAA.indb   146 7/10/2025   4:38:58 PM7/10/2025   4:38:58 PM
+ Instructional Technology 147
+words, the resonances/formants one programs do not cause changes in 
+the source input—as can happen in a human voice—but merely selectively 
+resonate its harmonic spectral content.
+Madde and Vibrato
+Since Madde’s programmed vibrato cycles—though adjustable in rate 
+and extent—are essentially uniform, audible pitch undulations are more 
+apparent and distracting than in a real voice with an ideal vibrato. With 
+actual voices, minute waveform variability can help to create a perceptual 
+“singleness of pitch, ” if rate and extent parameters are within certain limits. 
+!at is to say, a tone can be consistently vibrant (have measurable, regular 
+frequency undulations) without perceivable pitch undulation. Bear in mind 
+that pitch is not the same as frequency. It is the term for our perception of 
+frequency. In a real voice, if the vibrato frequency is close to six per second 
+and the extent (excursion above and below the target frequency) is a semi-
+tone or less, while we perceive that something is moving, the pitch sounds 
+stable and steady rather than wobbly or tremulous. One student described 
+his perception upon hearing an ideal vibrato as “movement within the pitch 
+rather than movement of the pitch. ” !is is analogous to our perceiving a 
+smoothly moving picture when, in fact, twenty-four still frames per second 
+are &ashed on the screen in the theater. Perceptual and actual phenomena 
+diverge. Madde does not replicate this “singleness of pitch” phenomenon.
+In spite of these few limitations, because of its musician-friendly keyboard 
+display and general excellence of design, Svante Granqvist’s Madde voice 
+synthesizer is an outstanding instructional tool—one of the best available to 
+date—for acoustics presentations/explanations for undergraduate voice 
+pedagogy classes or for any audience. It is recommended that you download 
+and use Madde for the explorations described in this text for the best 
+understanding of the principles and sounds being discussed. Madde can be 
+downloaded to PCs or to Macs that can handle Windows applications from 
+the following site:
+http://www .tolvan .com1
+Spectrography
+!e instructional technology that is the simplest to read and so far the 
+most useful for the voice studio is real-time spectrography . Real-time 
+PRAA.indb   147PRAA.indb   147 7/10/2025   4:38:58 PM7/10/2025   4:38:58 PM
+Practical Vocal Acoustics  148
+means that the analysis is simultaneous and the image display immediate—
+essentially as the sound is happening, that is, in real-time. Spectrography is 
+an analysis of sound that isolates the frequency components of the sound 
+and displays them on the vertical dimension, with higher frequencies 
+lying higher across the graph, and lower frequencies lying lower. Time 
+moves horizontally across the graph, with the present instant entering on 
+the right edge of the screen and then scrolling to the le/f_t. Saved images are 
+then read from le/f_t (earliest sound) to right (most recent sound). A third 
+dimension—the intensity or power of the frequency components—is 
+displayed on a color or darkness scale. Of all the ways we analyze and graph 
+sound, so far, the spectrographic image is visually the most analogous to 
+sound over time, and therefore the most approachable, understandable, 
+and even intuitive for students. With minimal initial explanation, students 
+can both see and hear important characteristics of their singing in the 
+playback, leading to productive commentary or discussion. !is author 
+experimented with real-time spectrography starting in 1989 and had the 
+privilege of using spectrography in his voice studio from 1993 until 2019. 
+It was as ever-present as the mirror on the wall and was referred to at a 
+comparable rate—that is, only as needed and when helpful.
+VoceVista
+Real-time spectrography is readily available from various sources in 
+various forms, including the deservedly popular VoceVi sta Video Pro  
+program, developed by Donald Miller, Harm Schutte, and their research 
+team in Groningen, Netherlands, and managed and updated by engineer 
+Bodo Maas. (Figure 17.2). If the program’s analysis parameters are set to 
+display a narrow frequency bandwidth (see De/f_initions), which is the 
+default setting for Voce Vista, individual harmonics of the fundamental 
+frequency are modeled and easily seen &owing horizontally across 
+the screen, and therefore characteristics of vibrato and vocal line can 
+be monitored and evaluated. While broad bandwidth  settings more 
+accurately model the individual impulses of the voice and show vocal 
+tract formants even more clearly, formants are usually reasonably 
+apparent with the narrow width default settings, especially for low and 
+mid-range pitches, such that overall resonance and resonance balance  
+can also be monitored with them. Durational parameters can be set to 
+PRAA.indb   148PRAA.indb   148 7/10/2025   4:38:59 PM7/10/2025   4:38:59 PM
+ Instructional Technology 149
+save short segments of time for near immediate retrieval, listening, and 
+viewing. Continuity and consistency of vibrancy, brevity of consonantal 
+interruption, and consistency of resonance balance, among other things, 
+can be readily seen and heard on playback.
+Power Spectra
+If more detailed display or research is needed, a power spectrum  
+display, and even electroglottography  (EGG) can be used (both 
+available with VoceVista). Power spectra display power or intensity 
+on the vertical and frequency (spectrum) on the horizontal. Unlike 
+spectrography, which graphs segments of time on the horizontal, power 
+spectra usually only graph an instant (either the present instant or an 
+instant selected from a saved spectrograph) of time. Power spectra can 
+therefore show formants, harmonics, and their relative strengths in 
+great detail ( Figure 17.3 ).
+Figure 17 .2 VoceVista real-time spectrography, with frequency on the 
+vertical, time on the horizontal, intensity on the color scale, and the 
+pressure waveform displayed above.
+PRAA.indb   149PRAA.indb   149 7/10/2025   4:38:59 PM7/10/2025   4:38:59 PM
+Practical Vocal Acoustics  150
+Electroglottography (EGG)
+Electroglottography is a charting of the amount of glottal contact in 
+each vibratory cycle, from which a closed quotient (percentage of time 
+the glottis is closed), contact quotient (amount of glottal contact), and 
+laryngeal register can be postulated. Data is collected by means of a small 
+electric current passing between two electrodes placed one on either side 
+of the larynx. !e greater the conductivity between them, the greater the 
+vocal fold contact. Chest voice has greater vocal fold contact and a larger 
+contact quotient than head voice. !erefore, one can—roughly at least—
+estimate vibrational mechanism from the contact quotient.
+!ough EGG signals can give very speci/f_ic information about laryngeal 
+registration and its coordination with acoustic factors, both of which are 
+essential in ongoing research, it is not yet clear that what electroglottography 
+adds is su#ciently crucial to application to be necessary for regular weekly 
+lesson use. For more information on EGG (as well as for any matters of 
+vocal resonance), this author highly recommends Donald Miller’s 
+Figure 17 .3 VoceVista with waveform (top left), spectrograph (bottom 
+left), and power spectrum (right) displayed. The vertical time cursor on 
+the left selects the moment being displayed on the power spectrum. The 
+short horizontal frequency cursor on the spectrograph (the third harmonic 
+from the bottom) becomes the vertical cursor on the power spectrum.
+PRAA.indb   150PRAA.indb   150 7/10/2025   4:39:00 PM7/10/2025   4:39:00 PM
+ Instructional Technology 151
+Resonance in Singing.  (See Selected References). Suggested uses of 
+VoceVista in the studio will be addressed below.
+Studio Uses of Voce Vista
+VoceVista is a powerful, well-designed tool for voice analysis and research. 
+As argued earlier, real-time spectrography—which is available from various 
+sources including VoceVista—is currently the most intuitively analogous way 
+to graph a number of pedagogically relevant sound characteristics visually. 
+With frequency on the vertical, time on the horizontal, and intensity on 
+the color or brightness scale, its display is understandable and readable by 
+students a/f_ter minimal training. Very practical matters of vocal line are readily 
+apparent: continuousness and consistency of vibrancy, dynamic shaping, 
+duration of any interruption of the tonal &ow, and at least in a general sense, 
+timbral balance. !is author therefore has real-time spectrography running 
+essentially continuously in lessons as the standard technology for playback. 
+If a more detailed look at the relative strength of harmonics is needed, 
+a screen display that includes power spectrum can be selected. A power 
+spectrum typically displays one instant of time, with power (intensity) on the 
+vertical and frequency (spectrum) on the horizontal. VoceVista very handily 
+coordinates the spectrograph display with the power spectrum display so 
+that one can scroll through the time dimension of the spectrograph and 
+examine each instant in detail on the power spectrum.
+Spectrographic display is best for assessing:
+ 1) Vibrancy (immediacy, consistency, continuity)
+ 2) Vocal line (tonal and general timbral continuity)
+ 3) General sense of overall resonance
+ 4) General presence and strength of the singer’s formant cluster
+!ings that spectrography is not best suited for include:
+ 1) Close comparisons between fairly similar vowels (power spectra 
+are better).
+ 2) Subtle timbral distinctions.
+ 3) Determining which sounds are correct (your trained ear decides. 
+!e picture may or may not show evidence, depending upon the 
+nature and degree of diﬀerence).
+PRAA.indb   151PRAA.indb   151 7/10/2025   4:39:00 PM7/10/2025   4:39:00 PM
+Practical Vocal Acoustics  152
+ 4) Best laryngeal height (your ear, eye, and the student’s freedom of 
+function are better).
+ 5) Precise resonance:harmonic interactions (power spectra and your 
+ear are better).
+!at said, the audio playback of VoceVista that accompanies the visual 
+display is good enough to “complete the picture” of most issues being 
+discussed. Ultimately, it is the sound—and accompanying freedom and 
+comfort of sensation—that determine the success of the singing being 
+evaluated. Spectrography doesn’t tell you what is good, bad, or indiﬀerent. 
+It simply displays what is. !e teacher and student look, listen and discuss 
+to determine what the sounds and the graph are re&ecting.
+Note
+1 Unfortunately at publication date, Madde no longer works with every PC 
+operating system, nor with Mac computers.
+PRAA.indb   152PRAA.indb   152 7/10/2025   4:39:00 PM7/10/2025   4:39:00 PM
+Deﬁnitions
+Absolute spectral tone color: the characteristic of individual frequencies 
+to be perceived by humans as having a speci/f_ic vowel-like quality, relative 
+height, and relative darkness or brightness. For example, low-frequency 
+harmonics have a dark [~u]-like quality; high frequencies have a bright 
+[~i]-like quality. Vowels are perceived to be a combination of the absolute 
+spectral tone colors of the harmonics being reinforced by the /f_irst and 
+second resonances of the vocal tract and featured as the /f_irst and second 
+formants in the radiated sound. !is approximation of a vowel quality is 
+indicated by a tilde plus the vowel. (Howell 2016)
+Acoustic coupling: coupling of a vocal tract resonance with a source 
+harmonic.
+Acoustic registration: the timbral transitions that occur as a result of 
+resonance:harmonic interactions. All acoustic register events involve 
+harmonic interactions with the /f_irst resonance. Many also involve 
+interaction with the second resonance.
+Acoustic registers: vocal registers due exclusively to relationships between 
+acoustic parameters, speci/f_ically the harmonics of the fundamental 
+frequency relative to the /f_irst resonance of the vocal tract. See: open timbre 
+(voce aperta), close timbre (voce chiusa), and whoop timbre.
+Active vowel modi/f_ication: a change in the vowel quality accomplished 
+by moving the vowel formants from their normal speech locations by 
+means of changes in the shape of the vocal tract in an attempt to /f_ind 
+better (more resonant) resonance:harmonic matches.
+Aﬀect: emotive expression, important for the spontaneous motivation 
+and organization of voice and the maintenance of the pharyngeal poise 
+necessary for vocal tract stability across range and vowels.
+PRAA.indb   153PRAA.indb   153 7/10/2025   4:39:00 PM7/10/2025   4:39:00 PM
+ Deﬁnitions 154
+Antinode: see pressure antinode.
+Articulation: in speech and singing, the shaping or tuning of the vocal 
+tract to modify the /f_iltered voice source signal; articulation also includes 
+how the tongue, lips, jaw, and other speech organs are involved in the 
+production of speech sounds.
+Aryepiglottic exit:  the mouth of the epilarynx, formed by the tissues 
+connecting the epiglottis with the arytenoids. A narrowing of the 
+aryepiglottic exit is associated with a boost in upper partials from the 
+voice source. Along with other perturbations further downstream along 
+the vocal tract, it is part of the resonance strategy of the singer’s formant 
+cluster in unampli/f_ied Western classical singing and possibly also of the 
+ring or twang of belt production.
+Auditory roughness:  the psychoacoustic percept of buzziness due to 
+closely clustered (usually harmonic) frequencies, that is, frequencies a 
+minor third or less apart (harmonics ( 6fo). Auditory roughness migrates 
+from rough low to smooth high across range, register, and voice type, 
+and is associated with laryngeal registers: rough with “chest voice, ” an 
+intermediate sizzle with “mix, ” and smooth with “head voice. ”
+Bandwidth: a tube resonance has a certain frequency range contour; that 
+is, it will reinforce frequencies on either side of its peak frequency response, 
+covering a range of frequencies. If the contour of the resonance is a tall, 
+narrow peak, it has a narrow bandwidth with higher potential intensity. 
+If its contour is rounder, it has a broad bandwidth  with less potential 
+intensity. Brass instrument resonances have very narrow bandwidths and 
+will therefore only pass speci/f_ic harmonics of a given tube through but 
+with higher intensity. Vocal tract resonances and formants typically have 
+wider bandwidths, allowing more voice source harmonics through on 
+either side of the peak formant frequency.
+Belting: a singing style with a mechanism one dominant laryngeal 
+registration, prioritizing the extension of a bright, speech-like timbre 
+higher, using an acoustic strategy in which the /f_irst resonance tracks the 
+second harmonic; in other words, a kind of skillful yelling or calling. 
+Some form of belting is prevalent in many forms of popular, folk, and 
+world music and in American musical theater.
+PRAA.indb   154PRAA.indb   154 7/10/2025   4:39:00 PM7/10/2025   4:39:00 PM
+Deﬁnitions 155
+Belt mix: a delayed (higher) version of close timbre, in which the second 
+harmonic of the voice source lies between the /f_irst and second resonances, 
+and the second resonance highlights a higher source harmonic, enabling 
+the singer to extend a belt-like, bright timbre into the top of the treble clef 
+and above.
+Breathy phonation: (see Mode of phonation)
+Chesty: (see Laryngeal register)
+Chiaroscuro: an Italian term meaning “bright-dark” or “clear-dark” 
+borrowed from art history to describe an ideal resonance balance between 
+low and high-frequency components in Western classical singing. It is 
+usually accomplished (in middle and lower ranges) by some balance in 
+power between the /f_irst formant and the singer’s formant cluster. Also 
+termed chiaroscuro balanced resonance.
+Closed Quotient: the average percentage of time the glottis is closed 
+during one vibratory cycle. A large closed quotient would usually indicate 
+a chestier laryngeal register with a short, thick vocal fold shape (vibrational 
+mechanism one). A smaller closed quotient would usually indicate a 
+headier laryngeal register with a long, thin vocal fold shape (vibrational 
+mechanism two). (See Contact quotient)
+Close: as a verb, to close; an acoustic concentration of the sound that occurs 
+when a source harmonic, particularly the second harmonic, surpasses the 
+/f_irst vocal tract resonance. Also called covering or turning over.
+Close timbre: a vocal quality and acoustic register in which the second 
+harmonic has risen above the /f_irst resonance peak or /f_irst formant, causing 
+the voice to seem to “turn over. ” Also termed voce chiusa in Italian. Belt 
+“mix” is a variant of close timbre.
+Close vowel: a vowel with a low /f_irst formant, such as [i] and [u], and an 
+inherently convergent resonator shape.
+Closed phase: the portion of a periodic glottal cycle during which the 
+glottis is closed and air&ow is zero.
+PRAA.indb   155PRAA.indb   155 7/10/2025   4:39:00 PM7/10/2025   4:39:00 PM
+ Deﬁnitions 156
+Contact quotient: the degree of vocal fold tissue in contact in a given 
+vibratory cycle. A large contact quotient would usually indicate a chestier 
+laryngeal register with a short, thick shape (vibrational mechanism one). 
+A smaller contact quotient would usually indicate a headier laryngeal 
+register with a long, thin shape (vibrational mechanism two). !ough 
+related to closed quotient, it is possible to have a high contact quotient 
+without complete glottal closure, or a high closed quotient (duration 
+of closure) without deep contact, but it is more typical to have a high 
+closed quotient when there is a high contact quotient. EGG displays 
+contact quotient reliably, from which closed quotient may be less reliably 
+inferred.
+Contemporary Commercial Music (CCM): popular music genres other 
+than Western classical.
+Convergent resonator: a vocal tract shape, which for the vowel being 
+produced is relatively more open near the glottis and narrower near the 
+lips (like an inverted megaphone). Such a resonance strategy is typical of 
+unampli/f_ied Western classical singing and voce chiusa.
+Coup de glotte: a clean, gentle glottal onset, in which the vocal folds close 
+immediately prior to phonation; the most e#cient, expressive way to 
+onset phonation; advocated by Manuel Garcia.
+Cover: the timbral shi/f_t corollary to the ascending fR1:2fo crossing, also 
+termed “turning over” or “closing, ” and causing a more internal and less 
+“exposed” timbral and somatosensory percept.
+Cricothyroid muscles (CT): (see Laryngeal register)
+Declarative knowledge: the relatively objective, measurable, quantitative 
+knowledge of physical realities, such as vocal physiology and acoustics. 
+Such knowledge is available to scienti/f_ic investigation and clear, 
+straightforward articulation. (see Procedural knowledge.)
+Depth: a description of the timbre of a sound that has signi/f_icant strength 
+in one of its lowest harmonics, as resonated by the /f_irst resonance and 
+featured as the /f_irst formant.
+PRAA.indb   156PRAA.indb   156 7/10/2025   4:39:00 PM7/10/2025   4:39:00 PM
+Deﬁnitions 157
+Divergent resonator: a description of a resonator shape that is smaller in 
+the pharynx and more open nearer the lips. Open vowels are inherently 
+divergent in shape. !is resonance strategy is more typical of musical 
+theater as well as many world music singing styles.
+Downstream resistor: any articulator position or device that resists 
+air&ow to some extent that is downstream from the vocal folds, that is, 
+nearer to or at the lips. Downstream resistors share the pressure load from 
+the lungs with the vocal folds, necessitating higher air&ow through the 
+glottis, reducing the transglottal pressure diﬀerence, thus discouraging 
+pressed phonation. (See also Semi-occluded vocal tract)
+Electroglottography (EGG): a charting of the amount of glottal contact 
+in each vibratory cycle, from which a closed quotient (the percentage 
+of time the glottis is closed) and laryngeal register can be postulated. 
+Data is collected by means of a small electric current passing between 
+two electrodes placed one on either side of the larynx. !e greater the 
+conductivity between them, the greater the vocal fold contact. Chest 
+voice (mechanism one) has greater vocal fold contact and a larger contact 
+quotient than head voice (mechanism two).
+Epilarynx, epilaryngeal tube: the short tube formed by the epiglottis 
+and the aryepiglottic folds and arytenoids just above the vocal 
+folds. !e epilarynx forms a small tube within the larger tube of the 
+laryngopharynx. Narrowing of the aryepiglottic opening (the exit of the 
+epilarynx) increases acoustic reactance and boosts higher frequencies. It 
+is surrounded by the piriform sinus spaces and valleculae, both of which 
+create anti-resonances.
+Fach: a German term for speci/f_ic voice categories, such as soubrette 
+soprano, Heldentenor, Verdi baritone, and so on, which are determined 
+by the tessitura capacity, vocal “weight, ” and timbre of a voice. !e overall 
+location of vocal tract formants, as well as the speci/f_ic location of the 
+singer’s formant cluster are signi/f_icant factors in determining quality and 
+therefore the Fach of a singer.
+Filter function: the characteristic of the vocal tract sound transfer function 
+to selectively prefer and pass some frequencies through over others, and 
+PRAA.indb   157PRAA.indb   157 7/10/2025   4:39:00 PM7/10/2025   4:39:00 PM
+ Deﬁnitions 158
+of the periodic vocal fold oscillation to reinforce those frequencies in sync 
+with its periodicity.
+First formant: the lowest radiated spectral peak of a voice, typically C4 
+or above. Most /f_irst formants lie in contact with the treble clef and cover 
+about one octave from the lowest of an [i] to the highest of an [a].
+Flow phonation: (see Mode of phonation)
+Formant: a frequency peak in the radiated spectrum, caused by a natural 
+resonance of the vocal tract, that is, by a standing wave of the quarter-
+wave resonator.
+Vowel formants: the /f_irst (lowest) two formants are the most easily tunable 
+and also span the range of all relevant vowel-like tone colors; therefore, 
+they are the most signi/f_icant in de/f_ining the vowel quality of a sound. 
+Together they are called the vowel formants.
+Singer’s formant cluster (SFC): a clustering of formants three and above 
+(usually formants 3–5) generated by a low larynx, open laryngopharynx, 
+narrowed epilaryngeal tube exit, and various additional perturbations 
+along the vocal tract length, that results in an increase in power in the 
+high-frequency components of a sung sound. It is especially characteristic 
+of non-treble voices in Western classical singing, enabling them to carry 
+over orchestral accompaniment.
+Formant detuning: the tuning of a resonance frequency peak away from 
+a harmonic to weaken its eﬀect. Used with F2 in the upper range of treble 
+voices to reduce shrillness and with F1 in non-treble voices and some 
+CCM aesthetics, such as belting, to avoid whoop timbre on close vowels.
+Formant tracking: the tuning of a resonance to follow or track a speci/f_ic 
+harmonic, such as fR1:1fo tracking of whoop timbre (upper treble voice 
+strategy) or fR1:2fo tracking of the yell or belting.
+Formant tuning: the tuning of one or both of the /f_irst two resonances in 
+order to /f_ind a better resonance:harmonic match and formant radiation 
+for more e#cient output.
+PRAA.indb   158PRAA.indb   158 7/10/2025   4:39:00 PM7/10/2025   4:39:00 PM
+Deﬁnitions 159
+Front-back vowel designation: a description either of a physical 
+articulatory characteristic (a fronted tongue dorsum-palatal-narrowing 
+versus a tongue hump further back), or of an acoustic characteristic (a 
+sound with a high second formant and therefore stronger high partials, 
+i.e., a front vowel; or a low second formant and therefore weaker high 
+partials and potentially stronger low partials, i.e., a back vowel).
+Fullness: a typical descriptor of a sound with signi/f_icant strength in its 
+lowest harmonics, as featured by the /f_irst resonance as the /f_irst formant. 
+Other similar terms are: depth, warmth, roundness.
+Fundamental frequency (1fo): the lowest harmonic of a sound (previously 
+H1), more or less equivalent to the perceived pitch.
+Harmonic: a frequency component of a periodic sound. Harmonic 
+frequency components are either the lowest component (the fundamental 
+frequency) or whole integer multiples of the lowest frequency component. 
+Together, they generate a pressure waveform that repeats at the frequency 
+of that lowest common denominator.
+Harmonic to noise ratio (HNR): the percentage of periodic to aperiodic 
+spectral content in a sound. A “pure” pitch percept arises from sounds 
+that have a high HNR, that is, those that contain only or mostly harmonic 
+frequencies. !e lower the HNR, the noisier the sound percept.
+Headier: a tone with a steeper spectral slope and smoother timbral 
+percept; therefore, associated with “head voice” or mechanism two. (See 
+laryngeal register)
+Heavy Cover: deliberate lowering of fR1 (by tube lengthening and vowel 
+closing) to below 2fo to precipitate the turning over of the voice. Strategies 
+used include lowering the larynx, lip rounding and/or trumpeting, and 
+vowel darkening.
+Helmholtz resonator:  a hollow enclosure having a smaller opening 
+consisting of such dimensions that the enclosure resonates at a single 
+frequency determined by the relative dimensions of its space and opening: 
+the larger the space and smaller the exit, the lower the frequency.
+PRAA.indb   159PRAA.indb   159 7/10/2025   4:39:00 PM7/10/2025   4:39:00 PM
+ Deﬁnitions 160
+Inertive reactance: a sluggishness of air molecule movement created by 
+resonator convergence, which can improve resonator interactivity with the 
+vibrator by reducing the transglottal pressure diﬀerence, glottal resistance, 
+and phonation threshold pressure.
+Intensity: the power of a sound measurable in decibels; the physical 
+correlate to perceptual loudness.
+Laryngeal register: the muscular adjustment of the vocal folds; the 
+relative participation of the thyroarytenoid (TA—shortening, thickening) 
+muscles and the cricothyroid (CT—stretching, thinning) muscles.
+Chesty: historic description of a sound assumed to be TA dominant, with 
+shorter, thicker, looser vocal folds, and which has a shallower spectral 
+slope with more strong, high harmonic component frequencies, and a 
+buzzier timbre. Now called vibrational mechanism one.
+Cricothyroid muscles (CT): the muscles, which upon contracting stretch 
+and thin the vocal folds for higher pitches. !ey are mostly situated outside 
+of the larynx and tilt the laryngeal cartilages to stretch the vocal folds. !ey 
+are responsible for what has historically been called “head” or “falsetto” 
+register (now vibrational mechanism two ), with its thinner vocal fold 
+contact, fundamental frequency dominance, and smaller number of 
+harmonics.
+Heady: historic description of a sound assumed to be CT dominant, with 
+thinner, longer, tauter vocal folds, and which has a stronger fundamental, 
+a steeper spectral slope, fewer and weaker high harmonic component 
+frequencies, and a smoother timbre. Now called vibrational mechanism 
+two.
+/T_hyroarytenoid muscles (TA): the muscles, which upon contracting 
+shorten and thicken the vocal folds for lower pitches. !ey comprise the 
+body of the vocal folds and are responsible for what has historically been 
+called “chest” register (now vibrational mechanism one), with its thicker 
+vocal fold contact, vertical phase diﬀerence , and larger number of 
+harmonics.
+Linear source-/f_ilter model: an earlier model of vocal resonance that was 
+sequentially, chronologically linear; that is, that postulated a power source 
+(breath) providing air&ow to a vibrator (the vocal folds), bringing them 
+into vibration, generating a voice source signal (sound wave) containing 
+PRAA.indb   160PRAA.indb   160 7/10/2025   4:39:00 PM7/10/2025   4:39:00 PM
+Deﬁnitions 161
+harmonics, which are then selectively resonated by a /f_ilter (resonator; the 
+vocal tract), which then transfers the /f_iltered harmonics to the outside 
+world through the lips. (See non-linear source-/f_ilter model.)
+Locational somatosense: the perceptual location of sensation of a sound; 
+historically referred to as “placement. ” Sound sensation migrates across 
+range from predominantly oral on low pitches to increasingly internal, 
+above the palate, and into the torso with ascent.
+Maximum Flow Declination Rate: the rate of reduction of air&ow volume 
+of the glottal impulses from peak (maximum) &ow to zero or baseline 
+&ow; the more rapid the declination, the stronger the high-frequency 
+content of the voice source excitation.
+Mechanism one: a vibrational mode of the larynx in which the vocal fold 
+shape is short and thick, the vocal fold cover loose, and in which the TA 
+muscle is involved in the vibration. It has a vertical phase diﬀerence , 
+generating more and stronger high partials. It is caused by greater TA 
+laryngeal muscle participation. (See Laryngeal register)
+Mechanism three: a vibrational mode of the larynx in which the vocal 
+fold shape is long and thin, the vocal fold cover is taut, eventually involving 
+epithelial vibration. However, the vocal folds may not be fully adducted 
+nor vibrate along their full length.
+Mechanism two: a vibrational mode of the larynx in which the vocal 
+fold shape is long and thin, the vocal fold cover is taut, involving vocal 
+ligament vibration. It has little vertical phase diﬀerence , resulting in 
+a more sinusoidal pressure wave that is more fundamental frequency 
+dominant. It is caused by greater CT laryngeal muscle participation and 
+usually passive TAs. (See Laryngeal register)
+Mechanism zero: a vibrational mode of the voice source in which the 
+vocal fold shape is short and thick, and the vocalis muscle and vocal fold 
+cover are loose. Also called pulse or vocal fry register.
+Mode of phonation: a way of categorizing the ratios of the three elements 
+of phonation: breath pressure (the transglottal pressure diﬀerence), 
+PRAA.indb   161PRAA.indb   161 7/10/2025   4:39:00 PM7/10/2025   4:39:00 PM
+ Deﬁnitions 162
+air&ow (through the glottis), and glottal resistance (vocal valve closure 
+force). Although these can vary along a continuum, they can be modeled 
+by representative numbers in a phonation equation as follows: breath 
+pressure/air&ow = glottal resistance. One of three ratios of pressure, &ow, 
+and glottal resistance in phonation: breathy (excess air&ow: 1/ 2 = 0.5); 
+pressed (excess glottal resistance or glottal closure force: 1/0.5 = 2); &ow 
+(a balance between pressure, &ow, and resistance: 1/1 = 1). (Not to be 
+confused with vibrational mechanism; see Laryngeal registration above.)
+Breathy phonation: a phonation equation model with excess air&ow, such 
+as 1/2 = 0.5 would be termed breathy phonation.
+Flow phonation: a phonation equation model with an ideal balance for a 
+given situation would be 1/1=1, and is termed &ow phonation.
+Pressed phonation: a phonation equation model with excess glottal 
+resistance, such as 1/0.5 = 2 would be termed pressed phonation.
+Narrow frequency bandwidth: see Bandwidth.
+Nasalance: using a (usually) slight opening of the velopharyngeal port 
+to divert and allow a small percentage of air&ow and sound through 
+the nares. Nasalance broadens the bandwidth of the /f_irst resonance, 
+weakening its intensity. A broader, weaker fR1 reduces potential interactive 
+interference with laryngeal register transitions and the percentage of tone 
+color contributed by the /f_irst formant, thus brightening the timbre.
+Necessary roughness: a perception of buzziness caused by high, closely 
+clustered and resonated spectral content. Frequencies less than a m3 
+apart beat against each other to human hearing perception, introducing a 
+buzziness or sizzle to the timbral percept.
+Node: see pressure node.
+Non-linear source-/f_ilter model: a source-/f_ilter model of vocal resonance 
+with the added component of possible interactivity between the /f_ilter 
+and the source, such that certain resonation postures of the /f_ilter cause 
+feedback on the vibrator that alters the function and contribution of the 
+vibrator, ideally by assisting its e#ciency.
+PRAA.indb   162PRAA.indb   162 7/10/2025   4:39:00 PM7/10/2025   4:39:00 PM
+Deﬁnitions 163
+Openness-closeness dimension:  descriptions of a vocal sound relative 
+to the frequency location of its /f_irst formant and the relationship of its 
+harmonics to its /f_irst formant. (See Voce chiusa, Close timbre, Close vowel, 
+and Voce aperta, Open timbre, Open vowel)
+Open timbre: a vocal sound in which two or more harmonics are at or 
+below the /f_irst formant of the vowel being sung. Also termed voce aperta 
+in Italian. Sometimes also used to describe a generally divergent resonance 
+shape strategy.
+Open vowel: a vowel with a high /f_irst formant, such as [ɑ], and an 
+inherently divergent resonator shape.
+Overtones: a designation for frequency components of a sound that lie 
+above the fundamental frequency. Overtones usually refer to harmonic 
+frequencies. !e /f_irst overtone is the second harmonic.
+Over-vowel tone color: the vowel-like spectral tone color tuned by the 
+second resonance of the vocal tract and featured by the radiated second 
+formant. Its pitch ranges from the top of the treble clef to just into the top 
+octave of the keyboard. In isolation, it has the spectral tone color range of [~ɔ 
+ɑ a æ ɛ ɪ e i]. As such, it is usually the target tone color of the intended vowel.
+Partials: another term for frequency components of a sound; partials may 
+also refer to non-harmonic frequencies, that is, frequencies that are not 
+multiples of the lowest frequency component.
+Passaggio: Italian for passage or transition into the upper voice.
+Primo passaggio: the lower entry into the transition zone.
+Secondo passaggio:  the upper exit of the transition zone, entry into the 
+upper voice.
+Zona di passaggio: the transition zone, a range segment of about a 4th or 
+5th in non-treble voice singers, during which it is thought that the laryngeal 
+registration should shi/f_t from a TA dominant mechanism one to a lighter 
+mechanism one with greater CT participation. In treble voice registration 
+this transition area is longer and is sub-divided into a lower middle and 
+upper middle, during which the voice transitions into CT dominant 
+vibrational mechanism two.
+PRAA.indb   163PRAA.indb   163 7/10/2025   4:39:00 PM7/10/2025   4:39:00 PM
+ Deﬁnitions 164
+Passive vowel migration, passive vowel modi/f_ication: this author’s 
+proposed designations for a change in vowel quality accomplished 
+by retaining the vocal tract shape but moving the pitch with its subset 
+of harmonics. !e change in vowel quality results from the changing 
+relationships and interactions between the stable resonances and the 
+moving harmonics. (See Vowel modi/f_ication.)
+Perturbation /T_heory: a theory modeling the vocal tract as a quarter-
+wave resonator whose frequency responses (resonances) can be retuned 
+by local perturbations (changes of dimension: narrowings or widenings) 
+near pressure wave nodes or antinodes.
+Pharyngeal voice:  a vocal production typically utilizing the thin vocal 
+ligament of mechanism two with enhanced vocal fold closure, pharyngeal 
+narrowing, a shallow spectral slope, and a peculiarly bright timbre. Also 
+called “witch voice” ( voce di strega ). Used to train the bridge between 
+mechanisms one and two and ease of upper voice phonation.
+Piriform Sinuses (Fossae): the small side branches of the lower pharynx 
+on either side of the laryngopharynx, which create an anti-resonance in 
+the 4000–6000 Hz region, highlighting the singer’s formant cluster just 
+below (2000–4000 Hz).
+Pitch: our perception of the frequency of a sound. It is the frequency of 
+the composite pressure pattern of multiple harmonic frequencies of a 
+tone. !ough derived from processing the /f_irst /f_ive to eight harmonics 
+of a tone, in most practical circumstances, it can be considered to be the 
+psychoacoustic equivalent of the fundamental frequency.
+Pitch of turning: the pitch at which a voice turns over, just inside of an 
+octave below the pitch of the /f_irst formant of the vowel being sung. !e 
+pitch at which the 2fo crosses above the fR1 of the vowel being sung.
+Power spectrum: an analysis of sound that displays power on the vertical 
+axis and frequency components on the horizontal axis.
+Pressed phonation: (see Mode of phonation)
+PRAA.indb   164PRAA.indb   164 7/10/2025   4:39:00 PM7/10/2025   4:39:00 PM
+Deﬁnitions 165
+Pressure antinode:  a point of maximum pressure variation within an 
+average pressure level context.
+Pressure node: a point of minimum pressure variation within an average 
+pressure level context.
+Pressure waveform: the pattern of air pressure variations (compressions 
+and rarefactions) that form a sound. If there is a regular, periodically 
+repeating pattern, the sound will have a clear pitch. If there is no regularly 
+repeating pattern, but rather random pressure variations, the sound will 
+be perceived as noise.
+Primary acoustic register transitions: prominent acoustic registration 
+events at the point at which 2fo crosses fR1, transitioning from open to close 
+timbre, and the point at which 1 fo intersects fR1, attaining whoop timbre. 
+Re/f_ining these two events is a major goal of Western classical singing 
+pedagogy for non-treble and treble voices, respectively. !e former is 
+most o/f_ten associated with the turning over of the open vowels in the 
+neighborhood of C4-G4 in non-treble voices. !e latter is the preferred 
+strategy for the upper middle range of Western classical treble voices.
+Primary laryngeal register transition: the shi/f_t from chest to falsetto, 
+or vibrational mechanism one to vibrational mechanism two. Non-
+treble classical singers tend to avoid this shi/f_t, staying in some form 
+of mechanism one for the entire range. Treble classical singers tend to 
+shi/f_t from mechanism one to mechanism two between C4 and G4, 
+usually before or by the fR1:2fo acoustic register transition. Belters extend 
+mechanism one or chest register to ca. C5.
+Primo passaggio: see passaggio.
+Procedural knowledge: the subjective, sensorial knowledge of motor 
+behavior, what it feels like to do the thing; the goal of motor learning for 
+skillful function; in short, the automated basis of ability. Being subjective 
+and sensorial, procedural knowledge is challenging to articulate but is 
+essential for intentional, skillful physical activity of any kind.
+PRAA.indb   165PRAA.indb   165 7/10/2025   4:39:00 PM7/10/2025   4:39:00 PM
+ Deﬁnitions 166
+Quarter-wave resonator: a resonator that is a tube open at one end 
+and closed at the other. Such a resonator can establish standing waves 
+(resonances) at the quarter-wavelength and odd-numbered multiples of 
+that length: 3/4 wavelength, 5/4 wavelength, 7/4 wavelength, and so on, 
+that is, wavelength segments with nodes and antinodes at opposite ends of 
+the tubular resonator. !e vocal tract is a form of quarter-wave resonator, 
+but with more variable, tunable wavelengths.
+Reactance: a matching of resistance between the glottis and the vocal 
+tract or epilarynx that increases the interactivity of the system (feedback 
+on the vibrator).
+Resonator convergence: an overall downstream narrowing of the vocal 
+tract shape from a relatively open area near the glottis to a narrowing 
+nearer the lips.
+Resonance: Resonance is the tendency of an object or system to respond 
+(oscillate) more strongly and longer to particular frequencies introduced 
+into it. A vocal tract resonance is one of several potential peak frequency 
+responses of the vocal tract to acoustic input.
+Real-time spectrography: an ever-changing, immediately current 
+analysis and visual representation of sound that displays frequency on the 
+vertical, time on the horizontal, and intensity on the gray or color scale. 
+!is form of sound display is currently the most intuitive and informative 
+as a visual learning aid for students.
+Roll-oﬀ: the drop in intensity of harmonics above the /f_irst harmonic; 
+typically indicated in decibels per octave (dBs/octave). Called “Tilt” on 
+the Madde synthesizer. Also termed spectral slope.
+Secondo passaggio: see passaggio.
+Semi-occluded vocal tract (SOVT):  a vocal tract with a location or exit 
+su#ciently narrowed to generate &ow resistance or acoustic impedance. 
+A short thin straw is one mechanical example. A very small, kazoo-like 
+[w] is an articulatory example. (See also downstream resistor.) SOVT 
+exercises are used to rebalance pressure, &ow, and resistance levels, 
+reducing transglottal pressure diﬀerence and glottal resistance.
+PRAA.indb   166PRAA.indb   166 7/10/2025   4:39:00 PM7/10/2025   4:39:00 PM
+Deﬁnitions 167
+Singer’s formant cluster: (see Formant)
+Somatosense: the body’s perceptual feel of a phenomenon or behavior, 
+such as the somatosense of a sung sound.
+Spectral envelope: an outline of the power dimension of a power spectrum. 
+It is useful for revealing the resonance characteristics (formants) of a 
+particular vocal tract shape.
+Spectral slope: the rate at which higher frequency spectral content of the 
+voice source or the radiated sound weakens in intensity per octave.
+Spectral tilt: another name for spectral slope.
+Spectrum: a chart of the frequency content of a sound, usually with 
+frequency on the horizontal axis and intensity on the vertical axis.
+Spectrography: a spectrograph displays frequency on the vertical axis, 
+time on the horizontal axis, and power on a gray or color scale. It is 
+perhaps the most accessible display of sound for studio use.
+/T_hyroarytenoid muscles (TA): (see Laryngeal register)
+Transfer function of the vocal tract:  the capacity of a particular shape 
+of the vocal tract to transfer sound energy from the glottis to the outside 
+world, which capacity varies preferentially by frequency, resulting in 
+“peaks and valleys” of frequency response.
+Transglottal pressure diﬀerence: the diﬀerence in pressure between the 
+average subglottal (tracheal) and supraglottal air pressures. !e transglottal 
+pressure diﬀerence determines the necessary glottal resistance level and 
+resultant vocal fold collision force. A comfortably low transglottal pressure 
+diﬀerence is therefore essential to maintaining healthy vocal fold tissue.
+Transient model of voice acoustics: a time and pressure dominant model 
+of voice acoustics in contrast to the frequency-dominant source-/f_ilter 
+model. !e transient model more accurately portrays the way in which 
+the complex pressure waves of voice are actually generated.
+PRAA.indb   167PRAA.indb   167 7/10/2025   4:39:00 PM7/10/2025   4:39:00 PM
+ Deﬁnitions 168
+Turning over: a term descriptive of the passing of 2fo above fR1 of a vowel 
+when ascending, and its accompanying sound and somatosense.
+Twang: a (controverted) term descriptive of a bright, edgy quality used in 
+CCM genres, accomplished by various pharyngeal narrowing strategies. 
+Associated by some more with Country Music vocal style, but used in 
+music theater belt and other styles as well.
+Under-vowel tone color: the vowel-like spectral tone color tuned by the 
+/f_irst resonance of the vocal tract and featured by the /f_irst formant. Its pitch 
+range largely overlaps the treble clef, and therefore in isolation has the 
+spectral tone color range of [~o-u] but in context is usually perceived as 
+mixed with the tone color of the second formant over-vowel.
+Valleculae: spaces between the epilarynx and the back of the tongue. Like 
+the piriform sinuses behind the epilarynx, open valleculae create a high-
+frequency anti-resonance. Hence, closing them increases timbal ring.
+Valsalva maneuver:  a forceful compression of the thorax (ribcage), 
+similar to eﬀortful elimination, childbearing, and heavy li/f_ting. If resisted 
+by glottal closure, it stimulates excessively strong glottal resistance and 
+should not be used in singing.
+Vertical phase diﬀerence : a diﬀerence in the timing of opening and 
+closing of the vocal folds’ vertical contact. It is caused by thicker vocal 
+folds whose contact area opens and closes at its lower margins ahead of 
+the opening and closing of its upper margins.
+Vocal ligament: the intermediate layer of the three-layer vocal fold 
+structure: the epithelial mucosal cover, the vocal ligament, and the vocalis 
+(thyroarytenoid) muscle body. Vocal fold vibrational load shi/f_ts from the 
+full body in mechanism one to the vocal ligament in mechanism two to 
+the epithelial layer in mechanism three.
+Vocal tract /f_ilter: the tube resonator comprised of the vocal tract from the 
+glottis to the lips. !is resonator “/f_ilters” spectral partials passing through 
+it, strengthening some and weakening others to create the vowels and 
+timbre of the sound radiated from the lips.
+PRAA.indb   168PRAA.indb   168 7/10/2025   4:39:00 PM7/10/2025   4:39:00 PM
+Deﬁnitions 169
+Vocal tract resonances: potential peak frequency responses of the vocal 
+tract /f_ilter function to acoustic input.
+Voce aperta: open timbre; any sung sounds in which two or more 
+harmonics are at or below the /f_irst resonance//f_irst formant—in other 
+words, the timbre of any pitches sung an octave or more below the /f_irst 
+formant of the vowel being sung. !is term has also been used historically 
+to describe an overall divergent resonator shape characterized by a timbre 
+in which vowels can tend to widen and move into yell timbre.
+Voce chiusa: close timbre; any sung sounds in which the second harmonic 
+is above the /f_irst resonance//f_irst formant—in other words, the timbre of 
+any sung pitches less than an octave below the /f_irst formant. !is term 
+has also been used historically to describe an overall convergent resonator 
+poise that results in the chiaroscuro timbre of Western classical singing, in 
+which vowels close when and where they should relative to vowels’ /f_irst 
+resonance/formant locations, in contrast to a predominantly divergent, 
+open timbre resonator adjustment.
+Voice source: the sound signal produced by the excitation of the air 
+column in the vocal tract by the abrupt closure of the glottic valve (vocal 
+folds). Each such closure introduces a noise spectrum with a theoretically 
+in/f_inite number of frequencies that excite the transfer function of the 
+vocal tract. !us, both the vocal tract and the vocal folds cooperate in 
+generating the voice source of a single impulse, which is then /f_iltered 
+further—by the periodic reiteration of that pulse—for frequencies in sync 
+with its fundamental frequency, that is, harmonic frequencies.
+Vowel designations: close or open (due to low or high /f_irst formant 
+locations), front or back (due to high or low second formant locations) 
+categorizations.
+Vowel formants: (see Formant)
+Vowel integrity: maintaining acceptable vowel identity even when vowel 
+modi/f_ication is necessary; avoidance of vowel distortion.
+PRAA.indb   169PRAA.indb   169 7/10/2025   4:39:00 PM7/10/2025   4:39:00 PM
+ Deﬁnitions 170
+Vowel migration: the inevitable, gradual migration or change of timbre 
+of vowels across range, due to frequency-dependent spectral tone color 
+and the changing interactions of frequencies with vocal tract resonances.
+Vowel modi/f_ication: historically understood to refer to a change in the 
+vowel quality accomplished by moving the vowel formants from their 
+normal speech locations by means of changes in the shape of the vocal 
+tract in an attempt to /f_ind better (more resonant) resonance:harmonic 
+matches. !is text proposes the subcategories: active and passive vowel 
+modi/f_ication. (See Passive vowel modi/f_ication)
+Whoop timbre: the timbre of a sung sound that is dominated by the tone 
+color of its fundamental frequency. Whoop timbre occurs when the sung 
+pitch approximately matches (and is tracked by) the frequency of the 
+/f_irst resonance and is therefore prominently featured in the radiated /f_irst 
+formant: a fR1:1fo coupling. It begins to appear from the mid-treble clef, 
+especially in treble voices. Since the fundamental frequency in that range 
+has an [~u], [~o], or [~ɔ]-like tone color, whoop timbre is round, domed, 
+and “whoop” or “hoot” like and is associated with head voice or M2.
+Y ell coupling, yell timbre: an acoustic coupling of fR1 and 2fo that has been 
+carried higher than normal through tube shortening and mouth widening 
+(fR1:2fo tracking); bright and o/f_ten pressed and spread in quality.
+Zona di passaggio: transition zone. (See passaggio)
+PRAA.indb   170PRAA.indb   170 7/10/2025   4:39:00 PM7/10/2025   4:39:00 PM
+Abbreviations
+Abbreviations
+A4, B3, C5, etc.: pitch designations by octave with A4 corresponding to 
+440 Hz and C4 corresponding to middle C.
+CCM: Contemporary Commercial Music; designation of vocal styles 
+other than Western classical, o/f_ten electronically ampli/f_ied.
+CT: Cricothyroid muscle
+fo, 1 fo: the fundamental frequency or lowest frequency component of a 
+periodic sound (the same as H1).
+F1, F2, F3, etc.: formants resulting from the vocal tract /f_ilter function. !e 
+vocal tract is a resonator with multiple natural resonances, resulting in 
+radiated spectral peaks called formants that are numbered from lowest to 
+highest. 
+1fo, 2 fo, 3 fo, etc.: harmonic frequency components of a periodic sound 
+having “pitch”: “one times the fundamental oscillation; two times the 
+fundamental frequency oscillation, ” and so on; more simply stated, /f_irst 
+harmonic, second harmonic, third harmonic, and so on. Formerly labeled 
+H1, H2, H3, and so on.
+IP A: International Phonetic Alphabet. IPA symbols for vowels appear in 
+the following form in this text: [ɑ].
+M0, M1, M2, M3: vibrational mechanisms of the vocal folds, corresponding 
+roughly to the historic terms pulse, chest, head, and whistle.
+SFC: Singer’s formant cluster, a clustering of formants three and 
+higher.
+TA: !yroarytenoid muscle
+PRAA.indb   171PRAA.indb   171 7/10/2025   4:39:01 PM7/10/2025   4:39:01 PM
+Appendix 1
+Appendix 1
+Madde Explorations
+Madde Exploration 1: 
+The Unresonated Voice Source
+Check the “Show formants/partials” box (bottom right just above the 
+keyboard). Uncheck the formants boxes (upper le/f_t, labeled F1[Hz], 
+F2[Hz], F3[Hz], etc.). Activate a set of harmonics by clicking on a pitch 
+on the keyboard at or below middle C (middle C4 is marked with a black 
+dot). Y ou will see a set of numbered lines, representing the harmonics 
+of the pitch you selected, just above the keyboard. (See Figure 18.1 .) 
+Activate the play arrow (top le/f_t). !is will approximate the pitched buzz 
+of an unresonated set of harmonics as it might sound if exposed in open 
+space. Y ou will probably want to deactivate this unattractive sound fairly 
+quickly.
+Madde Exploration 2: The E/uniFB00ect of 
+Mode of Phonation and Range on 
+Source Harmonics
+Deactivate the formant boxes as you did for Madde Example 1. To 
+experience the eﬀect of laryngeal register on the voice source, adjust the 
+Tilt [dB/oct] level in the Source spectrum area (upper right) by clicking 
+in the tilt box and using the up and down arrows on your keyboard. !e 
+Tilt represents the roll-oﬀ in power per octave of the harmonics. !e 
+larger the negative number, the greater the tilt. !e default Tilt is set for 
+Appendix 1
+PRAA.indb   172PRAA.indb   172 7/10/2025   4:39:01 PM7/10/2025   4:39:01 PM
+ Appendix 1 173
+Appendix 1
+a roll-oﬀ of 6 decibels per octave (i.e., -6). A “headier” tone would have a 
+steeper roll-oﬀ (try -12). A pressed tone would have a shallower roll-oﬀ  
+(try -3). (!is author advises against trying positive tilt numbers, at least 
+not with formants deactivated.) ( Figure 18.2) 
+Activate the play arrow (top le/f_t) for each of these. !e steeper the tilt 
+or roll-oﬀ, the milder the source will sound since it will have weaker high 
+harmonics. Since these higher frequencies are precisely where our ears are 
+the most sensitive to intensity, the signal will also sound quieter at steeper 
+tilts (-12), and louder (and more annoying!) at shallower tilts (-3). Y ou 
+will again want to deactivate the sound.
+In order to see the eﬀect of pitch on the number of available harmonics, 
+click on successively higher pitches up to soprano high C (C6). !e Madde 
+keyboard will only show three harmonics at that pitch, since the top C 
+(C8) is missing from its keyboard display. It is dramatically clear that high 
+sopranos face a rather diﬀerent resonance challenge/situation than a non-
+treble voice faces.
+Figure 18.1 Madde voice synthesizer, with vocal tract formants unchecked, 
+showing and playing an unresonated harmonic frequency set.
+PRAA.indb   173PRAA.indb   173 7/10/2025   4:39:01 PM7/10/2025   4:39:01 PM
+Appendix 1  174
+Madde Exploration 3: Formant 
+Resonation of Source Harmonics; 
+Harmonic:formant Crossings
+Make sure the “Show formants/partials” box (bottom right just above 
+the keyboard) is checked. Check the formants boxes (upper le/f_t, labeled 
+F1[Hz], F2[Hz], F3[Hz], etc.). Y ou will notice a red band appearing for 
+each formant just above its frequency center on the keyboard. Y ou can set 
+the formant frequencies for various voice types and vowels. For example, 
+bass baritone formants for an [e] vowel might be set as follows: F1 440; F2 
+1400; F3 2200; F4 2500; F5 2800. Set those and play the scale C3 D3 E3 F3 
+G3. If you continue playing, you may notice timbral changes as harmonics 
+pass through formants (visible just above the keyboard), especially through 
+formant one (more on that later). Y ou will certainly notice that harmonics, 
+once resonated by the vocal tract, are rather more pleasant than with the 
+formants removed. Other vowels can be modeled by varying the frequencies 
+of the /f_irst two formants (more on that later).
+Figure 18.2 Madde voice synthesizer Tilt function (in the Source spectrum 
+box, upper right-hand side): Tilt reﬂects source roll-off. Steeper tilt or 
+roll-off (a higher negative value) models a headier laryngeal registration. 
+Shallower tilt or roll-off (a small negative value) models a chestier laryngeal 
+registration.
+PRAA.indb   174PRAA.indb   174 7/10/2025   4:39:01 PM7/10/2025   4:39:01 PM
+ Appendix 1 175
+Madde Exploration 4: Open and 
+Close Timbre
+Make sure the “Show formants/partials” box (bottom right just above the 
+keyboard) is activated. Use the bass baritone formant settings for an [e] 
+vowel of Exploration 3, Figure 18.3. !e /f_irst formant for this example 
+is set at A440. Try the following explorations: Play pitches that lie more 
+than an octave below F1 to experience open timbre. Play an ascending 
+scale starting on C3 an octave below middle C. Y ou may notice a timbral 
+“closure” when 3fo rises through F1, that is, from ca. C3 to E3, and even 
+more prominently when 2fo rises through F1, from G3 to B3, the primary 
+turning of the voice (Figure 18.4). 
+Madde Exploration 5: Whoop 
+Timbre and Beyond
+Make sure the “Show formants/partials” box (bottom right just above the 
+keyboard) is activated. Use the bass baritone formant settings for an [e] 
+Figure 18.3 Formants of the vocal tract set for an [e] in a bass voice.
+PRAA.indb   175PRAA.indb   175 7/10/2025   4:39:02 PM7/10/2025   4:39:02 PM
+Appendix 1  176
+vowel as in Example 3, 4 above. !e /f_irst formant for this example is set at 
+A440. Continue with the following explorations:
+ 1. Ascend stepwise from C4 without adjusting the formants. !e 
+implication of leaving the formants the same is that the “singer” 
+is not changing his vocal tract (throat/vowel) shape at all. As 
+1fo approaches F1, the timbre will become increasingly close 
+until full whoop timbre is achieved at the F1:1fo juncture at A4. 
+Notice that this rather falsetto/feminine timbre was achieved 
+with no adjustment to the Source spectrum Tilt, therefore no 
+source change, rather was accomplished entirely by changing 
+harmonic:/f_ilter interactions, that is, entirely through changes 
+in resonance. !e implication is that source changes (laryngeal 
+registration changes) are not necessarily required for this timbre. 
+It must be noted, however, that in a human subject, source changes 
+are likely to accompany these resonance changes.
+ 2. If you continue to raise 1 fo above F1 (A4), what is now a counter 
+tenor “whoop” timbre will quickly thin, demonstrating the 
+necessity of formant tracking above this point.
+Figure 18.4 An exploration of turning over, the primary acoustic register 
+transition of a voice, when 2fo rises above F1.
+PRAA.indb   176PRAA.indb   176 7/10/2025   4:39:02 PM7/10/2025   4:39:02 PM
+ Appendix 1 177
+ 3. Have the synthesizer “sing” D5. Click on the F1[Hz] box. 
+Repeatedly click the up arrow on your computer keyboard, 
+gradually raising the F1 frequency until it matches D5 (until the 
+red F1 band joins 1fo on the pitch D5). Y ou will notice that timbral 
+fullness/depth will return.
+ 4. Click the keyboard down arrow to return F1 to A440 and deactivate 
+the sound (Figure 18.5). 
+Further Madde Explorations
+Modeling Exercises and Vocalizes
+Any of the exercises listed above (see Exploring Vowel Turning, p. 125 
+and Exploring F1:1fo Transition and Tracking, p. 131) can be modeled on 
+Madde to demonstrate an approximation of the passive vowel migrations 
+that accompany the primary F1:2fo crossing, or any secondary crossings 
+(F1:3fo, F1:4fo, etc.) and the timbral fullness of F1:1fo tracking.
+Figure 18.5 1fo rising above F1 will cause thinness of timbre.
+PRAA.indb   177PRAA.indb   177 7/10/2025   4:39:02 PM7/10/2025   4:39:02 PM
+Appendix 1  178
+F1/F2 Map
+Vowels can be more &uidly modeled and changed by selecting “Show 
+F1/F2 map” under the Settings menu. A chart will display with F1 on the 
+horizontal dimension and F2 on the vertical. Clicking and dragging the 
+cursor on this map will manipulate F1 and F2 locations, even while the 
+“voice” is activated. !is capability will allow exploration not only of 
+vowels, but also of opening and closing vowels by modifying a vowel to 
+move its /f_irst formant across the 2fo of the pitch being “sung. ” (Figure 18.6) 
+Modeling Student Voices
+If a student’s formants (from a comfortable part of the range) are derived, 
+perhaps by using VoceVista, the student’s voice can be modeled in Madde 
+for further exploration. For example, the passive vowel modi/f_ications of 
+a non-treble singer’s primary register transition on various vowels can 
+be modeled. While it is not usually necessary to model a speci/f_ic voice 
+to begin to understand passive modi/f_ication, it may be helpful for some. 
+More o/f_ten a generic model of the same voice type will su#ce. Also, fR1:1fo 
+tracking of treble voices can be convincingly demonstrated, and their 
+resultant necessary active vowel modi/f_ications.
+Figure 18.6 F1/F2 map (Vowel Formant Map).
+PRAA.indb   178PRAA.indb   178 7/10/2025   4:39:03 PM7/10/2025   4:39:03 PM
+Appendix 2
+Appendix 2
+Approximate F1 
+Locations by Voice
+Why Approximate First Formant 
+Locations?
+!e chart on the following page gives approximate /f_irst formant locations 
+by general voice type. !e formant boxes are deliberately non-speci/f_ic 
+(covering more than one pitch) for several reasons: general voice types 
+have varieties of subdivisions that accommodate some variety of vocal 
+tract length, which overlap with adjacent voice types and subdivisions. 
+For example, a high lyric baritone may have formants that are higher than 
+those of a Heldentenor, or a deeper mezzo-soprano may have formants 
+that are lower than those of a leggiero tenor. Voices are individual, as are 
+their formant locations. However, /f_irst formant locations will not vary 
+very far from the approximate locations given, and the general contour of 
+formant locations from vowel to vowel will be relatively stable. One could 
+use VoceVista to identify speci/f_ic spoken formants or formants of vowels 
+sung near speech range if speci/f_icity is desired. However, the teacher’s 
+ear and the ease and e#ciency of vocal function are usually su#cient for 
+re/f_ining the locations of acoustic registration events. Once a teacher knows 
+approximate locations by voice type, the passive vowel modi/f_ications that 
+accompany these events, and strategies to encourage timbral consistency 
+(i.e., tube stability) across these events, the student’s vocal function will 
+guide further adjustments.
+PRAA.indb   179PRAA.indb   179 7/10/2025   4:39:03 PM7/10/2025   4:39:03 PM
+Appendix 2  180
+Appendix 2
+Approximate F1 Locations by Voice
+See www .kenbozeman .com
+or https://faculty .lawrence .edu /bozemank /664 -2/ 
+Figure 19.1 Approximate ﬁrst formant locations. 
+PRAA.indb   180PRAA.indb   180 7/10/2025   4:39:03 PM7/10/2025   4:39:03 PM
+Appendix 3
+Appendix 3
+Events Surrounding 
+the Lower Passaggio
+See www .kenbozeman .com or
+https://faculty .lawrence .edu /bozemank /644 -2/ 
+Figure 20.1 Acoustic events surrounding the lower passagio. 
+PRAA.indb   181PRAA.indb   181 7/10/2025   4:39:04 PM7/10/2025   4:39:04 PM
+Appendix 4
+Appendix 4
+Recorded Exercise Examples
+http://www .kenbozeman .com /appendix -4-- -video -contents .php
+!ese sample explorations were made in the year of the /f_irst edition 
+publication with available undergraduate students at various levels 
+of development. While they model the acoustic phenomena being 
+discussed reasonably well, neither they nor the author would claim that 
+they represent singers whose training was completed. !e author is very 
+grateful for their willingness to serve as models for educational purposes.
+Exploring Vowel Turning (see Chapter 14, p. 125)
+Example 1. Leaps across the turn
+Example 2. Leaping and stepping across the turn 
+Example 3. Levels of turning
+Example 4. Repeated note from close to open to close
+Example 5. Same vowel across multiple levels
+Example 6. Turning with agility
+Example 7. Descending and ascending through the turn
+Example 8. Ascending and descending through the turn
+Exploring fR1:1fo Transition and Tracking (see Chapter 14, p. 131)
+Example 9. Repeated note
+Example 10. Leap up to open vowel, repeated to close vowel
+Example 11. Leap up on same vowel
+Example 12. Stepwise Ascent and Descent
+PRAA.indb   182PRAA.indb   182 7/10/2025   4:39:04 PM7/10/2025   4:39:04 PM
+Appendix 5
+Appendix 5
+YouTube Examples
+(Available at: http://www .kenbozeman .com)
+!ere is inherent risk in citing Y ouTube examples, including the potential 
+instability of the cited locations. At the time of this printing, these cited 
+locations had been stably available for a number of years. !eir educational 
+value overruled the author’s concerns about their potential instability. 
+Most of the recordings cited can also be found in other formats. (Y ouTube 
+titles in bold.)
+Example 1: Leontyne Price “Beim Schlafengehen” Strauss’ Vier Letzte 
+Lieder
+https://www .youtube .com /watch ?v =ItAmRzPTEdY &t =590s
+Example 2: Nicolai Gedda canta Rachmaninov II
+http://www .youtube .com /watch ?v =AFa9hgb0tmI &t =2m50s
+Example 3: José Van Dam sings Kaddish by Ravel
+http://www .youtube .com /watch ?v =IAiWPrhxlpc &t =3m45s
+Example 4: Jussi Björling, Ah, Love But A Day
+Piano version: https://www .youtube .com /watch ?v =WCElu55 _Efc
+Orchestral version: Jussi Björling sings “ Ah Love, but a day”
+http://www .youtube .com /watch ?v =4TWoHdA085g &t =0m23s
+Example 5: Jussi Björling—“Ombra mai fu”—Atlanta 1959
+https://www .youtube .com /watch ?v =pyHaucoWd4Q &t =112s
+Example 6: George London sings Schubert—“ An die Musik”
+https://www .youtube .com /watch ?v =YUxZlDekIk4
+PRAA.indb   183PRAA.indb   183 7/10/2025   4:39:04 PM7/10/2025   4:39:04 PM
+Appendix 5  184
+Appendix 5
+Example 7: Pavarotti about covered sound
+https://www .youtube .com /watch ?v =3JIVs9FZ8sQ
+Example 8: How to sing bel canto 2/2 (see 0:30–1:15):
+http://www .youtube .com /watch ?v =XPplK22nSXY &t =0m30s
+Example 9: How to sing bel canto 1/2 (see 3:14–3:55):
+https://www .youtube .com /watch ?v =3nH54BdqWpg &t =194s
+Example 10: Rockwell Blake describes dark timbre and
+passaggio ./f_l v
+(Unfortunately, Example 10 is no longer available)
+PRAA.indb   184PRAA.indb   184 7/10/2025   4:39:04 PM7/10/2025   4:39:04 PM
+Selected References
+Selected References
+Austin, Stephen F . 2005. “!e Voce Chiusa. ” Journal of Singing, 61 (4): 421–5.
+Ballantyne, Chadley, and Melissa Malde. 2025. “Sensation, Kinesthesia, Body 
+Mapping and Teaching Singing. ” In Graham F . Welch, David M. Howard, 
+and John Nix (eds.), Oxford Handbook of Singing, Second ed. New Y ork: 
+Oxford University Press.
+Bourne, T., M. Garnier, and D. Kenny. 2011. “Music !eater Voice: 
+Production, Physiology and Pedagogy. ” Journal of Singing, 67 (4): 237–44.
+Bozeman, Kenneth. 2007. “ A Case for Voice Science in the Voice Studio. ” 
+Journal of Singing, 63 (3): 265–70.
+Bozeman, Kenneth. 2008. “On the Voice: Registration Strategies for Training 
+the Male Passaggio. ” Choral Journal, 48: 59–72.
+Bozeman, Kenneth. 2010. “!e Role of the First Formant in Training the 
+Male Singing Voice. ” Journal of Singing, 66 (3): 291–7.
+Bozeman, Kenneth. 2012a. “ Acoustic Passaggio Pedagogy for the Male 
+Voice. ” Logopedics Phoniatrics Vocology, 38 (2): 64–9
+Bozeman, Kenneth. 2012b. “New Technology for Teaching Voice Science 
+and Pedagogy: !e Madde Synthesizer (Svante Granqvist). ” Journal of 
+Singing, 68 (4): 415–18.
+Bozeman, Kenneth. 2021. Kinesthetic Voice Pedagogy2: Motivating Acoustic 
+E#ciency. Gahanna, Ohio: Insideview Press.
+Delvaux, Bertrand, and David Howard. 2014. “ A New Method to Explore 
+the Spectral Impact of the Piriform Fossae on the Singing Voice: 
+Benchmarking Using MRI-Based 3D-Printed Vocal Tracts. ” PLoS ONE, 9 
+(7): e102680. https://doi .org /10 .1371 /journal .pone .0102680.
+Herbst, Christian T., and Jan G. ,vec. 2014. “ Adjustment of Glottal 
+Con/f_igurations in Singing. ” Journal of Singing, 70 (3): 301–8.
+Herbst, Christian T., David Howard, and Jan G. ,vec. 2015. “!e Sound 
+Source in Singing—Basic Principles and Muscular Adjustments for Fine-
+Tuning Vocal Timbre. ” In D. Howard, J. Nix, and G. Welch (eds.), !e 
+Oxford Handbook of Singing. Oxford: Oxford University Press.
+Howell, Ian. 2016. “Parsing the Spectral Envelope: Toward a General !eory 
+of Vocal Tone Color. ” DMA thesis, New England Conservatory of Music. 
+Retrieved from https://www .academia .edu /29162454.
+PRAA.indb   185PRAA.indb   185 7/10/2025   4:39:04 PM7/10/2025   4:39:04 PM
+Selected References  186
+Selected References
+Howell, Ian. 2017. “Necessary Roughness in the Voice Pedagogy 
+Classroom: !e Special Psychoacoustics of the Singing Voice. ” 
+VOICEPrints, !e Journal of the New York Singing Teachers’ Association, 
+14 (5): 4–7.
+Howell, Ian. 2025. Hearing Singing: A Guide to Functional Listening and Voice 
+Perception. Lanham: Rowman & Little/f_ield.
+Ladefoged, Peter. 1962. Elements of Acoustic Ponetics. Chicago, Il: University 
+of Chicago Press.
+Lovetri, Jeanette. 2012. “!e Confusion about Belting: A Personal 
+Observation. ” VoicePrints: Journal of the New York Singing Teachers’ 
+Association (September–October): 4–7.
+McCoy, Scott. 2012. Your Voice, An Inside View. Princeton, NJ: Inside View 
+Press.
+McKinney, James. 1982. !e Diagnosis and Correction of Vocal Faults. San 
+Diego, CA: Singular Press.
+Miller, Donald G. 2000. Registers of the Singing Voice. Groningen: Groningen 
+Press.
+Miller, Donald G. 2008. Resonance in Singing. Princeton, NJ: Inside View 
+Press.
+Miller, Richard. 1986. !e Structure of Singing: System and Art in Vocal 
+Technique. New Y ork: Schirmer Books.
+Nair, Garyth. 1999. Voice—Tradition and Technology. San Diego, CA: 
+Singular Publishing Group.
+Nair, Garyth. 2007. !e Cra/f_t of Singing. San Diego, CA: Plural Publishing.
+Obert, Kerrie, and Chadley Ballantyne, interview by Kari Ragan. 2019. 
+“Getting the Twang of It. ” NATS Chat, January 13. https:// .youtube .com /
+watch ?v =KHjbqUYrb04.
+Perna, Nicholas. 2015. “Nasality: Do Y ou Hear What I See?” VOICEPrints, 
+12 (1): 6–7.
+Perna, Nicholas. 2020. “Nasality Deconstructed. ” Journal of Singing, 76 (4): 
+429–32.
+Schutte, Harm K., and Donald, G. Miller. 1993. “Belting and Pop, 
+Nonclassical Approaches to Female Middle Voice: Some Preliminary 
+Considerations. ” Journal of Voice, 7 (2): 142–50.
+Schutte, Harm K., and Donald, G Miller. 2005. “Mixing Registers: Glottal 
+Source or Vocal Tract. ” Folia Phoniatrica et Logopaedica, 57: 278–91.
+Schutte, Harm K., and Donald, G. Miller. 1993. “Physical De/f_inition of the 
+Flageolet Register. ” Journal of Voice, 7 (3): 206–12.
+Schutte, Harm K., and Donald, G. Miller. 2005. “Resonance Strategies 
+Revealed in Recorded Tenor High Notes. ” Folia Phoniatrica et 
+Logopaedica, 57: 292–307.
+PRAA.indb   186PRAA.indb   186 7/10/2025   4:39:04 PM7/10/2025   4:39:04 PM
+ Selected References 187
+Schutte, Harm K., Donald, G. Miller, and Jan G. ,vec. 1995. “Measurement 
+of Formant Frequencies and Bandwidths in Singing. ” Journal of Voice, 9 
+(3): 290–6.
+Steinhauer, Kimberly M., and Jo Estill. 2008. “!e Estill Voice Model: 
+Physiology of Emotion. ” In Voice and Emotion, Vol. 2, 83–99. San Diego: 
+Plural Publishing.
+Story, Brad. 2016. “!e Vocal Tract in Singing. ” In G. Welch, D. M. Howard, 
+& J. Nix (eds.), !e Oxford Handbook of Singing. Oxford: Oxford 
+University Press. https://doi .org /10 .1093 /oxfordhb /9780199660773 .013 
+.012.
+Sundberg, Johan. 2001a. “ Articulatory Interpretation of the Singing 
+Formants. ” Journal of the Acoustical Society of America, 55: 838–44.
+Sundberg, Johan. 2001b. “Level and Center Frequency of the Singer’s 
+Formant. ” Journal of Voice, 15 (2): 176–86.
+Sundberg, Johan. 1987. !e Science of the Singing Voice. Imprint DeKalb, Ill.: 
+Northern Illinois University Press.
+Sundberg, Johan. 1974. “ Articulatory Interpretation of the Singing 
+Formants. ”Journal of the Acoustical Society of America, 55: 838–44.
+Sundberg, Johan. Miriam Havel, M. B. Lã Filipa, Brian P . Gill, and Jessica Lee. 
+2016. “Nasal Resonance and Singing. ” Paper presented at the 45th Annual 
+Symposium: Care of the Professional Voice, Philadelphia, PA, June, 2.
+Titze, Ingo. 1994. Principles of Voice Production. Englewood Cliﬀs, N.J.: 
+Prentice Hall.
+Titze, Ingo, and Brad Story. 1997. “ Acoustic Interactions of the Voice Source 
+with the Lower Vocal Tract. ” Journal of the Acoustical Society of America, 
+101 (4): 2234–43.
+Titze, Ingo, and Katherine Verdolini Abbott. 2012. Vocology: !e Science and 
+Practice of Voice Habilitation, Salt Lake City, Utah: !e National Center 
+for Voice & Speech.
+Titze, Ingo, et al. 2015. “Toward a Consensus on Symbolic Notation of 
+Harmonics, Resonances, and Formants in Vocalization. ” !e Journal of 
+the Acoustical Society of America, 137 (5): 3005–7.
+Titze, Ingo, and T. Riede. in press 2025. “ A Proposal for Epithelial 
+Dominance in Extremely High Fundamental Frequency Vocalizations. ” 
+!e Journal of the Acoustical Society of America.
+PRAA.indb   187PRAA.indb   187 7/10/2025   4:39:04 PM7/10/2025   4:39:04 PM
+Index
+absolute spectral tone color 6, 16–18, 
+30–6, 47, 62, 68, 70–2, 76, 97, 
+104, 109, 111, 126, 129, 135, 
+144, 153 
+acoustic(s) 1, 7, 93, 107, 167 
+belting, of 38, 44–5, 107–8, 
+110–13, 122–3, 154 
+coupling 45–8, 153, 170 
+feedback 35, 56, 67, 72, 83, 104, 
+131–2, 162, 166 
+pedagogy 93 
+register 26, 44, 49, 65, 93, 119, 
+153, 155, 165 
+registration 34, 41 n.3, 47, 75–7, 
+94, 153, 165, 179 
+sensation 61, 82–3, 104, 138 
+strategy 107, 111, 122–3 
+tube acoustics 93, 125 
+voice acoustics 7, 167 
+aﬀect 19, 43, 61, 68, 74, 99, 101, 103, 
+109, 112, 117, 126, 138–40, 
+143, 153 
+Appleman, Ralph 73 
+articulation 31, 101–2, 105, 132, 142, 
+154 
+aryepiglottic sphincter 38, 111, 154, 
+157 
+auditory roughness 15–16, 18, 70, 
+109, 111, 120, 122, 126, 154 
+balanced resonance 35, 37–8, 67, 73, 
+155 
+bandwidth(s) 27, 43–4, 54–5, 62, 148, 
+154, 162 
+broad 148, 154 
+clustered 62 
+narrow 154 
+Beach, Amy 85–7 
+belting 38, 44–5, 107–13, 122–3, 154, 
+158 
+Blake, Rockwell 116, 184 
+breathy phonation 14, 155, 162 
+chest 4, 15, 46, 49, 109–10, 112, 
+119–21, 138, 165, 171 
+chest voice 4, 60, 150, 154 
+chest mix 96, 122 
+chest register 46, 108, 165 
+chesty, chestier 15, 18, 53, 67, 
+155–6, 160 
+chiaroscuro 35, 38, 40, 46, 57 n.1, 
+67–9, 73–4, 155 
+close timbre 44, 47, 50–1, 53, 65,  
+71, 85–8, 95–6, 117–19,  
+153, 163, 169. See also voce 
+chiusa 
+close vowel 33, 48, 51, 56, 60, 67–9, 
+76, 118–19, 155, 163 
+semi-close 77 
+closed quotient 72, 150, 156–7 n.1 
+closing 12–13, 15, 34, 44, 49, 65, 
+74–6, 84, 89, 94, 115–18, 156 
+closing rate 13, 15 
+mini-closing 76, 94 
+vocal folds, of 12 
+Co#n, Berton 73 
+contact quotient 119–20, 150, 156 
+convergence, convergent 33, 48, 61, 
+66, 69–70, 72–4, 102 
+resonator 38, 52, 66–7, 73, 99, 
+118, 156, 166, 169 
+vowel 144–5 
+PRAA.indb   188PRAA.indb   188 7/10/2025   4:39:04 PM7/10/2025   4:39:04 PM
+Index 189
+cover 47, 49, 62, 65, 74, 78, 84, 
+115–17, 155–6 
+acoustic de/f_inition 74, 115, 117 
+heavy cover 84, 116, 159 
+vocal folds, of 120, 161, 168 
+cricothyroid muscles (CT) 51, 67, 
+120–1, 139, 156, 160–1, 163, 
+171 
+depth 15, 32–3, 37–8, 44, 47, 54–5, 
+65–9, 116, 126, 143, 156, 159 
+divergence, divergent 45–6, 56, 108, 
+111, 132, 157, 163, 169 
+resonator 46, 108 
+downstream resistor 142, 144, 157 
+electroglottography (EGG) 149–50, 
+157 
+epilarynx, epilaryngeal 22, 36, 38, 73, 
+154, 157–8, 166, 168 
+Fach 30, 37, 43, 56, 65, 157 
+&ow phonation 15, 48, 137, 162 
+formant(s) 18, 22, 25–40 
+clustering 33, 38, 44, 53, 96, 158, 
+171 
+/f_irst formant 18, 26, 30, 32–5, 
+38, 48, 50–1, 55–6, 60–2, 
+77, 94–5, 156, 158, 163, 169, 
+179–80 
+lowering 33, 52, 116 
+raising 33–4, 44–6, 107–8, 
+117, 131 
+harmonic interactions with 34, 41 
+n.3, 93 
+locations 26, 29, 34, 46, 50, 95, 
+125–6, 169, 179–80 
+number of 30 
+roles of 30, 32, 34 
+second formant 30, 33–6, 46, 54, 
+61, 94, 100, 104, 159, 169 
+front vowel 35, 55, 73, 82, 104, 132, 
+159 
+front-back dimension 34–6, 69–70, 
+159 
+fronted tongue 36, 55, 95, 101, 159 
+fullness 32–3, 44, 55, 63, 69, 96, 159 
+fundamental frequency (fo) 6, 8, 11–18, 
+37, 44, 47, 59–60, 63, 93, 96, 
+153, 159, 163, 164, 170–1 
+Granqvist, Svante 145, 147 
+Handel, G. F . 87 
+harmonic(s) 6–8, 11–18, 24–6, 28–9, 
+43–5, 51, 54, 59, 70–2, 93–5, 
+111, 145, 153–4, 161, 164, 
+172, 174 
+harmonic series 6–7 
+head 47, 68, 82, 104–5, 135 
+dominant 95–6, 132 
+heady, headier 15, 18, 53, 96, 121, 
+159–60 
+mix 122 
+voice 4, 49, 51, 53, 55, 119, 170–1 
+heavy 117, 121 
+cover 116, 159 
+mechanism 119 
+production 121 
+Helmholtz resonator 21–2, 159 
+inertance, inertive reactance 73, 142, 
+160 
+inhalation 
+noiseless 61, 99–100 
+instructional technology 1–3, 145 
+intensity 5–6, 8, 12–13, 16, 20 n.1, 53, 
+97, 111, 154, 160, 166–7 
+interactivity 8, 24, 37–8, 72–3, 160, 
+162, 166 
+knowledge 
+declarative 3–4, 120, 156 
+procedural 3–4, 81, 104, 112, 115, 
+117, 120–1, 165 
+Kraus, Alfredo 116 
+PRAA.indb   189PRAA.indb   189 7/10/2025   4:39:04 PM7/10/2025   4:39:04 PM
+ Index 190
+Large, John 73 
+laryngeal registration 19, 50–2, 
+65, 67, 94, 122, 125, 139, 
+141–4. See also chest, head; 
+mechanisms zero, one, 
+two, & three; cricothyroid, 
+thyroarytenoid 
+linear source-/f_ilter model 7, 12, 22, 
+24, 109, 160 
+London, George 89, 183 
+loudness 20 n.4, 27, 137, 160 
+Lovetri, Jeanette 110 
+Madde synthesizer 2, 3, 12, 17, 30, 51, 
+62, 145–7, 172–8 
+mechanism, vibrational 15, 20 n.3, 
+61, 119–20, 141, 146, 150, 
+171 
+one (M1) 15, 59, 67, 108, 110, 119, 
+155–6, 160–1, 165 
+three (M3) 59, 120, 160–1 
+two (M2) 16, 51, 59, 67, 119, 
+155–6, 160–1, 165 
+zero, (M0) 161 
+Miller, Donald Gray 36, 55, 73, 148, 
+150–1 
+mode of phonation 13–15, 17–18, 
+161, 172 
+breathy phonation 14, 122, 146, 
+162 
+&ow phonation 15, 48, 137, 146, 
+162 
+pressed phonation 14, 19, 46,  
+56, 65–6, 103, 108, 110,  
+121, 137–8, 142, 146, 157, 
+162 
+music 6, 91, 107 
+contemporary commercial 
+(CCM) 18, 29, 37, 54, 94, 
+156, 158, 168, 171 
+musical theater 45, 95, 107, 121–2, 
+154, 168 
+popular music 107, 156 
+world music 45, 95, 107, 122, 154, 
+157 
+nasalance 144, 162 
+noise 5–8, 11, 14, 18, 20 n.1, 61, 
+100, 146, 159, 166. See also 
+inhalation, noiseless 
+non-linear source-/f_ilter model 24–5, 
+72, 162 
+non-linearity 24, 146 
+open throat 61, 99 
+open timbre 45–7, 50, 65, 82, 84, 
+86–7, 89, 90, 109, 111, 117, 
+119, 125–6, 128–9, 133, 153, 
+163, 169. See also voce aperta 
+open vowel 33, 46, 49, 51, 54, 67, 73, 
+75–8, 83, 108–9, 119, 126–8, 
+157, 163, 165 
+opening, vowel 53, 55–6, 62, 69, 71, 
+74, 78, 90, 94, 96, 106, 117, 
+136 
+openness-closeness dimension 32–3, 
+163 
+overtones 163 
+partials 14–15, 22, 27, 37–8, 43, 51, 
+53, 97, 104, 110–11, 120, 159, 
+163, 172, 174–5 
+passaggio 66, 77, 116–17, 163 
+lower passaggio 51, 62, 65–79 n.1, 
+81, 83, 163, 181 
+primo passaggio 68, 76–7, 79 n.1, 
+163 
+secondo passaggio 76–9 n.1, 163 
+upper passaggio 51, 65, 76–7 
+zona di passaggio 68, 69, 75–7, 83, 
+143, 163 
+passive vowel modi/f_ication 
+migration 34, 47, 50, 66, 69–71, 
+76, 81–4, 86, 115, 117, 126, 
+130, 145, 164, 170, 177–9 
+Pavarotti, Luciano 115, 184 
+PRAA.indb   190PRAA.indb   190 7/10/2025   4:39:04 PM7/10/2025   4:39:04 PM
+Index 191
+pedagogy, pedagogic 1, 4, 9, 17, 27, 
+50, 70, 81, 83, 104, 115, 118, 
+121, 137, 141, 145, 147 
+perception, percept 4–6, 8, 16–18, 20, 
+25, 41 n.3, 78 
+of frequency (pitch) 5, 6, 8, 11 
+of intensity (loudness) 20, 27, 137, 
+160 
+of registration 120–1, 138, 141–2, 
+156 
+of tonal sensation 82, 103 
+of turning over 62, 68, 81, 85, 156 
+of vibrato 11, 137–8, 147, 149, 151 
+of voice type 56, 83 
+of vowel, timbre 32, 35–6, 47, 62, 
+68–71, 74, 81–2 
+perturbation 23, 30, 154, 158, 164 
+piriform sinuses 38, 157, 164, 168 
+pitch 5–8, 11, 15–17, 19–22, 26, 39, 
+43–5, 47–8, 50, 54–6, 62, 67, 
+96, 100, 117, 131–2, 137–9, 
+143, 147, 159, 164–5, 171–3 
+pitch of turning 50, 68, 84, 86, 118, 
+126–7, 130, 164 
+power spectrum 12, 39–40, 49, 
+149–51, 164, 167 
+pressed phonation. See mode of 
+phonation 
+pressure 
+breath 14, 22, 38, 111, 138, 161 
+ waveform 6, 15, 149, 159, 165 
+Price, Leontyne 62, 183 
+primary acoustic register 
+transition 47, 49, 76, 95, 131, 165, 
+176 
+primary laryngeal register 165 
+primary turning 75–8 
+quarter-wave resonator 22–3, 27, 37, 
+93, 158, 164, 166 
+Rachmaninoﬀ, Sergei 84, 183 
+Ravel, Maurice 85, 89, 183 
+reactance 38, 43, 73, 142, 157, 160, 
+166 
+Real-time spectrography 147–9, 151, 
+166–7 
+resonance(s) 3, 7–9, 11, 16, 19, 21,  
+23, 25, 27, 29–32, 39, 43–4, 
+93, 99, 103, 153–4, 158, 166, 
+169 
+anti-resonance 157, 164, 168 
+balance 35, 37–8, 73, 148–9, 155 
+characteristics 7, 9, 25, 28–9, 39, 
+95, 167 
+/f_irst 22, 26, 30, 31, 33–4, 36, 41 
+n.3, 44–56, 60, 62–3, 71–2, 
+75, 94–6, 117, 122, 125, 131, 
+144, 153, 169 
+frequency 22, 23 
+harmonic interactions 26, 34, 
+43–4, 49, 55, 64, 71–2, 74–5, 
+78, 93, 95, 125–6, 145–6, 
+152–3, 170 
+higher 23 
+lower, lowest 21, 23, 32 
+peaks 21, 28 
+primary 27 
+second 30–1, 33–6, 39, 41 n.3, 
+52–5, 62, 78, 87, 153, 155, 163 
+strategies 34–6, 38, 45, 49, 57 n.1, 
+67, 72, 78, 116–17, 156–7, 
+163 
+tracking 158 
+tube 28, 154 
+tuning 19, 24, 31, 36, 44, 68, 134, 
+158, 164 
+roll-oﬀ 8, 12, 14–16, 19, 51, 145–6, 166, 
+172–4 
+Schubert, Franz 89–91, 184 
+Schutte, Harm 148 
+second formant. See formant, second 
+semantics 3, 7, 121 
+diﬀerences 115, 118, 122 
+semi-occluded vocal tract 142, 143, 166 
+PRAA.indb   191PRAA.indb   191 7/10/2025   4:39:04 PM7/10/2025   4:39:04 PM
+ Index 192
+singer’s formant cluster (SFC) 14, 
+36–8, 46, 55, 57 n.1, 65, 67, 
+69, 73, 109, 144, 151, 154–5, 
+157–8, 164, 167, 171 
+formant tracking 44, 77, 96, 158 
+formant tuning 33, 44, 69, 72, 95, 
+158 
+strategies 36, 54 
+vowel formants 29, 31, 50, 104, 
+153, 158, 169–70 
+somatosense 4, 31, 82, 156, 167–8 
+front-to-back 67 
+locational 36, 68, 103, 105, 113, 
+117, 120–1, 126, 129, 133, 
+135, 161 
+migration of 26, 117 
+timbral 65, 68, 135 
+vibrotactile 104 
+sound transfer characteristics 7, 25, 
+28–9, 157 
+spectral envelope 39, 167 
+spectral slope 8, 12–13, 15, 18–19, 
+24–5, 97, 141, 159–60, 164, 
+166–7 
+spectrography 147–2, 166–7 
+Strauss, Richard 62–4, 183 
+Sundberg, Johan 36, 38, 73, 144 
+thyroarytenoid muscles (TA) 15, 65, 
+111, 120, 160, 168, 171 
+tilt. See roll oﬀ 
+Titze, Ingo 29, 36, 38, 59, 73, 120 
+tools 2, 145–52 
+transglottal pressure diﬀerence 14, 
+19–20, 24, 95, 107–11, 121–2, 
+142, 157, 160–1, 166–7 
+transient theory, model 7, 24, 167 
+turning, turning over 47, 49–51, 54, 
+65, 70, 74, 78, 81–3, 117, 127, 
+140, 155–6, 159, 165, 168, 
+176. See also pitch of turning; 
+primary turning 
+mini- 76–7, 87, 89–90, 94, 126 
+vertical phase diﬀerence 15, 59, 121, 
+160–1, 168 
+vocal fry 119, 161 
+vocal tract 8, 9, 11, 13–14, 18–25, 
+27–32, 34–5, 37–40, 43, 53, 
+59, 65, 70, 93, 95, 99, 100, 
+103, 108, 110–11, 148, 153–6, 
+158, 161, 164, 166–71, 173–6 
+/f_ilter 168–9, 171 
+tube 27–31, 37, 47, 52, 54–6, 65–6, 
+69–70, 74–6, 93–4, 96, 99, 
+101–2, 108, 125, 154, 159, 
+166, 168, 170, 179 
+voce aperta 4, 45, 57 n.1, 65, 115, 153, 
+163, 169 
+voce chiusa 4, 47, 57 n.1, 65, 115, 153, 
+155–6, 163, 169 
+VoceVista 2, 148–52, 178–9 
+voice 1, 2, 4, 7–9, 11–13, 15, 25, 26, 
+32, 65, 94–5, 157, 179 
+analysis 1, 2, 148, 151, 164, 166 
+lower 59, 60, 65 
+middle 34, 55, 60–1, 66, 110 
+non-treble 36, 44–5, 47–51, 54, 
+56, 65, 67, 69, 74–5, 78, 81, 
+83–4, 96, 125–6, 129, 163, 
+165 
+pharyngeal 38, 61, 164 
+science 1–2, 6, 27, 73, 119,  
+123 n.1 
+source 7–9, 11–13, 17–19, 21–2, 
+24, 28–9, 43, 141, 143–4, 
+154–5, 160–1, 167, 169, 172 
+synthesizer 2, 145–7, 173–4 
+treble 34, 37, 44, 48, 51–2, 54–5, 
+57 n.1, 59–60, 62, 64 n.2, 
+65, 78, 81, 83, 96, 108, 110, 
+125–7, 129, 132, 135, 158, 
+163, 165, 170 
+type 18, 30, 37, 119, 178 (see also 
+Fach) 
+upper 34, 36, 47, 61, 66, 76, 132, 
+163–4 (see also head, chest) 
+PRAA.indb   192PRAA.indb   192 7/10/2025   4:39:04 PM7/10/2025   4:39:04 PM
+Index 193
+vowel(s) 102, 144 
+back 22, 35, 55, 81–2 
+close 33, 48, 51, 56, 60, 64, 67,  
+77, 83, 117–19, 155, 159,  
+169 
+de/f_inition, identity 16, 17, 23, 
+33–4, 60, 69–1, 74, 132, 169 
+formants/resonances 26, 30–1, 40, 
+55, 94, 158 
+front 22, 35–6, 55, 81–2, 159 
+modi/f_ication/migration 28, 32, 
+34, 50, 52, 60, 62–3, 70–2, 74, 
+82, 84, 115, 117, 131–2, 153, 
+164, 170 
+open 33, 45–6, 48–9, 51, 53–4, 56, 
+77, 83, 119, 163, 169 
+over-vowel 97, 108, 163, 168 
+placement sensations 36, 103–5, 
+161 
+tone color 6, 32, 35, 71–2, 74, 104, 
+137, 153 
+turning 50, 67–8, 74, 77, 81, 86, 
+94, 126, 130, 140, 164, 168 
+under-vowel 31, 68, 71, 97, 
+116–17, 126, 129, 168 
+whoop 37, 44, 47–9, 51–6, 57 n.2, 
+62–4, 69, 71, 76–8, 93–6, 
+125–8, 131–2, 135–6, 153, 
+158, 166, 170, 175–6 
+yell 44–6, 54, 65, 68, 74, 82, 93, 95, 
+107–9, 116–17, 122–3, 126, 
+154, 158, 169–70 
+coupling 65, 170 
+instinct 45, 68, 74, 117, 137, 
+139–40 
+timbre 45–6, 54, 95, 107 
+PRAA.indb   193PRAA.indb   193 7/10/2025   4:39:05 PM7/10/2025   4:39:05 PM
+PRAA.indb   194PRAA.indb   194 7/10/2025   4:39:05 PM7/10/2025   4:39:05 PM
+PRAA.indb   195PRAA.indb   195 7/10/2025   4:39:05 PM7/10/2025   4:39:05 PM
+PRAA.indb   196PRAA.indb   196 7/10/2025   4:39:05 PM7/10/2025   4:39:05 PM
+PRAA.indb   197PRAA.indb   197 7/10/2025   4:39:05 PM7/10/2025   4:39:05 PM
+PRAA.indb   198PRAA.indb   198 7/10/2025   4:39:05 PM7/10/2025   4:39:05 PM

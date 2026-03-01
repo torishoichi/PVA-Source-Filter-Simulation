@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Source-Filter Simulation (PVA Model)</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <header>
+            <h1>Source-Filter Acoustic Model</h1>
+            <p>Practical Vocal Acoustics Simulation</p>
+        </header>
+
+        <main class="dashboard">
+            <!-- Source Panel -->
+            <section class="panel source-panel glass">
+                <div class="panel-header-row">
+                    <h2>The Voice Source</h2>
+                    <label for="voice-type-select">Voice Type Profile <span class="tooltip"
+                            data-tooltip="トレブルボイス（ソプラノ、アルト、カウンターテナー等）か非トレブルボイス（テノール、バス等）かの区分です。トレブルボイスは音域が高いため共鳴に利用できる倍音が少なく、より早い段階でWhoopモード（fR1:1fo）に依存します。非トレブルボイスは音域が低く、低・中音域に多くの倍音を持つため、ターンオーバー（fR1:2fo交差）が主要な音響イベントとなります。">[?]</span></label>
+                    <select id="voice-type-select" class="voice-type-select">
+                        <option value="treble">Treble Voice</option>
+                        <option value="nontreble" selected>Non-Treble Voice</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label for="pitch-slider">
+                        Fundamental Frequency (f₀) <span class="tooltip"
+                            data-tooltip="意図されたピッチ（音高）に相当する基本周波数です（PVA内では1foと表記）。この基本周波数の整数倍として倍音（2fo, 3fo...）が生成され、f0が高くなるほど倍音同士の周波数間隔は広くなります。">[?]</span>
+                        <span id="pitch-val">220</span> Hz
+                    </label>
+                    <input type="range" id="pitch-slider" min="50" max="1000" value="220" step="1">
+                    <div class="notes-display" id="pitch-note">A3</div>
+                </div>
+
+                <div class="control-group">
+                    <label>Vibrational Mechanism (Register) <span class="tooltip"
+                            data-tooltip="声帯の物理的な振動様式に基づく区分です。M1（地声的）は声帯が厚く接触率が高いため、緩やかなスペクトル傾斜（豊富な高次倍音）とバズ音を持ちます。M2（裏声的）は声帯が薄く接触率が低いため、急なスペクトル傾斜（少ない高次倍音）と滑らかな音色になります。">[?]</span></label>
+                    <div class="toggle-switch">
+                        <input type="radio" id="mech-m1" name="mechanism" value="m1" checked>
+                        <label for="mech-m1">M1 (Chest-like)</label>
+                        <input type="radio" id="mech-m2" name="mechanism" value="m2">
+                        <label for="mech-m2">M2 (Head-like)</label>
+                    </div>
+                    <div class="hint">M1: Richer harmonics (-12dB/oct). M2: Flutier, fewer harmonics (-18dB/oct).</div>
+                </div>
+
+                <div class="control-group">
+                    <label for="pressure-slider">
+                        Subglottal Pressure (P) <span class="tooltip"
+                            data-tooltip="声門間圧力差（呼気圧）。気管内（声帯の下）と声道（声帯の上）の圧力差であり、声帯を振動させるための駆動力となります。">[?]</span>
+                        <span id="pressure-val">1.0</span>
+                    </label>
+                    <input type="range" id="pressure-slider" min="0.1" max="3.0" value="1.0" step="0.1">
+                </div>
+
+                <div class="control-group">
+                    <label for="resistance-slider">
+                        Glottal Resistance (R) <span class="tooltip"
+                            data-tooltip="声門抵抗。気流の圧力に対して、有能な声帯閉鎖を達成・維持するために必要な力であり、振動組織の衝突力を決定します。">[?]</span>
+                        <span id="resistance-val">1.0</span>
+                    </label>
+                    <input type="range" id="resistance-slider" min="0.1" max="3.0" value="1.0" step="0.1">
+                </div>
+
+                <div class="status-panel glass-dark">
+                    <div class="status-row">
+                        <span>Airflow (U = P/R): <span class="tooltip"
+                                data-tooltip="気流量。呼気圧（P）と声門抵抗（R）の力学的なバランスの結果として生じる媒介的な値です。">[?]</span></span>
+                        <span id="airflow-val" class="mono">1.00</span>
+                    </div>
+                    <div class="status-row">
+                        <span>Phonation Mode: <span class="tooltip"
+                                data-tooltip="圧力、気流、声門抵抗のバランスによる発声状態の分類です。これらが均衡した「フロー発声」、抵抗が過剰な「圧迫発声（Pressed）」、気流が過剰な「息漏れ発声（Breathy）」に分かれ、生成される波形の倍音の強さ（スペクトルスロープ）やノイズ比率に影響を与えます。">[?]</span></span>
+                        <span id="mode-status" class="status-badge flow">Flow</span>
+                    </div>
+                </div>
+
+                <div class="acoustic-tracker glass-dark">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <h3 class="tracker-title" style="margin: 0;">Acoustic Strategy (f₀ vs fR1)</h3>
+                        <label class="toggle-checkbox">
+                            <input type="checkbox" id="auto-routing-toggle" checked>
+                            <span class="label-text" style="font-size:0.8rem; color:#8b949e;">Auto-Routing</span>
+                        </label>
+                    </div>
+                    <div class="status-row">
+                        <span>Timbre State: <span class="tooltip"
+                                data-tooltip="倍音と第1共鳴（fR1）の位置関係によって生じる音色の状態です。複数の倍音がfR1の下にある場合は「Open Timbre（開いた音色）」となり、第2倍音（2fo）がfR1を超えて上に行くと「Close Timbre（閉じた音色 / ターンオーバー）」へ移行します。">[?]</span></span>
+                        <span id="timbre-state" class="mono">Open</span>
+                    </div>
+                    <div class="status-row">
+                        <span>Acoustic Mode: <span class="tooltip"
+                                data-tooltip="共鳴周波数を特定の倍音に追従させる（トラッキングする）戦略です。fR1を2foに同調させ続けると発散型共鳴器による「YELL（叫び）」となり、fR1を1foに同調させると収束型共鳴器による「WHOOP（フープ）」となります。">[?]</span></span>
+                        <span id="acoustic-mode" class="status-badge neutral">Neutral</span>
+                    </div>
+                    <div id="event-flash" class="event-flash hidden">TURNING OVER! (2f₀ > fR1)</div>
+                </div>
+            </section>
+
+            <!-- Filter Panel -->
+            <section class="panel filter-panel glass">
+                <h2>The Filter (Vocal Tract) <span class="tooltip"
+                        data-tooltip="声道を1/4波長共鳴管として扱う音響伝達特性（フィルター機能）です。声帯原音の音響エネルギーのうち、声道の形状によって決まる特定の周波数（共鳴ピーク）に近い成分を選択的に強化し、それ以外を減衰させます。">[?]</span>
+                </h2>
+
+                <!-- F1 Control -->
+                <div class="formant-control">
+                    <div class="formant-header">
+                        <div class="label-row">
+                            <label for="f1-slider">F1 (Depth) <span class="tooltip"
+                                    data-tooltip="第1フォルマント（声道の最も低い共鳴）。音の「深さ」や「温かみ」に関与し、母音の開閉（Openness-Closeness）次元を決定します。声道を短くする、または口・顎を開くことでF1は上がり、声道を長くする、または口を閉じることでF1は下がります。このF1と倍音との交差が、音響的レジスター変化の主要な原因となります。">[?]</span>
+                                <span id="f1-val" class="accent-blue">500</span> Hz</label>
+                        </div>
+                        <button class="toggle-btn active" id="f1-toggle">ON</button>
+                    </div>
+                    <input type="range" id="f1-slider" min="250" max="1000" value="500" step="1">
+                    <div class="q-control">
+                        <label for="f1-q">Q Factor:</label>
+                        <input type="range" id="f1-q" min="1" max="20" value="5" step="0.1">
+                    </div>
+                </div>
+
+                <!-- F2 Control -->
+                <div class="formant-control">
+                    <div class="formant-header">
+                        <div class="label-row">
+                            <label for="f2-slider">F2 (Clarity) <span id="f2-val">1500</span> Hz</label>
+                        </div>
+                        <button class="toggle-btn active" id="f2-toggle">ON</button>
+                    </div>
+                    <input type="range" id="f2-slider" min="800" max="2500" value="1500" step="1">
+                    <div class="q-control">
+                        <label for="f2-q">Q Factor:</label>
+                        <input type="range" id="f2-q" min="1" max="20" value="6" step="0.1">
+                    </div>
+                </div>
+
+                <!-- F3 / SFC Control -->
+                <div class="formant-control">
+                    <div class="formant-header">
+                        <div class="label-row">
+                            <label for="f3-slider">F3 (Ring) <span id="f3-val">2800</span> Hz</label>
+                        </div>
+                        <button class="toggle-btn active" id="f3-toggle">ON</button>
+                    </div>
+                    <input type="range" id="f3-slider" min="2000" max="4000" value="2800" step="1">
+                    <div class="q-control">
+                        <label for="f3-q">Q Factor:</label>
+                        <input type="range" id="f3-q" min="1" max="20" value="8" step="0.1">
+                    </div>
+                </div>
+
+                <!-- F4 Control -->
+                <div class="formant-control">
+                    <div class="formant-header">
+                        <div class="label-row">
+                            <label for="f4-slider">F4 <span id="f4-val">3800</span> Hz</label>
+                        </div>
+                        <button class="toggle-btn active" id="f4-toggle">ON</button>
+                    </div>
+                    <input type="range" id="f4-slider" min="2500" max="4500" value="3800" step="1">
+                    <div class="q-control">
+                        <label for="f4-q">Q Factor:</label>
+                        <input type="range" id="f4-q" min="1" max="20" value="10" step="0.1">
+                    </div>
+                </div>
+
+                <!-- F5 Control -->
+                <div class="formant-control">
+                    <div class="formant-header">
+                        <div class="label-row">
+                            <label for="f5-slider">F5 <span id="f5-val">4800</span> Hz</label>
+                        </div>
+                        <button class="toggle-btn active" id="f5-toggle">ON</button>
+                    </div>
+                    <input type="range" id="f5-slider" min="3500" max="6000" value="4800" step="1">
+                    <div class="q-control">
+                        <label for="f5-q">Q Factor:</label>
+                        <input type="range" id="f5-q" min="1" max="20" value="12" step="0.1">
+                    </div>
+                </div>
+
+                <div class="preset-group">
+                    <span>Presets:</span>
+                    <button class="preset-btn" data-preset="i">[i] (ee)</button>
+                    <button class="preset-btn" data-preset="a">[ɑ] (ah)</button>
+                    <button class="preset-btn" data-preset="u">[u] (oo)</button>
+                    <button class="preset-btn" data-preset="open">Open Timbre</button>
+                    <button class="preset-btn" data-preset="close">Close Timbre</button>
+                </div>
+            </section>
+
+            <!-- Visualizer Panel -->
+            <section class="panel visualizer-panel glass">
+                <div class="canvas-header">
+                    <h2>Power Spectrum (Source × Filter = Output)</h2>
+                    <button id="audio-toggle" class="btn primary">Play Audio</button>
+                </div>
+                <div class="canvas-container">
+                    <canvas id="spectrum-canvas"></canvas>
+                    <div class="axis-labels x-axis">
+                        <span>0Hz</span>
+                        <span>1kHz</span>
+                        <span>2kHz</span>
+                        <span>3kHz</span>
+                        <span>4kHz</span>
+                        <span>5kHz</span>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="main.js"></script>
+</body>
+
+</html>

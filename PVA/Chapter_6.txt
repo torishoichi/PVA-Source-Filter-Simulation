@@ -1,0 +1,440 @@
+6
+Harmonic:Resonance 
+Interactions
+Vocal resonance is the result of the interactions between voice source 
+partials (frequencies) and vocal tract resonances. In general, we want 
+approximate matches between our resonance tunings and those 
+harmonics of the pitch being sung that are available for resonation. 
+Harmonics may lose power more rapidly on the high side of a resonance 
+frequency peak due to reactance (Titze). Since we have no control over 
+the frequency location of the harmonics (they are determined by the pitch 
+we are required to sing), the main factor that we can aﬀect in order to 
+be resonant is the frequency location (tuning) of the /f_irst two vocal tract 
+resonances and their resultant radiated formants. !eir tuning results 
+from our vowel conception and intention and from expressive, aﬀective 
+motivation. !e Western classical singer will want the frequency location 
+of the clustered higher formants to be as stable as possible for consistency 
+of overall timbre and Fach. However, the /f_irst two resonances can be tuned 
+to amplify available harmonics when necessary.
+Harmonic:First Resonance 
+Interactions
+While interaction between source-reinforced harmonics and all 
+resonances is important, interactions with the /f_irst resonance are 
+especially signi/f_icant. If no harmonics land within the bandwidth of the 
+PRAA.indb   43PRAA.indb   43 7/10/2025   4:38:50 PM7/10/2025   4:38:50 PM
+Practical Vocal Acoustics  44
+Harmonic:Resonance Interactions
+/f_irst resonance, ideally below its frequency peak, the overall sound will 
+be weaker and thinner. !ere needs to be at least one harmonic near that 
+peak to be activated and resonated by it in order to have fullness and 
+depth. If there are two or more harmonics below the /f_irst resonance, that 
+is, when singing lower pitches, there is little need for resonance/ formant 
+tuning, since, in that situation there will usually be plenty of harmonics 
+available for resonation by the /f_irst, second, and higher resonances. With 
+higher fundamental frequencies, harmonics are more widely spaced 
+relative to resonance frequencies, leaving fewer harmonics within the 
+bandwidths of the /f_irst two resonances to be featured. !erefore, more 
+attention to resonance/formant tuning becomes necessary when singing 
+higher pitches.
+Possible Resonance:Harmonic 
+Interactions
+!ere are four possible interactions between resonances and harmonics: 
+(1) a resonance can allow a moving harmonic to pass through it (opening 
+or closing the timbre); (2) a resonance can move across a stable harmonic 
+(a change of vowel and possibly of acoustic register on the same pitch); 
+(3) a resonance can be steadily retuned to track a moving harmonic (as in 
+yelling, belting, or whooping), sometimes called formant tracking; and 
+(4) a resonance can be “detuned” away from a harmonic (by raising fR1 
+to stay above the sung pitch to remain in close timbre and avoid whoop 
+timbre on close vowels by non-treble voices or belters; or by reducing 
+higher formant clustering as a strategy in the upper treble voice range to 
+eliminate the shrillness eﬀect of strong higher formants).
+Timbral Opening and Closing
+Whenever a source harmonic passes through and above the /f_irst resonance, 
+there is an aural eﬀect described as a perceptual closing of the timbre. 
+Whenever a harmonic drops below the /f_irst resonance, the timbre can be 
+heard to open to some degree.
+PRAA.indb   44PRAA.indb   44 7/10/2025   4:38:50 PM7/10/2025   4:38:50 PM
+ Harmonic:Resonance Interactions 45
+Open Timbre
+When two or more harmonics lie at or below the /f_irst resonance, the 
+timbre is described as open timbre  ( voce aperta  in Italian); the more 
+harmonics below the /f_irst resonance, the more open the timbre. In other 
+words, open timbre occurs when singing an octave or more below the /f_irst 
+resonance of the vowel being sung. Open timbre might be described as 
+bright, straightforward, clear, fresh, exposed, coming more directly out of 
+the mouth, and—if low enough in pitch—buzzy. If unskillfully taken too 
+high, open timbre can become blatant or spread as in a raw yell. Belting 
+is a skillful variation of open timbre at higher pitches.  When the /f_irst 
+resonance is tuned to the second harmonic, or conversely, as the second 
+harmonic approaches the peak frequency of the /f_irst resonance, an fR1:2fo 
+acoustic coupling occurs, which forms an especially strong form of open 
+timbre, characterized by ringing clarity and power from enhanced higher 
+spectral content. !is is such a strong acoustic coupling that we o/f_ten 
+instinctively adjust for it when power and projection are needed. Novice 
+singers tend to track this higher into yell timbre by an increasingly open, 
+divergent vocal tract shaping.
+Yell Coupling
+If this fR1:2fo open timbre coupling is maintained or tracked above the 
+normal fR1 location of the vowel being sung by raising the /f_irst resonance 
+in tandem with the rising second harmonic, the singer has moved into yell 
+timbre. !is is  a valuable resonance strategy when needed in life and is 
+quite common in musical theater, popular, folk, and world music idioms, 
+but yell timbre is avoided in Western classical singing. !ese non-classical 
+vocal styles can be said to exploit the expressive power and “naturalness” 
+of more or less skillful yelling. !e ability to yell is apparently an inherited, 
+universal, and strong survival instinct. Overcoming this instinct is crucial 
+in training young non-treble voices to negotiate their passaggi successfully 
+with Western classical timbre. On the contrary, carefully managing an 
+e#cient, skillful form of it is crucial to training musical theater belt timbre 
+(Figure 6.1). 
+PRAA.indb   45PRAA.indb   45 7/10/2025   4:38:50 PM7/10/2025   4:38:50 PM
+Practical Vocal Acoustics  46
+Yell Characteristics
+Y ell timbre and function are 
+accomplished by raising the /f_irst 
+resonance through tube shortening 
+(larynx raising), pharynx narrowing, 
+and mouth widening, that is, by 
+creating a divergent resonator shape. 
+!e /f_irst two of these maneuvers 
+are accomplished by activating 
+swallowing muscles which raise 
+and constrict the laryngopharynx, 
+narrowing the throat, preventing the 
+use of the classically described singer’s 
+formant cluster and chiaroscuro 
+timbre and in&uencing the vibrator 
+function toward pressed phonation. Furthermore, yelling is typically done 
+on open vowels like [a] or [ ɛ], because their high /f_irst formant locations 
+and inherently more divergent shapes make them more compatible with 
+the acoustic requirements of the yell (try yelling on a pure [u]!). !e yell is 
+chest register (TA) or mechanism one dominant. !ese maneuvers result 
+in the raised and forward-reaching chin of the young biological male 
+accommodating a rising larynx, plus a widened vowel posture.
+Figure 6.1 Open timbre coupling of fR1:2fo: If this coupling is carried higher 
+by tube shortening, it creates the “spread” timbre of a yell.
+PRAA.indb   46PRAA.indb   46 7/10/2025   4:38:50 PM7/10/2025   4:38:50 PM
+ Harmonic:Resonance Interactions 47
+Close Timbre
+When the second harmonic crosses su#ciently above the /f_irst vocal tract 
+resonance, the timbre is heard to close or turn over. !is crossing is the 
+primary acoustic registration event of non-treble (bass, baritone, tenor) 
+voices. Close timbre ( voce chiusa 1 in Italian) is variously described 
+as seeming domed, tipped, smoother, rounder, more collected, or 
+concentrated, above the palate or higher in sensation in the head, and 
+somewhat less direct or exposed (covered). !is occurs when the sung 
+pitch is less than an octave below the /f_irst resonance of the vowel being 
+sung. It is a necessary component of Western classical upper voice 
+training since, unlike other vocal styles, it enables the non-treble upper 
+range and treble middle range to occur without loss of timbral depth or 
+warmth. Turning over is accomplished by retaining depth (tube length), 
+vowel shape, and relative vowel closeness—all of which maintain 
+the /f_irst resonance frequency location—until the second harmonic 
+has surpassed it. It is accompanied by some degree of passive vowel 
+modi/f_ication or migration, a change in the vowel quality that is the 
+result of maintaining the tube shape while the pitch and its harmonics 
+move, in contrast to active modi/f_ication, which involves a deliberate 
+shape change with a resultant retuning of resonances and resultant 
+formants.
+Whoop Coupling
+When the fundamental frequency: 1fo (equivalent to the pitch one 
+is singing) reaches the frequency of the /f_irst resonance, fR1, there is a 
+strong fR1:1fo coupling. !is is called whooping 2 or hooting (D. Miller) 
+and is characterized by a “hootier” full, round, deep timbre. Whoop 
+timbre is dominated by the fundamental frequency; therefore, while 
+resonant, it is smoother and less brassy than open timbre. It may seem 
+more centralized in the head and darkly frontal, being dominated by 
+the [~u, ~o, ~ɔ]-like tone color of the /f_irst harmonic boosted by the /f_irst 
+resonance.
+PRAA.indb   47PRAA.indb   47 7/10/2025   4:38:51 PM7/10/2025   4:38:51 PM
+Practical Vocal Acoustics  48
+Whoop Characteristics
+Whooping is accomplished by tuning 
+the first resonance to the 1fo, that is, 
+to the pitch being sung. It is falsetto 
+(CT) or mechanism two  dominant, 
+tends toward flow phonation, 
+facilitates laryngopharyngeal space, 
+and a convergent (open to the back, 
+narrower to the front) resonator shape. 
+It is primarily done on close vowels, 
+especially [u], because their low first 
+resonance frequency locations facilitate 
+fR1:1fo coupling (it is difficult for most 
+non-treble voices to whoop on open 
+vowels unless very high). Since treble 
+voices eventually sing pitches at or 
+above the first formants of all of their 
+vowels, they are often operating in 
+whoop mode, especially in Western classical singing ( Figure 6.2 ). 
+Figure 6.2  The fR1:1fo coupling of whoop timbre, very characteristic of 
+treble voice classical singing.
+PRAA.indb   48PRAA.indb   48 7/10/2025   4:38:51 PM7/10/2025   4:38:51 PM
+ Harmonic:Resonance Interactions 49
+Yell and Whoop Frequency
+!ese two resonance strategies are inherently strong acoustically and 
+seem to occur innately and universally among humans. For example, 
+when desiring to make a lot of sound at sporting events or enthusiastic 
+celebrations, humans either yell or whoop. If done to excess, either can 
+cause hyper-functional wear. However, whooping is the lower pressure, 
+lower risk, vocally healthier of the two options. Cultural acceptability 
+is another matter. “Bravo!” in whoop mode is not likely to catch on. 
+Either strategy can be skillfully adapted for aesthetic, artistic use, taking 
+advantage of their expressive associations “in the wild. ”
+Turning Over
+!e most prominent and pedagogically relevant of these various 
+harmonic:resonance interactions for non-treble voices is the crossing 
+of the second harmonic (2 fo) above the /f_irst resonance (fR1). !is is the 
+primary acoustic register transition of biological male voices, and at least 
+for the open vowels, has been referred to as vocal cover, closing, or turning 
+over. It is associated with the laryngeal shi/f_t from what has historically been 
+called chest to head voice (actually chest to middle/mixed registration, i.e., 
+a lighter version of laryngeal mechanism one) (Figure 6.3). As mentioned 
+before, this transition also generates a timbral shi/f_t that could be described 
+Figure 6.3 Power spectrum of turning over in which the second harmonic 
+(2fo) has just surpassed the ﬁrst resonance peak.
+PRAA.indb   49PRAA.indb   49 7/10/2025   4:38:51 PM7/10/2025   4:38:51 PM
+Practical Vocal Acoustics  50
+as passive vowel modi/f_ication or migration,  since it causes a subtle closure 
+and rounding of the vowel timbre. !is modi/f_ication is accomplished not 
+through a shape change, but through changing relationships between 
+moving source harmonics and stable vocal tract resonances.
+The Pitch of Turning
+!e pitch of turning  from open to close timbre is determined by the 
+location of the /f_irst resonance of the vowel being sung, which is aﬀected by 
+how openly or closely the vowel is being pronounced. !e pitch of turning 
+is slightly less than an octave below the /f_irst resonance of the vowel, since 
+1fo is an octave below 2 fo. !at is, when you are singing a given pitch, 
+its second harmonic is an octave higher. Tones sung below the pitch of 
+turning for a given vowel (an octave or more below the /f_irst resonance of 
+that vowel) will be in open timbre. Notes above the pitch of turning for 
+that vowel (less than an octave below the /f_irst resonance of that vowel) will 
+be in close timbre. If turning over were the result of laryngeal registration 
+events rather than /f_irst resonance locations, one would expect a voice to 
+turn over at the same pitch for all vowels. It does not. Maintaining that 
+view is no longer a viable pedagogic position (Figure 6.4). 
+Figure 6.4  Approximate ﬁrst formant locations of the cardinal vowels 
+(modeled on the staff in a musician user-friendly way) for a bass voice. 
+Each vowel formant (containing its IPA symbol) is placed in a box on the 
+treble clef, with the pitches at which the voice would turn over or close 
+notated on the bass clef below each vowel. Note again the overall contour 
+of the set of vowel formants. This can be adjusted up or down for other 
+voice categories. From highest to lowest voice category, formant locations 
+only vary by about a fourth or ﬁfth with average high soprano formants 
+spanning approximately G4-G5 and deep bass formants approximately 
+C4-C5 (see Appendix 2, p. 179).
+PRAA.indb   50PRAA.indb   50 7/10/2025   4:38:51 PM7/10/2025   4:38:51 PM
+ Harmonic:Resonance Interactions 51
+As mentioned above,  open vowels (like [ ɑ]) have high first 
+formants. Close vowels (like [i] or [u]) have low first formants. The 
+more openly you pronounce a vowel, the higher its first resonance 
+will be, and the higher it will turn over. The more closely you 
+pronounce a vowel, the lower its first resonance will be, and the lower 
+it will turn over. The ability to hear the turning of the voice, knowledge 
+and anticipation of the locations and sounds of turning, and the 
+willingness and ability to allow that timbral shift to occur, all are 
+extremely helpful in training non-treble voice upper passaggio  and 
+treble voice lower passaggio .
+Madde Exploration 4: Open and Close Timbre
+From Turning to Whoop
+!ere is an octave between the /f_irst and second harmonics of a sung 
+pitch. !erefore, if tube length and shape are kept constant—in other 
+words, if the frequency location of the /f_irst vocal tract resonance is kept 
+constant—there will be just under an octave between turning over into 
+close timbre, where the second harmonic rises above the /f_irst resonance, 
+and arrival at full whoop timbre, where the /f_irst harmonic matches the 
+/f_irst resonance. An acoustic challenge is posed by the octave separation 
+between the /f_irst and second harmonics: immediately above the turn, 
+where the second harmonic begins to drop in power as it relinquishes 
+the advantage of fR1 resonation, the /f_irst harmonic is still too far below 
+the /f_irst resonance to match the power the second harmonic  just lost. 
+!is loss in power can be exacerbated—especially in treble voices—by 
+an earlier shi/f_t in laryngeal registration toward vibrational mechanism 
+two, with its greater CT (head voice) dominance, weaker glottal 
+resistance, and steeper roll-oﬀ in intensity of upper partials. To address 
+this challenge various strategies can be used to strengthen glottal closure 
+competence across the laryngeal register transition, and/or to boost 
+overall resonance by shi/f_ting to a second resonance ampli/f_ication of a 
+higher harmonic.
+PRAA.indb   51PRAA.indb   51 7/10/2025   4:38:51 PM7/10/2025   4:38:51 PM
+Practical Vocal Acoustics  52
+Resonance Strategies between 
+Turning and Whoop
+!ere are three basic /f_irst resonance options in this transitional range:
+
+1) active vowel modi/f_ication that lowers the /f_irst resonance to 
+   precipitate whoop timbre sooner;
+2) maintaining tube shape and /f_irst resonance tuning, allowing a 
+   gradual migration into whoop timbre across the octave divide; and
+3) active vowel modi/f_ication that raises the /f_irst resonance to 
+   postpone or avoid whoop timbre.
+   Overlapping with these /f_irst resonance strategies in this transitional register 
+   from turning to whoop are second resonance strategies: it is precisely here 
+   that coupling the second vocal tract resonance with a higher harmonic is 
+   o/f_ten sought to maintain or boost intensity.
+   Lowering the First Resonance 
+   through Active Vowel 
+   Modiﬁcation
+   If a closer vowel, a closer pronunciation of the same vowel, or some 
+   other tube shape adjusting, timbral deepening strategy (such as tube 
+   lengthening) is used that maximizes resonator convergence for the vowel 
+   being sung, the /f_irst resonance will be lowered. !is will cause a lower 
+   pitch transition into full whoop timbre (an earlier fR1:1fo match). In other 
+   words, it will reduce the interval between turning and whooping to rather 
+   less than an octave. !is is a common strategy of treble voices (altos, 
+   mezzos, sopranos, and countertenors) in Western classical singing, where 
+   the opulent, smoother head voice of whoop timbre is desirable throughout 
+   most of the range.
+   PRAA.indb   52PRAA.indb   52 7/10/2025   4:38:51 PM7/10/2025   4:38:51 PM
+   Harmonic:Resonance Interactions 53
+   Maintaining Vocal Tract Shape
+   Maintaining vocal tract length and vowel closeness (and thus /f_irst 
+   resonance frequency location) when ascending above a vowel’s point 
+   of turning will result in a gradually closer, headier timbre until full 
+   whoop timbre is achieved about an octave higher. As the fundamental 
+   frequency (1 fo) ascends into the peak of the /f_irst resonance and begins 
+   to dominate the timbre, tonal sensations may seem increasingly internal 
+   and centralized, since whooping is generally felt in the head and vertical 
+   pharyngeal column. However, in the lower range of this acoustic register, 
+   overall intensity may need assistance from the second formant featuring a 
+   higher harmonic or from a clustering of the /f_irst and second resonances, 
+   amplifying the second harmonic that lies between them. If appropriate for 
+   the voice type and musical style, intensity may also be helped by retaining 
+   a more robust (mechanism one, “chestier”) laryngeal registration above 
+   the turn or other source or resonance strategies that achieve a longer 
+   closed phase of the vocal fold oscillation. !e longer the vocal fold closure 
+   during each oscillation, the more, higher partials there will be in the 
+   radiated tone.
+   Raising the First Resonance 
+   through Vowel Opening
+   Alternatively, once the voice has turned over into close timbre, the vowel 
+   shape can be gradually opened, starting a step or two above the point of 
+   turning while staying within close timbre. !is strategy will postpone 
+   arrival in full whoop timbre and retain a turned over, yet more robust, 
+   buzzier timbral mix. It involves raising the /f_irst resonance by opening 
+   the vowel shape in a manner that keeps fR1 positioned well above the 
+   pitch being sung, avoiding full whoop timbre, but still below the second 
+   harmonic, avoiding reverting to open or yell timbre. !is approach 
+   eﬀectively lengthens the pitch interval between turning over and whoop 
+   timbre to more than an octave, in some cases avoiding arrival into whoop 
+   PRAA.indb   53PRAA.indb   53 7/10/2025   4:38:51 PM7/10/2025   4:38:51 PM
+   Practical Vocal Acoustics  54
+   coupling altogether. As the vowel is opened to raise the /f_irst resonance, 
+   it will be important for Western classical timbre that tube length—and 
+   timbral depth—not be compromised by larynx raising. Tube shortening is 
+   a viable alternative for some CCM genres that do not similarly prioritize 
+   timbral depth.
+   As mentioned above, in Western classical singing, trained treble voices 
+   prefer the /f_irst two strategies, leaving vowels close or even closing them 
+   more in order to sound headier and fuller—to reach full whoop timbre—
+   lower in the range. Non-treble voices tend to prefer the third strategy, 
+   opening the vowel somewhat above its point of turning, especially on 
+   close vowels, in order not to proceed into falsetto/whoop timbre. Many 
+   premier non-treble singers also seek out second resonance:higher 
+   harmonic couplings to boost the virile ring of the voice for more exciting, 
+   professional operatic top notes. A version of this strategy is also used in 
+   belt mix to extend its characteristic timbre above ca. B4.
+   Second Formant Strategies 
+   Revisited
+   As just mentioned, it is in the range between turning over and arriving 
+   at whoop timbre—for open vowels, approximately the pitch range of the 
+   treble clef—that strategies involving a more prominent second formant 
+   are employed by many professional singers, especially non-treble singers. 
+   !is is most likely due to the large intervallic distance between the /f_irst 
+   and second source harmonics, as compared to the relatively smaller 
+   distances between higher harmonics and their “trailing” harmonics. For 
+   example, when the third harmonic surpasses the /f_irst resonance, the 
+   second harmonic is less than a perfect /f_i/f_th behind and already su#ciently 
+   within the bandwidth of the /f_irst resonance to be ampli/f_ied by it. However, 
+   when the second harmonic crosses through the /f_irst resonance, the /f_irst 
+   harmonic is almost an octave below. !e resultant loss of power can be 
+   countered if a higher harmonic is within the bandwidth of the second 
+   resonance. As Donald Miller has pointed out, for front vowels which have 
+   a high second formant frequency center, this is likely to be the fourth 
+   PRAA.indb   54PRAA.indb   54 7/10/2025   4:38:51 PM7/10/2025   4:38:51 PM
+   Harmonic:Resonance Interactions 55
+   or higher harmonic. With the back vowels, which have a low second 
+   formant, this is likely to be the third or even the second harmonic. !is 
+   seems to be a feature of many premier tenors, generating an especially 
+   ringing top range and of treble belters to extend belt into a bright belt 
+   mix. Others maintain a stronger singer’s formant cluster to achieve ring. 
+   Similar strategies in treble voice singers can be appropriate for the lower-
+   middle voice, but for the upper middle voice can cause an overly brilliant 
+   sound and a reluctance to relinquish the second resonance dominance 
+   in order to establish the /f_irst resonance: /f_irst harmonic dominance of full 
+   whoop timbre. Whoop timbre is essential to opulent operatic head voice 
+   for pitches nearing the top of the treble clef and above. In any case, in order 
+   to have the fullness and depth necessary for classical timbral balance, once 
+   the second harmonic has surpassed the /f_irst resonance, the /f_irst harmonic 
+   (1fo) will need to be resonated to some su#cient extent.
+   First Resonance Tracking of 
+   the First Harmonic ( fR1:1fo )
+   Normally a classical genre singer would not want to sing a pitch higher 
+   than the tuning of the /f_irst resonance, since the tone would lack depth 
+   and fullness. !erefore, when a pitch is sung above the normal location 
+   of a vowel’s /f_irst formant, the vowel would be actively modi/f_ied to raise 
+   the /f_irst resonance and its formant in tandem with the rising pitch in 
+   order to maintain full whoop timbre. !ere are two ways to raise the /f_irst 
+   formant: tube shortening and vowel opening. Vowel opening is the better 
+   option for classical timbre. Opening a vowel involves increasing its overall 
+   shape divergence, while trying to preserve something of its characteristic 
+   shape relative to other vowels. For example, if it is a tongue-fronted 
+   vowel (tongue dorsum humped near the front teeth rather than &at), 
+   tongue height and dorsum-palatal-narrowing will be preserved, even if 
+   somewhat less frontally, as the vowel and mouth are opened and the head 
+   posture slightly elevated. !e higher the pitch being sung, the subtler any 
+   vowel distinctions become, but some thought/intention of the intended 
+   vowel can assist intelligibility remarkably high in the singing range. If it 
+   is a lip-rounded vowel within speaking range, some hint of lip rounding 
+   PRAA.indb   55PRAA.indb   55 7/10/2025   4:38:51 PM7/10/2025   4:38:51 PM
+   Practical Vocal Acoustics  56
+   remains above speaking range as the mouth is increasingly opened—as 
+   compared to a non-lip rounded vowel—until quite high. Tube shortening 
+   raises all formants and therefore changes timbral Fach perception. It 
+   should generally be avoided in classical genre except for the extreme high 
+   range of non-treble voices (ca. B5 and above). By that pitch, the ability 
+   to raise the /f_irst formant by vowel opening alone has been exhausted, so 
+   that elevating the larynx is the only remaining means of raising F1. At 
+   that point, laryngeal elevation does not necessarily compromise vocal 
+   freedom, since tuning the /f_irst resonance to the /f_irst harmonic provides 
+   bene/f_icial interactive feedback to the vibrator, reducing the amount of 
+   glottal resistance necessary. Besides, the vocal Fach of singers attempting 
+   such stratospheric frequencies is rarely in question. Such vowel opening 
+   for whoop timbre tuning is used by non-treble singers only for the vowels 
+   whose /f_irst formants lie within their singing range, such as [i], [u], and 
+   [y]. As mentioned above, trained non-treble voice singers tend to avoid 
+   whoop timbre altogether by keeping the /f_irst formant above the pitch they 
+   are singing through vowel opening, unless they are seeking a pure head 
+   tone or falsetto timbre for occasional special eﬀect. But untrained or less 
+   skillful ones o/f_ten neglect to open su#ciently when singing above the /f_irst 
+   formant locations (ca. D4 to G4) of their close vowels ([i u y]) resulting in 
+   timbral thinness and more eﬀortful phonation.
+   Untrained non-treble singers also o/f_ten raise the larynx on close 
+   vowels such as [i] and [u] even a/f_ter those vowels have closed, that is, 
+   within the octave below the vowel’s /f_irst formant. In this case they are 
+   attempting to stay in a more robust laryngeal adjustment without 
+   opening the articulation of the vowel when singing pitches that approach 
+   its /f_irst resonance. Maintaining a low larynx and close pronunciation in 
+   that situation would normally result in the timbre becoming increasingly 
+   “heady. ” Raising the larynx to avoid that whoop timbre causes a shallower 
+   timbre and pressed or constricted phonation. Opening the vowel shape 
+   within close timbre by opening the mouth while maintaining a relaxed 
+   and settled larynx and a high dorsum-palatal narrowing between the 
+   back upper molars will facilitate robust timbre and postpone or avoid 
+   whoop timbre. Classical treble voices (countertenors, mezzos, and 
+   sopranos alike) all will need to use the same resonance tuning strategies 
+   (see Chapter 7).
+   PRAA.indb   56PRAA.indb   56 7/10/2025   4:38:51 PM7/10/2025   4:38:51 PM
+   Harmonic:Resonance Interactions 57
+   Notes
+   1 !e term voce chiusa is used by some to denote the generally convergent 
+   resonance strategy that results in chiaroscuro timbre and singer’s formant 
+   cluster, and voce aperta to denote a generally divergent resonance 
+   strategy.
+   2 !e term “whoop” was chosen both as an onomatopoeic description and 
+   as an equivalently vernacular contrast to the term “yell, ” in the hope that 
+   its quality would be as well-known and recognizable.
+   PRAA.indb   57PRAA.indb   57 7/10/2025   4:38:51 PM7/10/2025   4:38:51 PM
+   PRAA.indb   58PRAA.indb   58 7/10/2025   4:38:51 PM7/10/2025   4:38:51 PM
+   Practical Vocal Acoustics
