@@ -214,6 +214,80 @@
             </div>
         </div>
 
+        <!-- Glottal Waveform -->
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <h3 class="card-title">Glottal Waveform (LF Model) <span class="tooltip"
+                        data-tooltip="Liljencrants-Fantモデル（1985）による声門流量波形のシミュレーションです。声帯が1周期で開閉する際の空気の流れ（声門流量パルス）を可視化します。この波形の形状が音源の倍音構造を決定し、発声モード（Flow/Pressed/Breathy）やメカニズム（M1/M2）によって大きく変化します。">[?]</span>
+                    <span class="guide-toggle" id="lf-guide-toggle">[??]</span>
+                </h3>
+            </div>
+
+            <div class="lf-guide-panel" id="lf-guide-panel" style="display:none;">
+                <table class="guide-table">
+                    <thead>
+                        <tr>
+                            <th>パラメータ</th>
+                            <th>意味</th>
+                            <th>値が高い時</th>
+                            <th>値が低い時</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Rd</strong></td>
+                            <td>波形全体の形状を決めるマスター値</td>
+                            <td>息漏れ寄り。閉鎖が緩く倍音が少ない</td>
+                            <td>圧迫寄り。閉鎖が急峻で倍音が豊か</td>
+                        </tr>
+                        <tr>
+                            <td><strong>OQ</strong><br><small>開放率</small></td>
+                            <td>1周期中、声門が開いている割合</td>
+                            <td>長く開放 → Breathy、柔らかい音</td>
+                            <td>短く開放 → Pressed、鋭い音</td>
+                        </tr>
+                        <tr>
+                            <td><strong>SQ</strong><br><small>速度比</small></td>
+                            <td>開く速度と閉じる速度の比率</td>
+                            <td>急速に開き緩やかに閉じる → 倍音↑</td>
+                            <td>対称的な開閉 → 倍音↓</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Tp</strong><br><small>流量ピーク</small></td>
+                            <td>気流が最大になる時点</td>
+                            <td colspan="2" style="text-align:center; color:#8b949e;">波形のピーク位置を示すマーカー</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Te</strong><br><small>閉鎖点</small></td>
+                            <td>声門が閉じる時点（最大興奮点）</td>
+                            <td colspan="2" style="text-align:center; color:#8b949e;">Open相とReturn相の境界マーカー</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <h4 class="guide-subtitle">Rd スケール（5段階）</h4>
+                <div class="rd-scale">
+                    <div class="rd-level pressed-strong">Rd &lt; 0.5<br><small>Pressed寄り<br>倍音↑</small></div>
+                    <div class="rd-level pressed-mild">0.5 – 0.9<br><small>やや Pressed<br>倍音やや↑</small></div>
+                    <div class="rd-level modal">0.9 – 1.3<br><small>Modal<br>バランス型</small></div>
+                    <div class="rd-level breathy-mild">1.3 – 2.0<br><small>やや Breathy<br>倍音↓</small></div>
+                    <div class="rd-level breathy-strong">Rd &gt; 2.0<br><small>Breathy寄り<br>倍音↓↓</small></div>
+                </div>
+            </div>
+
+            <div class="glottal-canvas-container">
+                <canvas id="glottal-canvas"></canvas>
+            </div>
+            <div class="glottal-legend">
+                <span class="legend-item open-legend">Open</span>
+                <span class="legend-item return-legend">Return</span>
+                <span class="legend-item closed-legend">Closed</span>
+            </div>
+            <!-- Hidden DOM elements for JS -->
+            <span id="lf-oq" style="display:none">0.50</span>
+            <span id="lf-sq" style="display:none">2.00</span>
+            <span id="lf-rd" style="display:none">1.00</span>
+        </div>
+
         <div class="card">
             <div class="status-header">
                 <h3>Acoustic Strategy</h3>
@@ -234,6 +308,11 @@
         </div>
     </section>
 
+    <footer class="book-ref">
+        <span>Based on: <a href="https://amzn.to/47i62o1" target="_blank" rel="noopener">Practical Vocal Acoustics</a> —
+            K. Bozeman</span>
+    </footer>
+
     <!-- Tab Switching Logic -->
     <script>
         document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -252,6 +331,31 @@
                 micBtn.classList.contains('mic-active') ? 'flex' : 'none';
         });
         micObserver.observe(document.getElementById('mic-toggle'), { attributes: true, attributeFilter: ['class'] });
+
+        // Mobile tooltip tap toggle
+        document.querySelectorAll('.tooltip').forEach(t => {
+            t.addEventListener('click', (e) => {
+                e.stopPropagation();
+                document.querySelectorAll('.tooltip.tooltip-active').forEach(a => {
+                    if (a !== t) a.classList.remove('tooltip-active');
+                });
+                t.classList.toggle('tooltip-active');
+            });
+        });
+        document.addEventListener('click', () => {
+            document.querySelectorAll('.tooltip.tooltip-active').forEach(a => a.classList.remove('tooltip-active'));
+        });
+
+        // Guide panel toggle
+        const guideToggle = document.getElementById('lf-guide-toggle');
+        const guidePanel = document.getElementById('lf-guide-panel');
+        if (guideToggle && guidePanel) {
+            guideToggle.addEventListener('click', () => {
+                const isVisible = guidePanel.style.display !== 'none';
+                guidePanel.style.display = isVisible ? 'none' : 'block';
+                guideToggle.classList.toggle('active', !isVisible);
+            });
+        }
     </script>
     <script src="main.js"></script>
 </body>

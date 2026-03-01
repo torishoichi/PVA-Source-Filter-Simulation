@@ -88,6 +88,12 @@ const els = {
     eventFlash: document.getElementById('event-flash'),
     autoRoutingToggle: document.getElementById('auto-routing-toggle'),
 
+    // Glottal Waveform
+    glottalCanvas: document.getElementById('glottal-canvas'),
+    lfOq: document.getElementById('lf-oq'),
+    lfSq: document.getElementById('lf-sq'),
+    lfRd: document.getElementById('lf-rd'),
+
     // Filters
     f1Slider: document.getElementById('f1-slider'),
     f1Val: document.getElementById('f1-val'),
@@ -395,6 +401,7 @@ function calcAerodynamics() {
     updateNoiseLevel();
     // Do not call analyzeAcoustics() here as calcAerodynamics() will trigger it
     updateSourceParams(); // Slopes change based on mode
+    drawGlottalWaveform(); // Update glottal waveform display
 }
 
 function analyzeAcoustics() {
@@ -544,6 +551,288 @@ function updateFilterParams() {
     updateNode(f5Node, 'f5');
 
     analyzeAcoustics();
+}
+
+// --- LF Glottal Waveform Model ---
+
+/**
+ * Compute LF model parameters from the app's phonation state.
+ * Maps Mechanism (M1/M2), Phonation Mode, and P/R to the Rd parameter,
+ * which then determines Open Quotient (OQ), Speed Quotient (SQ),
+ * and the LF waveform shape.
+ *
+ * Rd is the "declination parameter" (Fant 1995) that unifies
+ * the LF model into a single control dimension:
+ *   Rd ≈ 0.3 : very pressed (strong, buzzy)
+ *   Rd ≈ 1.0 : modal/flow (balanced)
+ *   Rd ≈ 2.7 : very breathy/soft
+ */
+function computeLFParams() {
+    // Base Rd from mechanism
+    let Rd = state.mechanism === 'm1' ? 0.8 : 1.5;
+
+    // Modify by phonation mode
+    if (state.phonationMode === 'pressed') {
+        Rd -= 0.4; // Tighter closure → lower Rd
+    } else if (state.phonationMode === 'breathy') {
+        Rd += 0.8; // Incomplete closure → higher Rd
+    }
+
+    // Influence from Pressure/Resistance balance
+    const prRatio = state.pressure / state.resistance;
+    Rd += (prRatio - 1.0) * 0.3; // Higher airflow → breathier
+
+    // Clamp Rd to valid range
+    Rd = Math.max(0.3, Math.min(2.7, Rd));
+
+    // Derive OQ and SQ from Rd (Fant 1995 regressions)
+    const OQ = Math.min(0.95, 0.1 + 0.5 * Rd);      // Open Quotient: ~0.25 pressed, ~0.6 flow, ~0.95 breathy
+    const SQ = Math.max(1.0, 4.0 - 1.1 * Rd);         // Speed Quotient: ~3.7 pressed (fast open), ~1.5 breathy
+
+    return { Rd, OQ, SQ };
+}
+
+/**
+ * Generate one period of the LF glottal flow waveform.
+ * Returns an array of normalized amplitude values [0..1].
+ *
+ * The LF model divides one glottal cycle into:
+ *   1. Opening phase (0 → Tp): flow rises, ∝ e^(αt) * sin(ωg*t)
+ *   2. Closing phase (Tp → Te): flow falls to maximum excitation
+ *   3. Return phase (Te → Tc): exponential recovery to zero
+ *   4. Closed phase (Tc → T0): vocal folds are closed, flow = 0
+ */
+function generateLFWaveform(numPoints) {
+    const { Rd, OQ, SQ } = computeLFParams();
+
+    // Update UI readouts
+    if (els.lfOq) els.lfOq.textContent = OQ.toFixed(2);
+    if (els.lfSq) els.lfSq.textContent = SQ.toFixed(2);
+    if (els.lfRd) els.lfRd.textContent = Rd.toFixed(2);
+
+    const T0 = 1.0; // Normalized period
+
+    // Timing parameters from OQ and SQ
+    const Te = OQ * T0;                    // End of open phase
+    const Tp = Te / (1.0 + SQ);            // Time of peak flow (opening phase)
+    const Ta = (0.01 + 0.2 * (Rd - 0.3) / 2.4) * T0; // Return phase duration
+    const Tc = Te + Math.min(Ta * 3, (T0 - Te) * 0.5); // End of return phase
+
+    // Angular frequency for open phase sinusoid
+    const wg = Math.PI / Tp;
+
+    // Growth parameter α (controls asymmetry of the pulse)
+    // Higher α = faster rising, more pressed sound
+    const alpha = Math.max(0, (SQ - 1.0) * 2.0);
+
+    // Return phase decay rate
+    const epsilon = 1.0 / Math.max(0.001, Ta);
+
+    const waveform = new Float32Array(numPoints);
+
+    for (let i = 0; i < numPoints; i++) {
+        const t = (i / numPoints) * T0;
+        let val = 0;
+
+        if (t <= Te) {
+            // Open phase: rising sinusoid with exponential growth
+            const sinPart = Math.sin(wg * t);
+            const expPart = Math.exp(alpha * (t - Tp));
+            val = sinPart * Math.min(expPart, 5.0); // clamp exp growth
+        } else if (t <= Tc) {
+            // Return phase: exponential decay from Te to baseline
+            const decay = Math.exp(-epsilon * (t - Te));
+            const baseline = Math.exp(-epsilon * (Tc - Te));
+            val = -(decay - baseline) * 0.3; // Small negative excursion
+        }
+        // Closed phase (t > Tc): val = 0
+
+        waveform[i] = val;
+    }
+
+    // Normalize to [0, 1] range
+    let maxVal = 0;
+    let minVal = 0;
+    for (let i = 0; i < numPoints; i++) {
+        if (waveform[i] > maxVal) maxVal = waveform[i];
+        if (waveform[i] < minVal) minVal = waveform[i];
+    }
+    const range = maxVal - minVal || 1;
+    for (let i = 0; i < numPoints; i++) {
+        waveform[i] = (waveform[i] - minVal) / range;
+    }
+
+    return { waveform, Te, Tp, Tc, T0, OQ, Rd };
+}
+
+/**
+ * Draw the glottal waveform on its dedicated canvas.
+ * OQ, SQ, Rd are rendered inside the canvas. Phases are color-coded.
+ */
+function drawGlottalWaveform() {
+    const canvas = els.glottalCanvas;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    canvas.width = canvas.clientWidth * (window.devicePixelRatio || 1);
+    canvas.height = canvas.clientHeight * (window.devicePixelRatio || 1);
+    ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+
+    // Background
+    ctx.fillStyle = '#0d1117';
+    ctx.fillRect(0, 0, w, h);
+
+    const numPoints = 500;
+    const { waveform, Te, Tp, Tc, T0, OQ, Rd } = generateLFWaveform(numPoints);
+    const { SQ } = computeLFParams();
+
+    // Draw phase regions with slightly stronger tinting
+    const teX = (Te / T0) * w;
+    const tpX = (Tp / T0) * w;
+    const tcX = (Tc / T0) * w;
+
+    ctx.fillStyle = 'rgba(46, 160, 67, 0.08)';
+    ctx.fillRect(0, 0, teX, h);
+
+    ctx.fillStyle = 'rgba(255, 123, 114, 0.08)';
+    ctx.fillRect(teX, 0, tcX - teX, h);
+
+    ctx.fillStyle = 'rgba(88, 166, 255, 0.05)';
+    ctx.fillRect(tcX, 0, w - tcX, h);
+
+    // Phase boundary lines
+    ctx.setLineDash([3, 3]);
+    ctx.lineWidth = 1;
+
+    // Te line
+    ctx.strokeStyle = 'rgba(255, 123, 114, 0.35)';
+    ctx.beginPath();
+    ctx.moveTo(teX, 0); ctx.lineTo(teX, h);
+    ctx.stroke();
+
+    // Tc line
+    ctx.strokeStyle = 'rgba(88, 166, 255, 0.25)';
+    ctx.beginPath();
+    ctx.moveTo(tcX, 0); ctx.lineTo(tcX, h);
+    ctx.stroke();
+
+    ctx.setLineDash([]);
+
+    // Draw waveform with gradient fill
+    const padding = 22;
+    const paddingBottom = 14;
+    const plotH = h - padding - paddingBottom;
+
+    // Filled area under curve
+    ctx.beginPath();
+    ctx.moveTo(0, padding + plotH);
+    for (let i = 0; i < numPoints; i++) {
+        const x = (i / numPoints) * w;
+        const y = padding + plotH * (1.0 - waveform[i]);
+        ctx.lineTo(x, y);
+    }
+    ctx.lineTo(w, padding + plotH);
+    ctx.closePath();
+
+    const gradient = ctx.createLinearGradient(0, padding, 0, padding + plotH);
+    gradient.addColorStop(0, 'rgba(88, 166, 255, 0.15)');
+    gradient.addColorStop(1, 'rgba(88, 166, 255, 0.0)');
+    ctx.fillStyle = gradient;
+    ctx.fill();
+
+    // Waveform line
+    ctx.beginPath();
+    ctx.strokeStyle = '#58a6ff';
+    ctx.lineWidth = 2;
+    ctx.shadowColor = 'rgba(88, 166, 255, 0.4)';
+    ctx.shadowBlur = 4;
+
+    let peakX = 0, peakY = h;
+    for (let i = 0; i < numPoints; i++) {
+        const x = (i / numPoints) * w;
+        const y = padding + plotH * (1.0 - waveform[i]);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+        if (y < peakY) { peakY = y; peakX = x; }
+    }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Peak dot at Tp
+    ctx.beginPath();
+    ctx.arc(peakX, peakY, 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffd700';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 215, 0, 0.5)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Tp label — 流量ピーク (Peak Flow)
+    ctx.font = '600 10px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(255, 215, 0, 0.8)';
+    ctx.fillText('Tp 流量ピーク', peakX, peakY - 8);
+
+    // Te label — 閉鎖点 (Closure Point)
+    ctx.fillStyle = 'rgba(255, 123, 114, 0.7)';
+    ctx.fillText('Te 閉鎖点', teX + 28, padding + 4);
+
+    // --- In-canvas parameter badges ---
+    const badgeY = h - 4;
+    ctx.font = '600 9px Inter, sans-serif';
+    ctx.textBaseline = 'bottom';
+
+    // OQ badge — 開放率 (Open Quotient): green, in Open phase area
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(46, 160, 67, 0.8)';
+    ctx.fillText(`開放率(OQ) ${OQ.toFixed(2)}`, teX / 2, badgeY);
+
+    // SQ badge — 速度比 (Speed Quotient): gold, bottom of Return area
+    ctx.fillStyle = 'rgba(255, 215, 0, 0.6)';
+    if (tcX - teX > 50) {
+        ctx.fillText(`速度比(SQ) ${SQ.toFixed(1)}`, (teX + tcX) / 2, badgeY);
+    }
+
+    // Rd badge — 波形タイプ (top-left corner with scale indicator)
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+    ctx.font = '700 11px Inter, sans-serif';
+    ctx.fillText(`Rd ${Rd.toFixed(2)}`, 6, 3);
+    // Sub-descriptor: show where this falls on the pressed–breathy scale
+    ctx.font = '400 8px Inter, sans-serif';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+    let rdDesc = '(Modal)';
+    if (Rd < 0.5) rdDesc = '(Pressed寄り — 倍音↑)';
+    else if (Rd < 0.9) rdDesc = '(やや Pressed — 倍音やや↑)';
+    else if (Rd < 1.3) rdDesc = '(Modal — バランス型)';
+    else if (Rd < 2.0) rdDesc = '(やや Breathy — 倍音↓)';
+    else rdDesc = '(Breathy寄り — 倍音↓↓)';
+    ctx.fillText(rdDesc, 6, 16);
+
+    // Phonation mode badge (top-right) with English
+    const modeLabels = {
+        flow: 'Flow',
+        pressed: 'Pressed',
+        breathy: 'Breathy'
+    };
+    const modeColors = {
+        flow: 'rgba(46, 160, 67, 0.8)',
+        pressed: 'rgba(255, 123, 114, 0.8)',
+        breathy: 'rgba(88, 166, 255, 0.8)'
+    };
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = modeColors[state.phonationMode] || 'rgba(255,255,255,0.5)';
+    ctx.font = '600 10px Inter, sans-serif';
+    ctx.fillText(modeLabels[state.phonationMode] || state.phonationMode, w - 6, 4);
+
+    // Update hidden DOM elements for potential external use
+    if (els.lfOq) els.lfOq.textContent = OQ.toFixed(2);
+    if (els.lfSq) els.lfSq.textContent = SQ.toFixed(2);
+    if (els.lfRd) els.lfRd.textContent = Rd.toFixed(2);
 }
 
 // --- Pitch Detection (Autocorrelation) ---
@@ -1062,6 +1351,7 @@ els.autoRoutingToggle.addEventListener('change', () => {
 const handleMechChange = (e) => {
     state.mechanism = e.target.value;
     updateSourceParams();
+    drawGlottalWaveform();
 };
 els.mechM1.addEventListener('change', handleMechChange);
 els.mechM2.addEventListener('change', handleMechChange);
@@ -1215,3 +1505,15 @@ els.canvas.addEventListener('mouseleave', handleCanvasInteraction);
 // Init notes & analysis
 els.pitchNote.textContent = freqToNote(state.pitch);
 analyzeAcoustics();
+drawGlottalWaveform(); // Initial render
+
+// Guide panel toggle
+const guideToggle = document.getElementById('lf-guide-toggle');
+const guidePanel = document.getElementById('lf-guide-panel');
+if (guideToggle && guidePanel) {
+    guideToggle.addEventListener('click', () => {
+        const isVisible = guidePanel.style.display !== 'none';
+        guidePanel.style.display = isVisible ? 'none' : 'block';
+        guideToggle.classList.toggle('active', !isVisible);
+    });
+}

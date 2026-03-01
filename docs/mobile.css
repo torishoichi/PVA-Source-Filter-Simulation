@@ -612,3 +612,224 @@ input[type="range"]::-webkit-slider-thumb {
         opacity: 1;
     }
 }
+
+/* ===== Glottal Waveform ===== */
+
+/* Tooltip for mobile (tap to show) */
+.tooltip {
+    color: var(--text-dim);
+    cursor: pointer;
+    position: relative;
+    font-size: 0.75rem;
+}
+
+.tooltip::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(22, 27, 34, 0.97);
+    color: #c9d1d9;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(48, 54, 61, 0.8);
+    font-size: 0.65rem;
+    line-height: 1.5;
+    width: max-content;
+    max-width: 280px;
+    white-space: pre-wrap;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.15s, visibility 0.15s;
+    z-index: 200;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.tooltip.tooltip-active::after {
+    opacity: 1;
+    visibility: visible;
+}
+
+.guide-subtitle {
+    font-size: 0.7rem;
+    color: var(--accent);
+    margin-bottom: 6px;
+    font-weight: 600;
+}
+
+.card-title {
+    font-size: 0.9rem;
+    color: var(--accent);
+    margin: 0;
+}
+
+.glottal-canvas-container {
+    width: 100%;
+    height: 140px;
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+#glottal-canvas {
+    width: 100%;
+    height: 100%;
+}
+
+.glottal-legend {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 6px;
+}
+
+.legend-item {
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    border-radius: 8px;
+    font-weight: 600;
+}
+
+.open-legend {
+    color: #2ea043;
+    background: rgba(46, 160, 67, 0.1);
+    border: 1px solid rgba(46, 160, 67, 0.25);
+}
+
+.return-legend {
+    color: #ff7b72;
+    background: rgba(255, 123, 114, 0.1);
+    border: 1px solid rgba(255, 123, 114, 0.25);
+}
+
+.closed-legend {
+    color: #58a6ff;
+    background: rgba(88, 166, 255, 0.1);
+    border: 1px solid rgba(88, 166, 255, 0.25);
+}
+
+/* Guide Toggle */
+.guide-toggle {
+    display: inline-block;
+    margin-left: 2px;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+    transition: color 0.2s;
+}
+
+.guide-toggle:active {
+    color: var(--text);
+}
+
+.guide-toggle.active {
+    color: var(--accent);
+}
+
+/* Guide Panel */
+.lf-guide-panel {
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(88, 166, 255, 0.15);
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 8px;
+    animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.guide-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.7rem;
+    margin-bottom: 8px;
+}
+
+.guide-table th {
+    text-align: left;
+    padding: 4px 6px;
+    color: var(--accent);
+    border-bottom: 1px solid rgba(88, 166, 255, 0.2);
+    font-weight: 600;
+    font-size: 0.65rem;
+}
+
+.guide-table td {
+    padding: 4px 6px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    color: var(--text);
+    line-height: 1.3;
+}
+
+.guide-table td:first-child {
+    white-space: nowrap;
+}
+
+.rd-scale {
+    display: flex;
+    gap: 2px;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.rd-level {
+    flex: 1;
+    padding: 4px 2px;
+    text-align: center;
+    font-size: 0.6rem;
+    color: #e6edf3;
+}
+
+.rd-level.pressed-strong {
+    background: rgba(255, 80, 70, 0.25);
+}
+
+.rd-level.pressed-mild {
+    background: rgba(255, 160, 100, 0.2);
+}
+
+.rd-level.modal {
+    background: rgba(46, 160, 67, 0.2);
+}
+
+.rd-level.breathy-mild {
+    background: rgba(100, 160, 255, 0.15);
+}
+
+.rd-level.breathy-strong {
+    background: rgba(88, 130, 255, 0.2);
+}
+
+/* ===== Book Reference Footer ===== */
+.book-ref {
+    text-align: center;
+    padding: 12px 16px;
+    font-size: 0.65rem;
+    color: rgba(139, 148, 158, 0.5);
+    margin-bottom: 60px;
+}
+
+.book-ref a {
+    color: rgba(139, 148, 158, 0.6);
+    text-decoration: underline;
+    text-decoration-color: rgba(139, 148, 158, 0.3);
+}
+
+.book-ref a:active {
+    color: var(--text-dim);
+}

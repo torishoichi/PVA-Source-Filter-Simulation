@@ -89,6 +89,86 @@
                     </div>
                 </div>
 
+                <div class="glottal-waveform glass-dark">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <h3 class="tracker-title" style="margin: 0;">Glottal Waveform (LF Model) <span class="tooltip"
+                                data-tooltip="Liljencrants-Fantモデル（1985）による声門流量波形のシミュレーションです。声帯が1周期で開閉する際の空気の流れ（声門流量パルス）を可視化します。この波形の形状が音源の倍音構造を決定し、発声モード（Flow/Pressed/Breathy）やメカニズム（M1/M2）によって大きく変化します。">[?]</span>
+                            <span class="guide-toggle" id="lf-guide-toggle">[??]</span>
+                        </h3>
+                        <span class="tooltip ref-tooltip"
+                            data-tooltip="📄 Fant, G., Liljencrants, J., & Lin, Q. (1985). A four-parameter model of glottal flow. STL-QPSR, 26(4), 1-13.&#10;📄 Fant, G. (1995). The LF-model revisited. Transformations and frequency domain analysis. STL-QPSR, 36(2-3), 119-156.">Ref</span>
+                    </div>
+
+                    <!-- Guide Panel (hidden by default) -->
+                    <div class="lf-guide-panel" id="lf-guide-panel" style="display:none;">
+                        <table class="guide-table">
+                            <thead>
+                                <tr>
+                                    <th>パラメータ</th>
+                                    <th>意味</th>
+                                    <th>値が高い時</th>
+                                    <th>値が低い時</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><strong>Rd</strong></td>
+                                    <td>波形全体の形状を決めるマスター値</td>
+                                    <td>息漏れ寄り。閉鎖が緩く倍音が少ない</td>
+                                    <td>圧迫寄り。閉鎖が急峻で倍音が豊か</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>OQ</strong><br><small>開放率</small></td>
+                                    <td>1周期中、声門が開いている割合</td>
+                                    <td>長く開放 → Breathy、柔らかい音</td>
+                                    <td>短く開放 → Pressed、鋭い音</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>SQ</strong><br><small>速度比</small></td>
+                                    <td>開く速度と閉じる速度の比率</td>
+                                    <td>急速に開き緩やかに閉じる → 倍音↑</td>
+                                    <td>対称的な開閉 → 倍音↓</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Tp</strong><br><small>流量ピーク</small></td>
+                                    <td>気流が最大になる時点</td>
+                                    <td colspan="2" style="text-align:center; color:#8b949e;">波形のピーク位置を示すマーカー</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Te</strong><br><small>閉鎖点</small></td>
+                                    <td>声門が閉じる時点（最大興奮点）</td>
+                                    <td colspan="2" style="text-align:center; color:#8b949e;">Open相とReturn相の境界マーカー</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <h4 class="guide-subtitle">Rd スケール（5段階）</h4>
+                        <div class="rd-scale">
+                            <div class="rd-level pressed-strong">Rd &lt; 0.5<br><small>Pressed寄り —
+                                    倍音↑<br>声帯が強く閉鎖。パワフルな音色</small></div>
+                            <div class="rd-level pressed-mild">0.5 – 0.9<br><small>やや Pressed —
+                                    倍音やや↑<br>明瞭だがやや硬い音色</small></div>
+                            <div class="rd-level modal">0.9 – 1.3<br><small>Modal — バランス型<br>健康的な発声。最適バランス</small></div>
+                            <div class="rd-level breathy-mild">1.3 – 2.0<br><small>やや Breathy —
+                                    倍音↓<br>柔らかく温かみのある音色</small></div>
+                            <div class="rd-level breathy-strong">Rd &gt; 2.0<br><small>Breathy寄り —
+                                    倍音↓↓<br>息の混じった柔らかい音色</small></div>
+                        </div>
+                    </div>
+
+                    <div class="glottal-canvas-container">
+                        <canvas id="glottal-canvas"></canvas>
+                    </div>
+                    <div class="glottal-legend">
+                        <span class="legend-item open-legend">Open <span class="tooltip"
+                                data-tooltip="声門開放相（Opening Phase）。声帯が開き気流が増加する区間です。声門下圧によって声帯が押し開かれ、流量がピーク（Tp）に達します。この区間の長さはOpen Quotient（OQ）に関係します。">[?]</span></span>
+                        <span class="legend-item return-legend">Return <span class="tooltip"
+                                data-tooltip="復帰相（Return Phase）。声帯が急速に閉鎖した直後の過渡応答です。声門流量が急激に減少した後、声道内の慣性による微小な逆流が生じます。この急峻さが高次倍音の強さを決定します。">[?]</span></span>
+                        <span class="legend-item closed-legend">Closed <span class="tooltip"
+                                data-tooltip="声門閉鎖相（Closed Phase）。声帯が完全に（または部分的に）閉じ、気流がゼロになる区間です。Pressed発声ではこの区間が長く、Breathy発声では短いか不完全閉鎖となります。">[?]</span></span>
+                    </div>
+                </div>
+
                 <div class="acoustic-tracker glass-dark">
                     <div
                         style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
@@ -249,6 +329,10 @@
             </section>
         </main>
     </div>
+    <footer class="book-ref">
+        <span>Based on: <a href="https://amzn.to/47i62o1" target="_blank" rel="noopener">Practical Vocal Acoustics:
+                Pedagogic Applications for Teachers and Singers</a> — Kenneth Bozeman (NATS Books)</span>
+    </footer>
     <script src="main.js"></script>
 </body>
 
