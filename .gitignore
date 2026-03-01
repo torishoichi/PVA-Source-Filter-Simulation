@@ -3,3 +3,7 @@ PVA/
 
 # OS files
 .DS_Store
+
+# AI agent project files (local only)
+AGENTS.md
+.agents/
