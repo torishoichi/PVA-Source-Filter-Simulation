@@ -478,8 +478,11 @@ input[type=range]::-webkit-slider-thumb:hover {
     box-shadow: 0 4px 12px rgba(255, 123, 114, 0.3);
 }
 
-.vowel-presets {
+.vowel-presets,
+.preset-group {
     display: flex;
+    flex-wrap: wrap;
+    /* Added to handle 5 vowels + 2 timbres gracefully */
     gap: 10px;
     align-items: center;
     margin-top: 20px;
