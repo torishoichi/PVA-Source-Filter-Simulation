@@ -12,6 +12,7 @@ let isPresetLoading = false;
 // Source nodes
 let fundamentalOsc = null;
 let harmonicsOscs = [];
+let spectralTiltNode = null;
 
 // Filter nodes (Vocal Tract Resonances)
 let f1Node = null;
@@ -41,6 +42,7 @@ const state = {
     timbreState: 'Open', // 'Open' or 'Close'
     isMicActive: false,
     micGain: 1.0,
+    spectrumSlope: -12, // dB/octave attenuation
     acousticMode: 'Neutral', // 'Neutral', 'Yell', 'Whoop'
     masterVolume: 0.5, // 0.0 to 1.0
     formants: {
@@ -59,6 +61,7 @@ const els = {
     canvas: document.getElementById('spectrum-canvas'),
     masterVolume: document.getElementById('master-volume'),
     micGainSlider: document.getElementById('mic-gain'),
+    spectrumSlopeSlider: document.getElementById('spectrum-slope'),
 
     // Source
     voiceTypeSelect: document.getElementById('voice-type-select'),
@@ -202,7 +205,14 @@ function initAudio() {
     f4Node = audioCtx.createBiquadFilter(); f4Node.type = 'peaking'; f4Node.gain.value = state.formants.f4.gain;
     f5Node = audioCtx.createBiquadFilter(); f5Node.type = 'peaking'; f5Node.gain.value = state.formants.f5.gain;
 
-    // Connect Filter Chain: Source -> F1 -> F2 -> F3 -> F4 -> F5 -> MasterGain -> Analyser -> Destination
+    // Spectral Tilt Filter (Highshelf)
+    spectralTiltNode = audioCtx.createBiquadFilter();
+    spectralTiltNode.type = 'highshelf';
+    // Anchor the shelf slightly above the fundamental so H0 isn't attenuated, but higher harmonics are.
+    spectralTiltNode.frequency.value = 400;
+
+    // Connect Filter Chain: Source -> SpectralTilt -> F1 -> F2 -> F3 -> F4 -> F5 -> MasterGain -> Analyser -> Destination
+    spectralTiltNode.connect(f1Node);
     f1Node.connect(f2Node);
     f2Node.connect(f3Node);
     f3Node.connect(f4Node);
@@ -275,7 +285,7 @@ function startNoise() {
 
     noiseNode.connect(noiseFilter);
     noiseFilter.connect(noiseGain);
-    noiseGain.connect(f1Node); // Pass noise through the vocal tract filter!
+    noiseGain.connect(spectralTiltNode); // Pass noise through spectral tilt -> vocal tract filter!
 
     noiseNode.start();
 }
@@ -326,12 +336,14 @@ function createSource() {
         gain.gain.value = linearGain;
 
         osc.connect(gain);
-        gain.connect(f1Node);
+        gain.connect(spectralTiltNode);
 
         osc.start(time);
 
         harmonicsOscs.push({ osc, gain, harmonic: i });
     }
+
+    updateSpectralTilt();
 }
 
 function destroySource() {
@@ -496,6 +508,8 @@ function updateSourceParams() {
             h.gain.gain.setTargetAtTime(linearGain, time, 0.05);
         });
     }
+
+    updateSpectralTilt();
 }
 
 function updateFilterParams() {
@@ -867,6 +881,20 @@ els.micGainSlider.addEventListener('input', (e) => {
         micGainNode.gain.setTargetAtTime(state.micGain, audioCtx.currentTime, 0.05);
     }
 });
+
+els.spectrumSlopeSlider.addEventListener('input', (e) => {
+    state.spectrumSlope = parseFloat(e.target.value);
+    updateSpectralTilt();
+});
+
+function updateSpectralTilt() {
+    if (spectralTiltNode) {
+        // Tie the shelf anchor to just above the fundamental to only tilt the harmonics
+        const anchorFreq = state.pitch * 1.5;
+        spectralTiltNode.frequency.setTargetAtTime(anchorFreq, audioCtx.currentTime, 0.1);
+        spectralTiltNode.gain.setTargetAtTime(state.spectrumSlope, audioCtx.currentTime, 0.1);
+    }
+}
 
 els.autoRoutingToggle.addEventListener('change', () => {
     // Re-evaluate current state if toggled back on
