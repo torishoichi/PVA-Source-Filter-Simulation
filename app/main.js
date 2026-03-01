@@ -26,6 +26,7 @@ let noiseGain = null;
 
 let micStream = null;
 let micSource = null;
+let micGainNode = null;
 let micAnalyser = null;
 
 // --- State Variables ---
@@ -39,6 +40,7 @@ const state = {
     phonationMode: 'flow', // 'flow', 'pressed', 'breathy'
     timbreState: 'Open', // 'Open' or 'Close'
     isMicActive: false,
+    micGain: 1.0,
     acousticMode: 'Neutral', // 'Neutral', 'Yell', 'Whoop'
     masterVolume: 0.5, // 0.0 to 1.0
     formants: {
@@ -56,6 +58,7 @@ const els = {
     btnMic: document.getElementById('mic-toggle'),
     canvas: document.getElementById('spectrum-canvas'),
     masterVolume: document.getElementById('master-volume'),
+    micGainSlider: document.getElementById('mic-gain'),
 
     // Source
     voiceTypeSelect: document.getElementById('voice-type-select'),
@@ -670,6 +673,10 @@ els.btnMic.addEventListener('click', async () => {
             micStream.getTracks().forEach(track => track.stop());
             micStream = null;
         }
+        if (micGainNode) {
+            micGainNode.disconnect();
+            micGainNode = null;
+        }
         if (micSource) {
             micSource.disconnect();
             micSource = null;
@@ -691,12 +698,16 @@ els.btnMic.addEventListener('click', async () => {
             }
 
             micSource = audioCtx.createMediaStreamSource(micStream);
+            micGainNode = audioCtx.createGain();
+            micGainNode.gain.value = state.micGain;
+
             micAnalyser = audioCtx.createAnalyser();
             micAnalyser.fftSize = 2048;
             micAnalyser.smoothingTimeConstant = 0.8;
 
-            // Connect mic source to analyzer entirely locally (NO route to audioCtx.destination)
-            micSource.connect(micAnalyser);
+            // Connect mic source -> gain -> analyzer entirely locally (NO route to audioCtx.destination)
+            micSource.connect(micGainNode);
+            micGainNode.connect(micAnalyser);
 
             state.isMicActive = true;
             els.btnMic.classList.add('mic-active');
@@ -795,6 +806,13 @@ els.resistanceSlider.addEventListener('input', (e) => {
 els.masterVolume.addEventListener('input', (e) => {
     state.masterVolume = parseFloat(e.target.value);
     calcAerodynamics();
+});
+
+els.micGainSlider.addEventListener('input', (e) => {
+    state.micGain = parseFloat(e.target.value);
+    if (micGainNode) {
+        micGainNode.gain.setTargetAtTime(state.micGain, audioCtx.currentTime, 0.05);
+    }
 });
 
 els.autoRoutingToggle.addEventListener('change', () => {
