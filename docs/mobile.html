@@ -382,21 +382,19 @@
                 slider.dispatchEvent(new Event('input', { bubbles: true }));
             }
 
-            document.addEventListener('touchstart', function (e) {
-                const target = e.target.closest('input[type="range"]');
-                if (!target) return;
-                activeSlider = target;
-                const touch = e.touches[0];
-                updateSlider(activeSlider, touch.clientX);
-                e.preventDefault();
-            }, { passive: false });
+            document.querySelectorAll('input[type="range"]').forEach(function (slider) {
+                slider.addEventListener('touchstart', function (e) {
+                    e.preventDefault();
+                    activeSlider = slider;
+                    updateSlider(slider, e.touches[0].clientX);
+                }, { passive: false });
 
-            document.addEventListener('touchmove', function (e) {
-                if (!activeSlider) return;
-                const touch = e.touches[0];
-                updateSlider(activeSlider, touch.clientX);
-                e.preventDefault();
-            }, { passive: false });
+                slider.addEventListener('touchmove', function (e) {
+                    if (activeSlider !== slider) return;
+                    e.preventDefault();
+                    updateSlider(slider, e.touches[0].clientX);
+                }, { passive: false });
+            });
 
             document.addEventListener('touchend', function () {
                 activeSlider = null;
