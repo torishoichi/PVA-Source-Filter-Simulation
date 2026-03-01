@@ -43,6 +43,7 @@ const state = {
     isMicActive: false,
     micGain: 1.0,
     spectrumSlope: -12, // dB/octave attenuation
+    showSlopeLine: false, // Toggle for slope approximation line
     acousticMode: 'Neutral', // 'Neutral', 'Yell', 'Whoop'
     masterVolume: 0.5, // 0.0 to 1.0
     formants: {
@@ -58,10 +59,14 @@ const state = {
 const els = {
     btnPlay: document.getElementById('audio-toggle'),
     btnMic: document.getElementById('mic-toggle'),
+    btnSlopeLine: document.getElementById('slope-line-toggle'),
     canvas: document.getElementById('spectrum-canvas'),
     masterVolume: document.getElementById('master-volume'),
     micGainSlider: document.getElementById('mic-gain'),
     spectrumSlopeSlider: document.getElementById('spectrum-slope'),
+    volumeVal: document.getElementById('volume-val'),
+    slopeVal: document.getElementById('slope-val'),
+    micGainVal: document.getElementById('mic-gain-val'),
 
     // Source
     voiceTypeSelect: document.getElementById('voice-type-select'),
@@ -715,6 +720,62 @@ function drawVisualizer() {
         drawFormantEnvelope(state.formants.f5.freq, state.formants.f5.q, 'F5', '#d2a8ff', state.formants.f5.enabled); // Pink
     }
 
+    // 4. Draw Slope Approximation Line (dashed yellow)
+    if (state.showSlopeLine && isPlaying && analyser) {
+        const slopeBufferLength = analyser.frequencyBinCount;
+        const slopeDataArray = new Float32Array(slopeBufferLength);
+        analyser.getFloatFrequencyData(slopeDataArray);
+
+        const slopeMaxDb = analyser.maxDecibels;
+        const slopeMinDb = analyser.minDecibels;
+        const slopeDbRange = slopeMaxDb - slopeMinDb;
+
+        // Find the H0 peak dB value as our starting reference
+        const f0 = state.pitch;
+        const h0BinIndex = Math.round((f0 / nyquist) * slopeBufferLength);
+        let h0Db = slopeDataArray[Math.min(h0BinIndex, slopeBufferLength - 1)];
+        if (!isFinite(h0Db)) h0Db = slopeMinDb;
+
+        canvasCtx.beginPath();
+        canvasCtx.strokeStyle = 'rgba(255, 215, 0, 0.7)'; // Gold/Yellow
+        canvasCtx.setLineDash([8, 6]);
+        canvasCtx.lineWidth = 2;
+
+        const slopeDbPerOctave = state.spectrumSlope; // Negative value e.g. -12
+
+        // Draw from f0 to MAX_FREQ_DISPLAY
+        const numSlopePoints = 200;
+        for (let j = 0; j <= numSlopePoints; j++) {
+            const fraction = j / numSlopePoints;
+            // Logarithmic frequency sweep from f0 to MAX_FREQ_DISPLAY
+            const freq = f0 * Math.pow(MAX_FREQ_DISPLAY / f0, fraction);
+            if (freq > MAX_FREQ_DISPLAY) break;
+
+            const x = freqToX(freq, width);
+
+            // How many octaves above f0?
+            const octavesAboveF0 = Math.log2(freq / f0);
+            // The theoretical dB at this frequency
+            const theoreticalDb = h0Db + (octavesAboveF0 * slopeDbPerOctave);
+
+            // Convert to canvas Y using the same normalization as the spectrum
+            const normalizedValue = Math.max(0, (theoreticalDb - slopeMinDb) / slopeDbRange);
+            const displayVal = Math.pow(normalizedValue, 1.5);
+            const y = height - (displayVal * height * 0.9);
+
+            if (j === 0) canvasCtx.moveTo(x, y);
+            else canvasCtx.lineTo(x, y);
+        }
+        canvasCtx.stroke();
+        canvasCtx.setLineDash([]);
+
+        // Label
+        canvasCtx.fillStyle = 'rgba(255, 215, 0, 0.8)';
+        canvasCtx.font = '11px monospace';
+        canvasCtx.textAlign = 'left';
+        canvasCtx.fillText(`Slope: ${slopeDbPerOctave}dB/oct`, freqToX(f0, width) + 5, 40);
+    }
+
     animationId = requestAnimationFrame(drawVisualizer);
 }
 
@@ -872,11 +933,13 @@ els.resistanceSlider.addEventListener('input', (e) => {
 
 els.masterVolume.addEventListener('input', (e) => {
     state.masterVolume = parseFloat(e.target.value);
+    els.volumeVal.textContent = Math.round(state.masterVolume * 100) + '%';
     calcAerodynamics();
 });
 
 els.micGainSlider.addEventListener('input', (e) => {
     state.micGain = parseFloat(e.target.value);
+    els.micGainVal.textContent = state.micGain.toFixed(1) + 'x';
     if (micGainNode) {
         micGainNode.gain.setTargetAtTime(state.micGain, audioCtx.currentTime, 0.05);
     }
@@ -884,7 +947,14 @@ els.micGainSlider.addEventListener('input', (e) => {
 
 els.spectrumSlopeSlider.addEventListener('input', (e) => {
     state.spectrumSlope = parseFloat(e.target.value);
+    els.slopeVal.textContent = state.spectrumSlope + 'dB';
     updateSpectralTilt();
+});
+
+// Slope Line Toggle
+els.btnSlopeLine.addEventListener('click', () => {
+    state.showSlopeLine = !state.showSlopeLine;
+    els.btnSlopeLine.classList.toggle('slope-line-active', state.showSlopeLine);
 });
 
 function updateSpectralTilt() {
