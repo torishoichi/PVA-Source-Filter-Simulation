@@ -24,6 +24,10 @@ let noiseNode = null;
 let noiseFilter = null;
 let noiseGain = null;
 
+let micStream = null;
+let micSource = null;
+let micAnalyser = null;
+
 // --- State Variables ---
 const state = {
     voiceType: 'nontreble', // 'treble' or 'nontreble'
@@ -34,6 +38,7 @@ const state = {
     airflow: 1.0, // Calculated (U = P/R)
     phonationMode: 'flow', // 'flow', 'pressed', 'breathy'
     timbreState: 'Open', // 'Open' or 'Close'
+    isMicActive: false,
     acousticMode: 'Neutral', // 'Neutral', 'Yell', 'Whoop'
     masterVolume: 0.5, // 0.0 to 1.0
     formants: {
@@ -48,6 +53,7 @@ const state = {
 // --- DOM Elements ---
 const els = {
     btnPlay: document.getElementById('audio-toggle'),
+    btnMic: document.getElementById('mic-toggle'),
     canvas: document.getElementById('spectrum-canvas'),
     masterVolume: document.getElementById('master-volume'),
 
@@ -518,15 +524,11 @@ function resizeCanvas() {
 }
 
 function drawVisualizer() {
-    if (!isPlaying || !analyser) return;
+    if (!isPlaying && !state.isMicActive) return;
 
     resizeCanvas();
     const width = els.canvas.width;
     const height = els.canvas.height;
-
-    const bufferLength = analyser.frequencyBinCount;
-    const dataArray = new Float32Array(bufferLength); // dB values
-    analyser.getFloatFrequencyData(dataArray);
 
     // Clear background
     canvasCtx.fillStyle = '#0d1117';
@@ -543,97 +545,111 @@ function drawVisualizer() {
     }
     canvasCtx.stroke();
 
-    // Draw frequency spectrum (FFT)
-    const nyquist = audioCtx.sampleRate / 2;
-    const maxDb = analyser.maxDecibels;
-    const minDb = analyser.minDecibels;
-    const dbRange = maxDb - minDb;
+    const nyquist = audioCtx ? audioCtx.sampleRate / 2 : 24000;
 
-    canvasCtx.beginPath();
-    canvasCtx.strokeStyle = 'rgba(88, 166, 255, 0.8)'; // Accent color
-    canvasCtx.lineWidth = 2;
+    // Helper to draw a single frequency spectrum
+    const drawSpectrum = (analyzerNode, strokeColor, fillColor, boost) => {
+        if (!analyzerNode) return;
+        const bufferLength = analyzerNode.frequencyBinCount;
+        const dataArray = new Float32Array(bufferLength);
+        analyzerNode.getFloatFrequencyData(dataArray);
 
-    // Fill path
-    canvasCtx.moveTo(0, height);
+        const maxDb = analyzerNode.maxDecibels;
+        const minDb = analyzerNode.minDecibels;
+        const dbRange = maxDb - minDb;
 
-    let isFirst = true;
-    for (let i = 0; i < bufferLength; i++) {
-        const freq = (i * nyquist) / bufferLength;
-        if (freq > MAX_FREQ_DISPLAY) break;
-
-        const x = freqToX(freq, width);
-
-        // Normalize dB value to 0-1
-        let db = dataArray[i];
-        if (!isFinite(db)) db = minDb;
-        const normalizedValue = Math.max(0, (db - minDb) / dbRange);
-
-        // Boost visually for better appearance
-        const displayVal = Math.pow(normalizedValue, 1.5);
-        const y = height - (displayVal * height * 0.9); // Leave a little margin at top
-
-        if (isFirst) {
-            canvasCtx.lineTo(x, y);
-            isFirst = false;
-        } else {
-            canvasCtx.lineTo(x, y);
-        }
-    }
-
-    const endXPos = canvasCtx.currentX || width;
-    canvasCtx.lineTo(endXPos, height);
-
-    // Gradient fill
-    const gradient = canvasCtx.createLinearGradient(0, 0, 0, height);
-    gradient.addColorStop(0, 'rgba(88, 166, 255, 0.5)');
-    gradient.addColorStop(1, 'rgba(88, 166, 255, 0.0)');
-    canvasCtx.fillStyle = gradient;
-
-    canvasCtx.fill();
-    canvasCtx.stroke();
-
-    // --- Draw Formant Overlay Envelopes ---
-    const drawFormantEnvelope = (freq, q, label, color, enabled) => {
-        if (!enabled) return;
-
-        const cx = freqToX(freq, width);
-
-        // Simple bell curve visualization based on Q factor to represent the filter shape
         canvasCtx.beginPath();
-        canvasCtx.strokeStyle = color;
-        canvasCtx.setLineDash([5, 5]);
+        canvasCtx.strokeStyle = strokeColor;
         canvasCtx.lineWidth = 2;
+        canvasCtx.moveTo(0, height);
 
-        const numPoints = 100;
-        // bandwidth approx freq / Q
-        const bw = freq / q;
+        let isFirst = true;
+        for (let i = 0; i < bufferLength; i++) {
+            const freq = (i * nyquist) / bufferLength;
+            if (freq > MAX_FREQ_DISPLAY) break;
 
-        for (let j = 0; j <= numPoints; j++) {
-            const px = cx - (freqToX(bw, width) * 2) + (freqToX(bw, width) * 4 * (j / numPoints));
+            const x = freqToX(freq, width);
+            let db = dataArray[i];
+            if (!isFinite(db)) db = minDb;
+            const normalizedValue = Math.max(0, (db - minDb) / dbRange);
+            const displayVal = Math.pow(normalizedValue, boost);
+            const y = height - (displayVal * height * 0.9);
 
-            // Gaussian bell curve approximation for visual
-            const dist = Math.abs(px - cx) / freqToX(bw, width);
-            let val = Math.exp(-0.5 * Math.pow(dist * 1.5, 2));
+            if (isFirst) {
+                canvasCtx.lineTo(x, y);
+                isFirst = false;
+            } else {
+                canvasCtx.lineTo(x, y);
+            }
+        }
 
-            const py = height - (val * height * 0.8);
+        const endXPos = canvasCtx.currentX || width;
+        canvasCtx.lineTo(endXPos, height);
 
-            if (j === 0) canvasCtx.moveTo(px, py);
-            else canvasCtx.lineTo(px, py);
+        if (fillColor) {
+            canvasCtx.fillStyle = fillColor;
+            canvasCtx.fill();
         }
         canvasCtx.stroke();
-        canvasCtx.setLineDash([]);
-
-        // Label
-        canvasCtx.fillStyle = color;
-        canvasCtx.font = '12px monospace';
-        canvasCtx.fillText(label, cx - 10, 20);
     };
 
-    drawFormantEnvelope(state.formants.f1.freq, state.formants.f1.q, 'F1', '#ff7b72', state.formants.f1.enabled); // Red
-    drawFormantEnvelope(state.formants.f2.freq, state.formants.f2.q, 'F2', '#79c0ff', state.formants.f2.enabled); // Blue
-    drawFormantEnvelope(state.formants.f3.freq, state.formants.f3.q, 'F3', '#a371f7', state.formants.f3.enabled); // Purple
-    drawFormantEnvelope(state.formants.f4.freq, state.formants.f4.q, 'F4', '#f0883e', state.formants.f4.enabled); // Orange
-    drawFormantEnvelope(state.formants.f5.freq, state.formants.f5.q, 'F5', '#d2a8ff', state.formants.f5.enabled); // Pink
+    // 1. Draw Simulated Spectrum (Blue, filled)
+    if (isPlaying && analyser) {
+        const gradient = canvasCtx.createLinearGradient(0, 0, 0, height);
+        gradient.addColorStop(0, 'rgba(88, 166, 255, 0.5)');
+        gradient.addColorStop(1, 'rgba(88, 166, 255, 0.0)');
+        drawSpectrum(analyser, 'rgba(88, 166, 255, 0.8)', gradient, 1.5);
+    }
+
+    // 2. Draw Live Microphone Spectrum (Green, outline only)
+    if (state.isMicActive && micAnalyser) {
+        drawSpectrum(micAnalyser, 'rgba(46, 160, 67, 0.9)', null, 1.2);
+    }
+
+    // 3. Draw Formant Overlay Envelopes (Only when simulating)
+    if (isPlaying) {
+        const drawFormantEnvelope = (freq, q, label, color, enabled) => {
+            if (!enabled) return;
+
+            const cx = freqToX(freq, width);
+
+            // Simple bell curve visualization based on Q factor to represent the filter shape
+            canvasCtx.beginPath();
+            canvasCtx.strokeStyle = color;
+            canvasCtx.setLineDash([5, 5]);
+            canvasCtx.lineWidth = 2;
+
+            const numPoints = 100;
+            // bandwidth approx freq / Q
+            const bw = freq / q;
+
+            for (let j = 0; j <= numPoints; j++) {
+                const px = cx - (freqToX(bw, width) * 2) + (freqToX(bw, width) * 4 * (j / numPoints));
+
+                // Gaussian bell curve approximation for visual
+                const dist = Math.abs(px - cx) / freqToX(bw, width);
+                let val = Math.exp(-0.5 * Math.pow(dist * 1.5, 2));
+
+                const py = height - (val * height * 0.8);
+
+                if (j === 0) canvasCtx.moveTo(px, py);
+                else canvasCtx.lineTo(px, py);
+            }
+            canvasCtx.stroke();
+            canvasCtx.setLineDash([]);
+
+            // Label
+            canvasCtx.fillStyle = color;
+            canvasCtx.font = '12px monospace';
+            canvasCtx.fillText(label, cx - 10, 20);
+        };
+
+        drawFormantEnvelope(state.formants.f1.freq, state.formants.f1.q, 'F1', '#ff7b72', state.formants.f1.enabled); // Red
+        drawFormantEnvelope(state.formants.f2.freq, state.formants.f2.q, 'F2', '#79c0ff', state.formants.f2.enabled); // Blue
+        drawFormantEnvelope(state.formants.f3.freq, state.formants.f3.q, 'F3', '#a371f7', state.formants.f3.enabled); // Purple
+        drawFormantEnvelope(state.formants.f4.freq, state.formants.f4.q, 'F4', '#f0883e', state.formants.f4.enabled); // Orange
+        drawFormantEnvelope(state.formants.f5.freq, state.formants.f5.q, 'F5', '#d2a8ff', state.formants.f5.enabled); // Pink
+    }
 
     animationId = requestAnimationFrame(drawVisualizer);
 }
@@ -644,6 +660,58 @@ function drawVisualizer() {
 els.btnPlay.addEventListener('click', () => {
     if (isPlaying) stopAudio();
     else startAudio();
+});
+
+// Mic Toggle
+els.btnMic.addEventListener('click', async () => {
+    if (state.isMicActive) {
+        // Disconnect and stop
+        if (micStream) {
+            micStream.getTracks().forEach(track => track.stop());
+            micStream = null;
+        }
+        if (micSource) {
+            micSource.disconnect();
+            micSource = null;
+        }
+        state.isMicActive = false;
+        els.btnMic.classList.remove('mic-active');
+        els.btnMic.textContent = 'Mic: OFF';
+    } else {
+        // Request permissions and start
+        try {
+            micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+            // Generate context if it doesn't exist yet
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                await audioCtx.resume();
+            }
+
+            micSource = audioCtx.createMediaStreamSource(micStream);
+            micAnalyser = audioCtx.createAnalyser();
+            micAnalyser.fftSize = 2048;
+            micAnalyser.smoothingTimeConstant = 0.8;
+
+            // Connect mic source to analyzer entirely locally (NO route to audioCtx.destination)
+            micSource.connect(micAnalyser);
+
+            state.isMicActive = true;
+            els.btnMic.classList.add('mic-active');
+            els.btnMic.textContent = 'Mic: ON';
+
+            // Kick off visualizer if it wasn't already running
+            if (!isPlaying) {
+                cancelAnimationFrame(animationId);
+                drawVisualizer();
+            }
+        } catch (err) {
+            console.error('Microphone access denied or error:', err);
+            alert('Could not access the microphone. Please grant permission in your browser.');
+        }
+    }
 });
 
 // Source Controls
