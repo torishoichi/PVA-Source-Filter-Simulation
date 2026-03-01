@@ -769,19 +769,25 @@ function drawGlottalWaveform() {
     ctx.lineWidth = 1;
     ctx.stroke();
 
+    // Responsive font scaling for mobile
+    const isMobile = w < 400;
+    const fontSm = isMobile ? 7 : 9;
+    const fontMd = isMobile ? 8 : 10;
+    const fontLg = isMobile ? 9 : 11;
+
     // Tp label — 流量ピーク (Peak Flow)
-    ctx.font = '600 10px Inter, sans-serif';
+    ctx.font = `600 ${fontMd}px Inter, sans-serif`;
     ctx.textAlign = 'center';
     ctx.fillStyle = 'rgba(255, 215, 0, 0.8)';
     ctx.fillText('Tp 流量ピーク', peakX, peakY - 8);
 
     // Te label — 閉鎖点 (Closure Point)
     ctx.fillStyle = 'rgba(255, 123, 114, 0.7)';
-    ctx.fillText('Te 閉鎖点', teX + 28, padding + 4);
+    ctx.fillText('Te 閉鎖点', teX + (isMobile ? 18 : 28), padding + 4);
 
     // --- In-canvas parameter badges ---
     const badgeY = h - 4;
-    ctx.font = '600 9px Inter, sans-serif';
+    ctx.font = `600 ${fontSm}px Inter, sans-serif`;
     ctx.textBaseline = 'bottom';
 
     // OQ badge — 開放率 (Open Quotient): green, in Open phase area
@@ -799,10 +805,10 @@ function drawGlottalWaveform() {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-    ctx.font = '700 11px Inter, sans-serif';
+    ctx.font = `700 ${fontLg}px Inter, sans-serif`;
     ctx.fillText(`Rd ${Rd.toFixed(2)}`, 6, 3);
     // Sub-descriptor: show where this falls on the pressed–breathy scale
-    ctx.font = '400 8px Inter, sans-serif';
+    ctx.font = `400 ${isMobile ? 6 : 8}px Inter, sans-serif`;
     ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
     let rdDesc = '(Modal)';
     if (Rd < 0.5) rdDesc = '(Pressed寄り — 倍音↑)';
@@ -826,7 +832,7 @@ function drawGlottalWaveform() {
     ctx.textAlign = 'right';
     ctx.textBaseline = 'top';
     ctx.fillStyle = modeColors[state.phonationMode] || 'rgba(255,255,255,0.5)';
-    ctx.font = '600 10px Inter, sans-serif';
+    ctx.font = `600 ${fontMd}px Inter, sans-serif`;
     ctx.fillText(modeLabels[state.phonationMode] || state.phonationMode, w - 6, 4);
 
     // Update hidden DOM elements for potential external use
@@ -1512,7 +1518,7 @@ const guideToggle = document.getElementById('lf-guide-toggle');
 const guidePanel = document.getElementById('lf-guide-panel');
 if (guideToggle && guidePanel) {
     guideToggle.addEventListener('click', () => {
-        const isVisible = guidePanel.style.display !== 'none';
+        const isVisible = guidePanel.style.display === 'block';
         guidePanel.style.display = isVisible ? 'none' : 'block';
         guideToggle.classList.toggle('active', !isVisible);
     });

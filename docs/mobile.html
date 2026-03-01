@@ -352,7 +352,7 @@
             const guidePanel = document.getElementById('lf-guide-panel');
             if (guideToggle && guidePanel) {
                 guideToggle.addEventListener('click', () => {
-                    const isVisible = guidePanel.style.display !== 'none';
+                    const isVisible = guidePanel.style.display === 'block';
                     guidePanel.style.display = isVisible ? 'none' : 'block';
                     guideToggle.classList.toggle('active', !isVisible);
                 });
