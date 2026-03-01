@@ -41,6 +41,26 @@ body {
 header {
     text-align: center;
     margin-bottom: 10px;
+    position: relative;
+}
+
+.bmc-link {
+    position: absolute;
+    top: 0;
+    right: 0;
+    color: rgba(139, 148, 158, 0.6);
+    text-decoration: none;
+    font-size: 0.75rem;
+    padding: 4px 10px;
+    border: 1px solid rgba(139, 148, 158, 0.2);
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.bmc-link:hover {
+    color: rgba(139, 148, 158, 0.9);
+    border-color: rgba(139, 148, 158, 0.5);
+    background: rgba(139, 148, 158, 0.08);
 }
 
 header h1 {
