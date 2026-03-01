@@ -564,6 +564,21 @@ function drawVisualizer() {
     canvasCtx.fillStyle = '#0d1117';
     canvasCtx.fillRect(0, 0, width, height);
 
+    // Subtle pitch watermark in center
+    if (isPlaying) {
+        canvasCtx.save();
+        canvasCtx.fillStyle = 'rgba(255, 255, 255, 0.07)';
+        canvasCtx.font = '600 28px Inter, sans-serif';
+        canvasCtx.textAlign = 'center';
+        canvasCtx.textBaseline = 'middle';
+        canvasCtx.fillText(
+            `${state.pitch} Hz · ${freqToNote(state.pitch)}`,
+            width / 2,
+            height / 2
+        );
+        canvasCtx.restore();
+    }
+
     // Draw Grid lines
     canvasCtx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
     canvasCtx.lineWidth = 1;
