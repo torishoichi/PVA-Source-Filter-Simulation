@@ -302,6 +302,8 @@ input[type="range"] {
     height: 6px;
     background: transparent;
     margin: 8px 0;
+    touch-action: none;
+    /* Prevent scroll hijack on mobile */
 }
 
 input[type="range"]:focus {
