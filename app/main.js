@@ -431,6 +431,8 @@ function analyzeAcoustics() {
                 els.mechM2.checked = true; state.mechanism = 'm2';
                 els.resistanceSlider.value = 1.0; state.resistance = 1.0;
                 els.pressureSlider.value = 1.0; state.pressure = 1.0;
+                els.resistanceVal.textContent = state.resistance.toFixed(1);
+                els.pressureVal.textContent = state.pressure.toFixed(1);
             }
         } else if (f0 <= 400 && Math.abs(fR1 - f20) / f20 < yellTolerance) {
             // Trebles can only truly Yell in their lower octaves
@@ -440,6 +442,8 @@ function analyzeAcoustics() {
                 els.mechM1.checked = true; state.mechanism = 'm1';
                 els.resistanceSlider.value = 2.0; state.resistance = 2.0;
                 els.pressureSlider.value = 1.0; state.pressure = 1.0;
+                els.resistanceVal.textContent = state.resistance.toFixed(1);
+                els.pressureVal.textContent = state.pressure.toFixed(1);
             }
         } else {
             state.acousticMode = 'Neutral';
@@ -453,6 +457,8 @@ function analyzeAcoustics() {
                 els.mechM1.checked = true; state.mechanism = 'm1';
                 els.resistanceSlider.value = 2.0; state.resistance = 2.0;
                 els.pressureSlider.value = 1.0; state.pressure = 1.0;
+                els.resistanceVal.textContent = state.resistance.toFixed(1);
+                els.pressureVal.textContent = state.pressure.toFixed(1);
             }
         } else if (Math.abs(fR1 - f0) / f0 < whoopTolerance) {
             // Whoop is strict (requires closer tuning) for non-treble
@@ -462,6 +468,8 @@ function analyzeAcoustics() {
                 els.mechM2.checked = true; state.mechanism = 'm2';
                 els.resistanceSlider.value = 1.0; state.resistance = 1.0;
                 els.pressureSlider.value = 1.0; state.pressure = 1.0;
+                els.resistanceVal.textContent = state.resistance.toFixed(1);
+                els.pressureVal.textContent = state.pressure.toFixed(1);
             }
         } else {
             state.acousticMode = 'Neutral';
