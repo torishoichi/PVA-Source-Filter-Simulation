@@ -546,6 +546,63 @@ function updateFilterParams() {
     analyzeAcoustics();
 }
 
+// --- Pitch Detection (Autocorrelation) ---
+
+function detectPitchFromMic() {
+    if (!micAnalyser || !audioCtx) return -1;
+
+    const bufLen = micAnalyser.fftSize;
+    const buf = new Float32Array(bufLen);
+    micAnalyser.getFloatTimeDomainData(buf);
+
+    // Check if there's enough signal (RMS threshold)
+    let rms = 0;
+    for (let i = 0; i < bufLen; i++) rms += buf[i] * buf[i];
+    rms = Math.sqrt(rms / bufLen);
+    if (rms < 0.01) return -1; // Too quiet
+
+    // Autocorrelation
+    const sampleRate = audioCtx.sampleRate;
+    const minPeriod = Math.floor(sampleRate / 1000); // ~1000 Hz max
+    const maxPeriod = Math.floor(sampleRate / 60);   // ~60 Hz min
+
+    let bestCorrelation = 0;
+    let bestPeriod = -1;
+
+    for (let period = minPeriod; period <= maxPeriod; period++) {
+        let correlation = 0;
+        for (let i = 0; i < bufLen - period; i++) {
+            correlation += buf[i] * buf[i + period];
+        }
+        correlation /= (bufLen - period);
+
+        if (correlation > bestCorrelation) {
+            bestCorrelation = correlation;
+            bestPeriod = period;
+        }
+    }
+
+    if (bestPeriod <= 0 || bestCorrelation < 0.01) return -1;
+
+    // Parabolic interpolation for sub-sample accuracy
+    const y1 = bestPeriod > minPeriod ? autocorr(buf, bestPeriod - 1) : 0;
+    const y2 = autocorr(buf, bestPeriod);
+    const y3 = bestPeriod < maxPeriod ? autocorr(buf, bestPeriod + 1) : 0;
+
+    const shift = (y3 - y1) / (2 * (2 * y2 - y1 - y3));
+    const refinedPeriod = bestPeriod + (isFinite(shift) ? shift : 0);
+
+    return sampleRate / refinedPeriod;
+}
+
+function autocorr(buf, period) {
+    let sum = 0;
+    for (let i = 0; i < buf.length - period; i++) {
+        sum += buf[i] * buf[i + period];
+    }
+    return sum / (buf.length - period);
+}
+
 // --- Visualizer ---
 
 function resizeCanvas() {
@@ -564,19 +621,27 @@ function drawVisualizer() {
     canvasCtx.fillStyle = '#0d1117';
     canvasCtx.fillRect(0, 0, width, height);
 
-    // Subtle pitch watermark in center
-    if (isPlaying) {
-        canvasCtx.save();
-        canvasCtx.fillStyle = 'rgba(255, 255, 255, 0.07)';
-        canvasCtx.font = '600 28px Inter, sans-serif';
-        canvasCtx.textAlign = 'center';
-        canvasCtx.textBaseline = 'middle';
-        canvasCtx.fillText(
-            `${state.pitch} Hz · ${freqToNote(state.pitch)}`,
-            width / 2,
-            height / 2
-        );
-        canvasCtx.restore();
+    // Tuner-style pitch display from mic input
+    if (state.isMicActive && micAnalyser) {
+        const detectedPitch = detectPitchFromMic();
+        if (detectedPitch > 0) {
+            const noteName = freqToNote(detectedPitch);
+            canvasCtx.save();
+
+            // Large note name (like a tuner)
+            canvasCtx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+            canvasCtx.font = '700 48px Inter, sans-serif';
+            canvasCtx.textAlign = 'center';
+            canvasCtx.textBaseline = 'middle';
+            canvasCtx.fillText(noteName, width / 2, height / 2 - 10);
+
+            // Frequency below
+            canvasCtx.fillStyle = 'rgba(255, 255, 255, 0.10)';
+            canvasCtx.font = '400 18px Inter, sans-serif';
+            canvasCtx.fillText(`${Math.round(detectedPitch)} Hz`, width / 2, height / 2 + 28);
+
+            canvasCtx.restore();
+        }
     }
 
     // Draw Grid lines
