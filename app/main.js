@@ -687,7 +687,13 @@ els.btnMic.addEventListener('click', async () => {
     } else {
         // Request permissions and start
         try {
-            micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            micStream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    echoCancellation: false,
+                    noiseSuppression: false,
+                    autoGainControl: false
+                }
+            });
 
             // Generate context if it doesn't exist yet
             if (!audioCtx) {
