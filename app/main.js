@@ -602,6 +602,53 @@ function drawVisualizer() {
         gradient.addColorStop(0, 'rgba(88, 166, 255, 0.5)');
         gradient.addColorStop(1, 'rgba(88, 166, 255, 0.0)');
         drawSpectrum(analyser, 'rgba(88, 166, 255, 0.8)', gradient, 1.5);
+
+        // --- Draw Harmonic Peak Labels (H0, H1, H2...) ---
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Float32Array(bufferLength);
+        analyser.getFloatFrequencyData(dataArray);
+
+        const maxDb = analyser.maxDecibels;
+        const minDb = analyser.minDecibels;
+        const dbRange = maxDb - minDb;
+
+        canvasCtx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        canvasCtx.font = '10px monospace';
+        canvasCtx.textAlign = 'center';
+
+        const f0 = state.pitch;
+        const searchRangeHz = f0 * 0.1; // Search +/- 10% around expected harmonic freq for the exact FFT bin peak
+
+        for (let h = 1; (f0 * h) <= MAX_FREQ_DISPLAY; h++) {
+            const expectedFreq = f0 * h;
+
+            // Find actual peak bin around expected freq
+            const minFreq = expectedFreq - searchRangeHz;
+            const maxFreq = expectedFreq + searchRangeHz;
+
+            let peakVal = -Infinity;
+            let peakFreq = expectedFreq;
+
+            for (let i = 0; i < bufferLength; i++) {
+                const f = (i * nyquist) / bufferLength;
+                if (f >= minFreq && f <= maxFreq) {
+                    if (dataArray[i] > peakVal) {
+                        peakVal = dataArray[i];
+                        peakFreq = f;
+                    }
+                }
+            }
+
+            // Only draw if it's somewhat prominent (above noise floor + some margin)
+            if (peakVal > minDb + (dbRange * 0.15)) {
+                const normalizedValue = Math.max(0, (peakVal - minDb) / dbRange);
+                const displayVal = Math.pow(normalizedValue, 1.5); // use same boost as drawing
+                const y = height - (displayVal * height * 0.9);
+                const x = freqToX(peakFreq, width);
+
+                canvasCtx.fillText(`H${h - 1}`, x, y - 8);
+            }
+        }
     }
 
     // 2. Draw Live Microphone Spectrum (Green, outline only)
