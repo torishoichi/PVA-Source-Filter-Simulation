@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PVA Simulator (Mobile)</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="mobile.css">
+</head>
+
+<body>
+    <!-- Fixed Top Bar -->
+    <header class="top-bar">
+        <h1>PVA Simulator</h1>
+        <div class="top-actions">
+            <button id="mic-toggle" class="btn-icon" title="Mic">🎤</button>
+            <button id="audio-toggle" class="btn-play">▶ Play</button>
+        </div>
+    </header>
+
+    <!-- Spectrum Canvas (always visible, sticky) -->
+    <section class="spectrum-section">
+        <div class="canvas-container">
+            <canvas id="spectrum-canvas"></canvas>
+            <div class="axis-labels x-axis">
+                <span>0</span><span>1k</span><span>2k</span><span>3k</span><span>4k</span><span>5k</span>
+            </div>
+        </div>
+        <div class="spectrum-toolbar">
+            <div class="toolbar-item">
+                <span>Vol</span>
+                <input type="range" id="master-volume" min="0" max="1" value="0.5" step="0.01">
+                <span class="control-val" id="volume-val">50%</span>
+            </div>
+            <div class="toolbar-item">
+                <span>Slope</span>
+                <input type="range" id="spectrum-slope" min="-24" max="0" value="-12" step="1">
+                <span class="control-val" id="slope-val">-12dB</span>
+            </div>
+            <button id="slope-line-toggle" class="btn-icon-sm">📈</button>
+        </div>
+        <div class="spectrum-toolbar" id="mic-toolbar" style="display:none;">
+            <div class="toolbar-item">
+                <span>Mic Gain</span>
+                <input type="range" id="mic-gain" min="0" max="5" value="1.0" step="0.1">
+                <span class="control-val" id="mic-gain-val">1.0x</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- Tab Navigation -->
+    <nav class="tab-nav">
+        <button class="tab-btn active" data-tab="source">Source</button>
+        <button class="tab-btn" data-tab="filter">Filter</button>
+        <button class="tab-btn" data-tab="status">Status</button>
+    </nav>
+
+    <!-- Tab: Source -->
+    <section class="tab-content active" id="tab-source">
+        <div class="card">
+            <div class="card-row">
+                <label>Voice Type</label>
+                <select id="voice-type-select" class="mobile-select">
+                    <option value="treble">Treble</option>
+                    <option value="nontreble" selected>Non-Treble</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="card">
+            <label class="slider-label">
+                Pitch (f₀)
+                <span class="slider-val"><span id="pitch-val">220</span> Hz · <span id="pitch-note">A3</span></span>
+            </label>
+            <input type="range" id="pitch-slider" min="50" max="1000" value="220" step="1" class="mobile-range">
+        </div>
+
+        <div class="card">
+            <label class="slider-label">Mechanism</label>
+            <div class="toggle-pills">
+                <input type="radio" id="mech-m1" name="mechanism" value="m1" checked>
+                <label for="mech-m1" class="pill">M1 (Chest)</label>
+                <input type="radio" id="mech-m2" name="mechanism" value="m2">
+                <label for="mech-m2" class="pill">M2 (Head)</label>
+            </div>
+        </div>
+
+        <div class="card">
+            <label class="slider-label">
+                Pressure (P)
+                <span class="slider-val" id="pressure-val">1.0</span>
+            </label>
+            <input type="range" id="pressure-slider" min="0.3" max="2.5" value="1.0" step="0.1" class="mobile-range">
+        </div>
+
+        <div class="card">
+            <label class="slider-label">
+                Resistance (R)
+                <span class="slider-val" id="resistance-val">1.0</span>
+            </label>
+            <input type="range" id="resistance-slider" min="0.3" max="2.5" value="1.0" step="0.1" class="mobile-range">
+        </div>
+    </section>
+
+    <!-- Tab: Filter -->
+    <section class="tab-content" id="tab-filter">
+        <!-- F1 -->
+        <div class="card formant-card">
+            <div class="formant-row">
+                <label class="slider-label">F1 <span class="formant-hint">Depth</span>
+                    <span class="slider-val"><span id="f1-val">500</span> Hz</span>
+                </label>
+                <button class="toggle-btn active" id="f1-toggle">ON</button>
+            </div>
+            <input type="range" id="f1-slider" min="250" max="1000" value="500" step="1"
+                class="mobile-range accent-red">
+            <div class="q-row">
+                <span>Q</span>
+                <input type="range" id="f1-q" min="1" max="20" value="5" step="0.1" class="mobile-range-sm">
+            </div>
+        </div>
+
+        <!-- F2 -->
+        <div class="card formant-card">
+            <div class="formant-row">
+                <label class="slider-label">F2 <span class="formant-hint">Clarity</span>
+                    <span class="slider-val"><span id="f2-val">1500</span> Hz</span>
+                </label>
+                <button class="toggle-btn active" id="f2-toggle">ON</button>
+            </div>
+            <input type="range" id="f2-slider" min="800" max="2500" value="1500" step="1"
+                class="mobile-range accent-blue">
+            <div class="q-row">
+                <span>Q</span>
+                <input type="range" id="f2-q" min="1" max="20" value="6" step="0.1" class="mobile-range-sm">
+            </div>
+        </div>
+
+        <!-- F3 -->
+        <div class="card formant-card">
+            <div class="formant-row">
+                <label class="slider-label">F3 <span class="formant-hint">Ring</span>
+                    <span class="slider-val"><span id="f3-val">2800</span> Hz</span>
+                </label>
+                <button class="toggle-btn active" id="f3-toggle">ON</button>
+            </div>
+            <input type="range" id="f3-slider" min="2000" max="4000" value="2800" step="1"
+                class="mobile-range accent-purple">
+            <div class="q-row">
+                <span>Q</span>
+                <input type="range" id="f3-q" min="1" max="20" value="8" step="0.1" class="mobile-range-sm">
+            </div>
+        </div>
+
+        <!-- F4 -->
+        <div class="card formant-card">
+            <div class="formant-row">
+                <label class="slider-label">F4
+                    <span class="slider-val"><span id="f4-val">3800</span> Hz</span>
+                </label>
+                <button class="toggle-btn active" id="f4-toggle">ON</button>
+            </div>
+            <input type="range" id="f4-slider" min="2500" max="4500" value="3800" step="1"
+                class="mobile-range accent-orange">
+            <div class="q-row">
+                <span>Q</span>
+                <input type="range" id="f4-q" min="1" max="20" value="10" step="0.1" class="mobile-range-sm">
+            </div>
+        </div>
+
+        <!-- F5 -->
+        <div class="card formant-card">
+            <div class="formant-row">
+                <label class="slider-label">F5
+                    <span class="slider-val"><span id="f5-val">4800</span> Hz</span>
+                </label>
+                <button class="toggle-btn active" id="f5-toggle">ON</button>
+            </div>
+            <input type="range" id="f5-slider" min="3500" max="6000" value="4800" step="1"
+                class="mobile-range accent-pink">
+            <div class="q-row">
+                <span>Q</span>
+                <input type="range" id="f5-q" min="1" max="20" value="12" step="0.1" class="mobile-range-sm">
+            </div>
+        </div>
+
+        <!-- Vowel Presets -->
+        <div class="card">
+            <label class="slider-label">Presets</label>
+            <div class="preset-grid">
+                <button class="preset-btn" data-preset="a">[ɑ] ah</button>
+                <button class="preset-btn" data-preset="i">[i] ee</button>
+                <button class="preset-btn" data-preset="u">[u] oo</button>
+                <button class="preset-btn" data-preset="e">[e] eh</button>
+                <button class="preset-btn" data-preset="o">[o] oh</button>
+                <button class="preset-btn" data-preset="open">Open</button>
+                <button class="preset-btn" data-preset="close">Close</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Tab: Status -->
+    <section class="tab-content" id="tab-status">
+        <div class="card">
+            <div class="status-row">
+                <span>Airflow (U = P/R)</span>
+                <span id="airflow-val" class="mono">1.00</span>
+            </div>
+            <div class="status-row">
+                <span>Phonation Mode</span>
+                <span id="mode-status" class="status-badge flow">Flow</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="status-header">
+                <h3>Acoustic Strategy</h3>
+                <label class="toggle-checkbox">
+                    <input type="checkbox" id="auto-routing-toggle" checked>
+                    <span>Auto</span>
+                </label>
+            </div>
+            <div class="status-row">
+                <span>Timbre</span>
+                <span id="timbre-state" class="mono">Open</span>
+            </div>
+            <div class="status-row">
+                <span>Mode</span>
+                <span id="acoustic-mode" class="status-badge neutral">Neutral</span>
+            </div>
+            <div id="event-flash" class="event-flash hidden">TURNING OVER! (2f₀ > fR1)</div>
+        </div>
+    </section>
+
+    <!-- Tab Switching Logic -->
+    <script>
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                btn.classList.add('active');
+                document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+            });
+        });
+
+        // Show/hide mic toolbar when mic is toggled
+        const micObserver = new MutationObserver(() => {
+            const micBtn = document.getElementById('mic-toggle');
+            document.getElementById('mic-toolbar').style.display =
+                micBtn.classList.contains('mic-active') ? 'flex' : 'none';
+        });
+        micObserver.observe(document.getElementById('mic-toggle'), { attributes: true, attributeFilter: ['class'] });
+    </script>
+    <script src="main.js"></script>
+</body>
+
+</html>
