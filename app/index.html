@@ -203,7 +203,13 @@
             <section class="panel visualizer-panel glass">
                 <div class="canvas-header">
                     <h2>Power Spectrum (Source × Filter = Output)</h2>
-                    <button id="audio-toggle" class="btn primary">Play Audio</button>
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <label for="master-volume"
+                            style="font-size: 0.9rem; color: var(--text-secondary); margin: 0;">Volume:</label>
+                        <input type="range" id="master-volume" min="0" max="1" value="0.5" step="0.01"
+                            style="width: 100px; margin: 0;">
+                        <button id="audio-toggle" class="btn primary">Play Audio</button>
+                    </div>
                 </div>
                 <div class="canvas-container">
                     <canvas id="spectrum-canvas"></canvas>

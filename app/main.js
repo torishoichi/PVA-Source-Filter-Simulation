@@ -35,6 +35,7 @@ const state = {
     phonationMode: 'flow', // 'flow', 'pressed', 'breathy'
     timbreState: 'Open', // 'Open' or 'Close'
     acousticMode: 'Neutral', // 'Neutral', 'Yell', 'Whoop'
+    masterVolume: 0.5, // 0.0 to 1.0
     formants: {
         f1: { freq: 500, q: 5, gain: 15, enabled: true },
         f2: { freq: 1500, q: 6, gain: 12, enabled: true },
@@ -48,6 +49,7 @@ const state = {
 const els = {
     btnPlay: document.getElementById('audio-toggle'),
     canvas: document.getElementById('spectrum-canvas'),
+    masterVolume: document.getElementById('master-volume'),
 
     // Source
     voiceTypeSelect: document.getElementById('voice-type-select'),
@@ -211,7 +213,7 @@ function startAudio() {
     startNoise();
 
     // Smooth fade in (Intensity based on Pressure)
-    const targetIntensity = Math.min(1.0, state.pressure * 0.8);
+    const targetIntensity = Math.min(1.0, state.pressure * 0.8) * state.masterVolume;
     masterGain.gain.cancelScheduledValues(audioCtx.currentTime);
     masterGain.gain.setValueAtTime(0, audioCtx.currentTime);
     masterGain.gain.linearRampToValueAtTime(targetIntensity, audioCtx.currentTime + 0.1);
@@ -359,9 +361,9 @@ function calcAerodynamics() {
     els.modeStatus.textContent = state.phonationMode.charAt(0).toUpperCase() + state.phonationMode.slice(1);
     els.modeStatus.className = `status-badge ${state.phonationMode}`;
 
-    // Apply changes to sound
+    // Update intensity
     if (isPlaying && masterGain && audioCtx) {
-        const targetIntensity = Math.min(1.0, state.pressure * 0.8);
+        const targetIntensity = Math.min(1.0, state.pressure * 0.8) * state.masterVolume;
         masterGain.gain.setTargetAtTime(targetIntensity, audioCtx.currentTime, 0.05);
     }
     updateNoiseLevel();
@@ -719,6 +721,11 @@ els.pressureSlider.addEventListener('input', (e) => {
 els.resistanceSlider.addEventListener('input', (e) => {
     state.resistance = parseFloat(e.target.value);
     els.resistanceVal.textContent = state.resistance.toFixed(1);
+    calcAerodynamics();
+});
+
+els.masterVolume.addEventListener('input', (e) => {
+    state.masterVolume = parseFloat(e.target.value);
     calcAerodynamics();
 });
 
