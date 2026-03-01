@@ -6,4 +6,5 @@ PVA/
 
 # AI agent project files (local only)
 AGENTS.md
+GEMINI.md
 .agents/
