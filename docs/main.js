@@ -127,6 +127,9 @@ const els = {
 const canvasCtx = els.canvas.getContext('2d');
 let animationId = null;
 
+// Detect mobile page for UI text differences
+const isMobilePage = !!document.querySelector('.tab-nav');
+
 // --- Helper Functions ---
 function freqToNote(freq) {
     const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -248,7 +251,7 @@ function startAudio() {
     masterGain.gain.setValueAtTime(0, audioCtx.currentTime);
     masterGain.gain.linearRampToValueAtTime(targetIntensity, audioCtx.currentTime + 0.1);
 
-    els.btnPlay.textContent = 'Stop Audio';
+    els.btnPlay.textContent = isMobilePage ? '■ Stop' : 'Stop Audio';
     els.btnPlay.classList.add('playing');
     isPlaying = true;
 
@@ -268,13 +271,18 @@ function stopAudio() {
         stopNoise();
     }, 150);
 
-    els.btnPlay.textContent = 'Play Audio';
+    els.btnPlay.textContent = isMobilePage ? '▶ Play' : 'Play Audio';
     els.btnPlay.classList.remove('playing');
     isPlaying = false;
 
     if (animationId) {
         cancelAnimationFrame(animationId);
         animationId = null;
+    }
+
+    // If mic is still active, keep the visualizer running
+    if (state.isMicActive) {
+        drawVisualizer();
     }
 }
 
@@ -669,9 +677,17 @@ function generateLFWaveform(numPoints) {
  * Draw the glottal waveform on its dedicated canvas.
  * OQ, SQ, Rd are rendered inside the canvas. Phases are color-coded.
  */
+let glottalNeedsRedraw = false;
+
 function drawGlottalWaveform() {
     const canvas = els.glottalCanvas;
     if (!canvas) return;
+
+    // Skip drawing if canvas is not visible (e.g. in a hidden tab on mobile)
+    if (canvas.clientWidth === 0 || canvas.clientHeight === 0) {
+        glottalNeedsRedraw = true;
+        return;
+    }
 
     const ctx = canvas.getContext('2d');
     canvas.width = canvas.clientWidth * (window.devicePixelRatio || 1);
@@ -1188,7 +1204,7 @@ els.btnMic.addEventListener('click', async () => {
         }
         state.isMicActive = false;
         els.btnMic.classList.remove('mic-active');
-        els.btnMic.textContent = 'Mic: OFF';
+        if (!isMobilePage) els.btnMic.textContent = 'Mic: OFF';
     } else {
         // Request permissions and start
         try {
@@ -1200,10 +1216,8 @@ els.btnMic.addEventListener('click', async () => {
                 }
             });
 
-            // Generate context if it doesn't exist yet
-            if (!audioCtx) {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            }
+            // Ensure full audio infrastructure is initialized (filters, gain, analyser)
+            initAudio();
             if (audioCtx.state === 'suspended') {
                 await audioCtx.resume();
             }
@@ -1222,7 +1236,7 @@ els.btnMic.addEventListener('click', async () => {
 
             state.isMicActive = true;
             els.btnMic.classList.add('mic-active');
-            els.btnMic.textContent = 'Mic: ON';
+            if (!isMobilePage) els.btnMic.textContent = 'Mic: ON';
 
             // Kick off visualizer if it wasn't already running
             if (!isPlaying) {

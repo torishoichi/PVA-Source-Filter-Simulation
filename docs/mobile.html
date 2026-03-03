@@ -61,7 +61,8 @@
     <section class="tab-content active" id="tab-source">
         <div class="card">
             <div class="card-row">
-                <label>Voice Type <span class="tooltip" data-tooltip="トレブルボイス（ソプラノ、アルト、カウンターテナー等）か非トレブルボイス（テノール、バス等）かの区分です。トレブルボイスは音域が高いため共鳴に利用できる倍音が少なく、より早い段階でWhoopモード（fR1:1fo）に依存します。非トレブルボイスは音域が低く、低・中音域に多くの倍音を持つため、ターンオーバー（fR1:2fo交差）が主要な音響イベントとなります。">[?]</span></label>
+                <label>Voice Type <span class="tooltip"
+                        data-tooltip="トレブルボイス（ソプラノ、アルト、カウンターテナー等）か非トレブルボイス（テノール、バス等）かの区分です。トレブルボイスは音域が高いため共鳴に利用できる倍音が少なく、より早い段階でWhoopモード（fR1:1fo）に依存します。非トレブルボイスは音域が低く、低・中音域に多くの倍音を持つため、ターンオーバー（fR1:2fo交差）が主要な音響イベントとなります。">[?]</span></label>
                 <select id="voice-type-select" class="mobile-select">
                     <option value="treble">Treble</option>
                     <option value="nontreble" selected>Non-Treble</option>
@@ -71,14 +72,16 @@
 
         <div class="card">
             <label class="slider-label">
-                Pitch (f₀) <span class="tooltip" data-tooltip="意図されたピッチ（音高）に相当する基本周波数です（PVA内では1foと表記）。この基本周波数の整数倍として倍音（2fo, 3fo...）が生成され、f0が高くなるほど倍音同士の周波数間隔は広くなります。">[?]</span>
+                Pitch (f₀) <span class="tooltip"
+                    data-tooltip="意図されたピッチ（音高）に相当する基本周波数です（PVA内では1foと表記）。この基本周波数の整数倍として倍音（2fo, 3fo...）が生成され、f0が高くなるほど倍音同士の周波数間隔は広くなります。">[?]</span>
                 <span class="slider-val"><span id="pitch-val">220</span> Hz · <span id="pitch-note">A3</span></span>
             </label>
             <input type="range" id="pitch-slider" min="50" max="1000" value="220" step="1" class="mobile-range">
         </div>
 
         <div class="card">
-            <label class="slider-label">Mechanism <span class="tooltip" data-tooltip="声帯の物理的な振動様式に基づく区分です。M1（地声的）は声帯が厚く接触率が高いため、緩やかなスペクトル傾斜（豊富な高次倍音）とバズ音を持ちます。M2（裏声的）は声帯が薄く接触率が低いため、急なスペクトル傾斜（少ない高次倍音）と滑らかな音色になります。">[?]</span></label>
+            <label class="slider-label">Mechanism <span class="tooltip"
+                    data-tooltip="声帯の物理的な振動様式に基づく区分です。M1（地声的）は声帯が厚く接触率が高いため、緩やかなスペクトル傾斜（豊富な高次倍音）とバズ音を持ちます。M2（裏声的）は声帯が薄く接触率が低いため、急なスペクトル傾斜（少ない高次倍音）と滑らかな音色になります。">[?]</span></label>
             <div class="toggle-pills">
                 <input type="radio" id="mech-m1" name="mechanism" value="m1" checked>
                 <label for="mech-m1" class="pill">M1 (Chest)</label>
@@ -89,7 +92,8 @@
 
         <div class="card">
             <label class="slider-label">
-                Pressure (P) <span class="tooltip" data-tooltip="声門間圧力差（呼気圧）。気管内（声帯の下）と声道（声帯の上）の圧力差であり、声帯を振動させるための駆動力となります。">[?]</span>
+                Pressure (P) <span class="tooltip"
+                    data-tooltip="声門間圧力差（呼気圧）。気管内（声帯の下）と声道（声帯の上）の圧力差であり、声帯を振動させるための駆動力となります。">[?]</span>
                 <span class="slider-val" id="pressure-val">1.0</span>
             </label>
             <input type="range" id="pressure-slider" min="0.3" max="2.5" value="1.0" step="0.1" class="mobile-range">
@@ -97,7 +101,8 @@
 
         <div class="card">
             <label class="slider-label">
-                Resistance (R) <span class="tooltip" data-tooltip="声門抵抗。気流の圧力に対して、有能な声帯閉鎖を達成・維持するために必要な力であり、振動組織の衝突力を決定します。">[?]</span>
+                Resistance (R) <span class="tooltip"
+                    data-tooltip="声門抵抗。気流の圧力に対して、有能な声帯閉鎖を達成・維持するために必要な力であり、振動組織の衝突力を決定します。">[?]</span>
                 <span class="slider-val" id="resistance-val">1.0</span>
             </label>
             <input type="range" id="resistance-slider" min="0.3" max="2.5" value="1.0" step="0.1" class="mobile-range">
@@ -109,7 +114,8 @@
         <!-- F1 -->
         <div class="card formant-card">
             <div class="formant-row">
-                <label class="slider-label">F1 <span class="formant-hint">Depth</span> <span class="tooltip" data-tooltip="第1フォルマント（声道の最も低い共鳴）。音の「深さ」や「温かみ」に関与し、母音の開閉（Openness-Closeness）次元を決定します。声道を短くする、または口・顎を開くことでF1は上がり、声道を長くする、または口を閉じることでF1は下がります。このF1と倍音との交差が、音響的レジスター変化の主要な原因となります。">[?]</span>
+                <label class="slider-label">F1 <span class="formant-hint">Depth</span> <span class="tooltip"
+                        data-tooltip="第1フォルマント（声道の最も低い共鳴）。音の「深さ」や「温かみ」に関与し、母音の開閉（Openness-Closeness）次元を決定します。声道を短くする、または口・顎を開くことでF1は上がり、声道を長くする、または口を閉じることでF1は下がります。このF1と倍音との交差が、音響的レジスター変化の主要な原因となります。">[?]</span>
                     <span class="slider-val"><span id="f1-val">500</span> Hz</span>
                 </label>
                 <button class="toggle-btn active" id="f1-toggle">ON</button>
@@ -205,11 +211,13 @@
     <section class="tab-content" id="tab-status">
         <div class="card">
             <div class="status-row">
-                <span>Airflow (U = P/R) <span class="tooltip" data-tooltip="気流量。呼気圧（P）と声門抵抗（R）の力学的なバランスの結果として生じる媒介的な値です。">[?]</span></span>
+                <span>Airflow (U = P/R) <span class="tooltip"
+                        data-tooltip="気流量。呼気圧（P）と声門抵抗（R）の力学的なバランスの結果として生じる媒介的な値です。">[?]</span></span>
                 <span id="airflow-val" class="mono">1.00</span>
             </div>
             <div class="status-row">
-                <span>Phonation Mode <span class="tooltip" data-tooltip="圧力、気流、声門抵抗のバランスによる発声状態の分類です。これらが均衡した「フロー発声」、抵抗が過剰な「圧迫発声（Pressed）」、気流が過剰な「息漏れ発声（Breathy）」に分かれ、生成される波形の倍音の強さ（スペクトルスロープ）やノイズ比率に影響を与えます。">[?]</span></span>
+                <span>Phonation Mode <span class="tooltip"
+                        data-tooltip="圧力、気流、声門抵抗のバランスによる発声状態の分類です。これらが均衡した「フロー発声」、抵抗が過剰な「圧迫発声（Pressed）」、気流が過剰な「息漏れ発声（Breathy）」に分かれ、生成される波形の倍音の強さ（スペクトルスロープ）やノイズ比率に影響を与えます。">[?]</span></span>
                 <span id="mode-status" class="status-badge flow">Flow</span>
             </div>
         </div>
@@ -278,9 +286,12 @@
                 <canvas id="glottal-canvas"></canvas>
             </div>
             <div class="glottal-legend">
-                <span class="legend-item open-legend">Open <span class="tooltip" data-tooltip="声門開放相（Opening Phase）。声帯が開き気流が増加する区間です。声門下圧によって声帯が押し開かれ、流量がピーク（Tp）に達します。この区間の長さはOpen Quotient（OQ）に関係します。">[?]</span></span>
-                <span class="legend-item return-legend">Return <span class="tooltip" data-tooltip="復帰相（Return Phase）。声帯が急速に閉鎖した直後の過渡応答です。声門流量が急激に減少した後、声道内の慣性による微小な逆流が生じます。この急峻さが高次倍音の強さを決定します。">[?]</span></span>
-                <span class="legend-item closed-legend">Closed <span class="tooltip" data-tooltip="声門閉鎖相（Closed Phase）。声帯が完全に（または部分的に）閉じ、気流がゼロになる区間です。Pressed発声ではこの区間が長く、Breathy発声では短いか不完全閉鎖となります。">[?]</span></span>
+                <span class="legend-item open-legend">Open <span class="tooltip"
+                        data-tooltip="声門開放相（Opening Phase）。声帯が開き気流が増加する区間です。声門下圧によって声帯が押し開かれ、流量がピーク（Tp）に達します。この区間の長さはOpen Quotient（OQ）に関係します。">[?]</span></span>
+                <span class="legend-item return-legend">Return <span class="tooltip"
+                        data-tooltip="復帰相（Return Phase）。声帯が急速に閉鎖した直後の過渡応答です。声門流量が急激に減少した後、声道内の慣性による微小な逆流が生じます。この急峻さが高次倍音の強さを決定します。">[?]</span></span>
+                <span class="legend-item closed-legend">Closed <span class="tooltip"
+                        data-tooltip="声門閉鎖相（Closed Phase）。声帯が完全に（または部分的に）閉じ、気流がゼロになる区間です。Pressed発声ではこの区間が長く、Breathy発声では短いか不完全閉鎖となります。">[?]</span></span>
             </div>
             <!-- Hidden DOM elements for JS -->
             <span id="lf-oq" style="display:none">0.50</span>
@@ -297,11 +308,13 @@
                 </label>
             </div>
             <div class="status-row">
-                <span>Timbre <span class="tooltip" data-tooltip="倍音と第1共鳴（fR1）の位置関係によって生じる音色の状態です。複数の倍音がfR1の下にある場合は「Open Timbre（開いた音色）」となり、第2倍音（2fo）がfR1を超えて上に行くと「Close Timbre（閉じた音色 / ターンオーバー）」へ移行します。">[?]</span></span>
+                <span>Timbre <span class="tooltip"
+                        data-tooltip="倍音と第1共鳴（fR1）の位置関係によって生じる音色の状態です。複数の倍音がfR1の下にある場合は「Open Timbre（開いた音色）」となり、第2倍音（2fo）がfR1を超えて上に行くと「Close Timbre（閉じた音色 / ターンオーバー）」へ移行します。">[?]</span></span>
                 <span id="timbre-state" class="mono">Open</span>
             </div>
             <div class="status-row">
-                <span>Mode <span class="tooltip" data-tooltip="共鳴周波数を特定の倍音に追従させる（トラッキングする）戦略です。fR1を2foに同調させ続けると発散型共鳴器による「YELL（叫び）」となり、fR1を1foに同調させると収束型共鳴器による「WHOOP（フープ）」となります。">[?]</span></span>
+                <span>Mode <span class="tooltip"
+                        data-tooltip="共鳴周波数を特定の倍音に追従させる（トラッキングする）戦略です。fR1を2foに同調させ続けると発散型共鳴器による「YELL（叫び）」となり、fR1を1foに同調させると収束型共鳴器による「WHOOP（フープ）」となります。">[?]</span></span>
                 <span id="acoustic-mode" class="status-badge neutral">Neutral</span>
             </div>
             <div id="event-flash" class="event-flash hidden">TURNING OVER! (2f₀ > fR1)</div>
@@ -321,6 +334,14 @@
                 document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
                 btn.classList.add('active');
                 document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+
+                // Redraw glottal waveform when Status tab becomes visible
+                if (btn.dataset.tab === 'status' && typeof glottalNeedsRedraw !== 'undefined' && glottalNeedsRedraw) {
+                    glottalNeedsRedraw = false;
+                    if (typeof drawGlottalWaveform === 'function') {
+                        drawGlottalWaveform();
+                    }
+                }
             });
         });
 
