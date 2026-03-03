@@ -41,6 +41,9 @@ const state = {
     phonationMode: 'flow', // 'flow', 'pressed', 'breathy'
     timbreState: 'Open', // 'Open' or 'Close'
     isMicActive: false,
+    isMicPaused: false,
+    cachedMicData: null,
+    cachedMicPitch: -1,
     micGain: 1.0,
     spectrumSlope: -12, // dB/octave attenuation
     showSlopeLine: false, // Toggle for slope approximation line
@@ -59,6 +62,7 @@ const state = {
 const els = {
     btnPlay: document.getElementById('audio-toggle'),
     btnMic: document.getElementById('mic-toggle'),
+    btnMicPause: document.getElementById('mic-pause'),
     btnSlopeLine: document.getElementById('slope-line-toggle'),
     canvas: document.getElementById('spectrum-canvas'),
     masterVolume: document.getElementById('master-volume'),
@@ -934,7 +938,15 @@ function drawVisualizer() {
 
     // Tuner-style pitch display from mic input
     if (state.isMicActive && micAnalyser) {
-        const detectedPitch = detectPitchFromMic();
+        let detectedPitch = -1;
+
+        if (state.isMicPaused) {
+            detectedPitch = state.cachedMicPitch;
+        } else {
+            detectedPitch = detectPitchFromMic();
+            state.cachedMicPitch = detectedPitch;
+        }
+
         if (detectedPitch > 0) {
             const noteName = freqToNote(detectedPitch);
             canvasCtx.save();
@@ -969,11 +981,17 @@ function drawVisualizer() {
     const nyquist = audioCtx ? audioCtx.sampleRate / 2 : 24000;
 
     // Helper to draw a single frequency spectrum
-    const drawSpectrum = (analyzerNode, strokeColor, fillColor, boost) => {
+    const drawSpectrum = (analyzerNode, strokeColor, fillColor, boost, dataArrayOverride = null) => {
         if (!analyzerNode) return;
         const bufferLength = analyzerNode.frequencyBinCount;
-        const dataArray = new Float32Array(bufferLength);
-        analyzerNode.getFloatFrequencyData(dataArray);
+
+        let dataArray;
+        if (dataArrayOverride) {
+            dataArray = dataArrayOverride;
+        } else {
+            dataArray = new Float32Array(bufferLength);
+            analyzerNode.getFloatFrequencyData(dataArray);
+        }
 
         const maxDb = analyzerNode.maxDecibels;
         const minDb = analyzerNode.minDecibels;
@@ -1071,7 +1089,15 @@ function drawVisualizer() {
 
     // 2. Draw Live Microphone Spectrum (Green, outline only)
     if (state.isMicActive && micAnalyser) {
-        drawSpectrum(micAnalyser, 'rgba(46, 160, 67, 0.9)', null, 1.2);
+        if (!state.cachedMicData) {
+            state.cachedMicData = new Float32Array(micAnalyser.frequencyBinCount);
+        }
+
+        if (!state.isMicPaused) {
+            micAnalyser.getFloatFrequencyData(state.cachedMicData);
+        }
+
+        drawSpectrum(micAnalyser, 'rgba(46, 160, 67, 0.9)', null, 1.2, state.cachedMicData);
     }
 
     // 3. Draw Formant Overlay Envelopes (Only when simulating)
@@ -1203,7 +1229,14 @@ els.btnMic.addEventListener('click', async () => {
             micSource = null;
         }
         state.isMicActive = false;
+        state.isMicPaused = false;
         els.btnMic.classList.remove('mic-active');
+        if (els.btnMicPause) {
+            els.btnMicPause.style.display = 'none';
+            els.btnMicPause.classList.remove('mic-paused');
+            const svgPause = '<svg viewBox="0 0 24 24" width="' + (isMobilePage ? 20 : 12) + '" height="' + (isMobilePage ? 20 : 12) + '" fill="currentColor" style="vertical-align: ' + (isMobilePage ? 'top' : '-1px') + '; ' + (isMobilePage ? '' : 'margin-right: 4px;') + '"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>';
+            els.btnMicPause.innerHTML = isMobilePage ? svgPause : `${svgPause}Pause`;
+        }
         if (!isMobilePage) els.btnMic.textContent = 'Mic: OFF';
     } else {
         // Request permissions and start
@@ -1236,6 +1269,9 @@ els.btnMic.addEventListener('click', async () => {
 
             state.isMicActive = true;
             els.btnMic.classList.add('mic-active');
+            if (els.btnMicPause) {
+                els.btnMicPause.style.display = 'inline-flex';
+            }
             if (!isMobilePage) els.btnMic.textContent = 'Mic: ON';
 
             // Kick off visualizer if it wasn't already running
@@ -1249,6 +1285,25 @@ els.btnMic.addEventListener('click', async () => {
         }
     }
 });
+
+// Mic Pause Toggle
+if (els.btnMicPause) {
+    els.btnMicPause.addEventListener('click', () => {
+        if (!state.isMicActive) return;
+
+        state.isMicPaused = !state.isMicPaused;
+
+        if (state.isMicPaused) {
+            els.btnMicPause.classList.add('mic-paused');
+            const svgPlay = '<svg viewBox="0 0 24 24" width="' + (isMobilePage ? 20 : 12) + '" height="' + (isMobilePage ? 20 : 12) + '" fill="currentColor" style="vertical-align: ' + (isMobilePage ? 'top' : '-1px') + '; ' + (isMobilePage ? '' : 'margin-right: 4px;') + '"><path d="M8 5v14l11-7z"/></svg>';
+            els.btnMicPause.innerHTML = isMobilePage ? svgPlay : `${svgPlay}Resume`;
+        } else {
+            els.btnMicPause.classList.remove('mic-paused');
+            const svgPause = '<svg viewBox="0 0 24 24" width="' + (isMobilePage ? 20 : 12) + '" height="' + (isMobilePage ? 20 : 12) + '" fill="currentColor" style="vertical-align: ' + (isMobilePage ? 'top' : '-1px') + '; ' + (isMobilePage ? '' : 'margin-right: 4px;') + '"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>';
+            els.btnMicPause.innerHTML = isMobilePage ? svgPause : `${svgPause}Pause`;
+        }
+    });
+}
 
 // Source Controls
 els.voiceTypeSelect.addEventListener('change', (e) => {

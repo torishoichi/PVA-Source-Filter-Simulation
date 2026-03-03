@@ -74,12 +74,18 @@ body {
     border-radius: 50%;
     border: 1px solid var(--border);
     background: transparent;
+    color: var(--text);
     font-size: 1.2rem;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     transition: all 0.2s;
+    outline: none;
+}
+
+.btn-icon:focus {
+    outline: none;
 }
 
 .bmc-link {
@@ -117,6 +123,13 @@ body {
     50% {
         box-shadow: 0 0 20px rgba(255, 123, 114, 0.7);
     }
+}
+
+.btn-icon.mic-paused {
+    background: var(--warn);
+    border-color: var(--warn);
+    animation: none;
+    opacity: 0.8;
 }
 
 .btn-play {
