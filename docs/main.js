@@ -1005,7 +1005,7 @@ function drawVisualizer() {
         gradient.addColorStop(1, 'rgba(88, 166, 255, 0.0)');
         drawSpectrum(analyser, 'rgba(88, 166, 255, 0.8)', gradient, 1.5);
 
-        // --- Draw Harmonic Peak Labels (H0, H1, H2...) ---
+        // --- Draw Harmonic Peak Labels (1fo, 2fo, 3fo...) ---
         const bufferLength = analyser.frequencyBinCount;
         const dataArray = new Float32Array(bufferLength);
         analyser.getFloatFrequencyData(dataArray);
@@ -1048,7 +1048,7 @@ function drawVisualizer() {
                 const y = height - (displayVal * height * 0.9);
                 const x = freqToX(peakFreq, width);
 
-                canvasCtx.fillText(`H${h - 1}`, x, y - 8);
+                canvasCtx.fillText(`${h}fo`, x, y - 8);
             }
         }
     }
@@ -1113,7 +1113,7 @@ function drawVisualizer() {
         const slopeMinDb = analyser.minDecibels;
         const slopeDbRange = slopeMaxDb - slopeMinDb;
 
-        // Find the H0 peak dB value as our starting reference
+        // Find the 1fo (fundamental) peak dB value as our starting reference
         const f0 = state.pitch;
         const h0BinIndex = Math.round((f0 / nyquist) * slopeBufferLength);
         let h0Db = slopeDataArray[Math.min(h0BinIndex, slopeBufferLength - 1)];
