@@ -21,6 +21,11 @@ let f3Node = null;
 let f4Node = null;
 let f5Node = null;
 
+let visF1Node = null, visF2Node = null, visF3Node = null, visF4Node = null, visF5Node = null;
+let visSpectralTiltNode = null;
+let visMasterGain = null;
+let silentTarget = null;
+
 let noiseNode = null;
 let noiseFilter = null;
 let noiseGain = null;
@@ -49,6 +54,9 @@ const state = {
     showSlopeLine: false, // Toggle for slope approximation line
     acousticMode: 'Neutral', // 'Neutral', 'Yell', 'Whoop'
     masterVolume: 0.5, // 0.0 to 1.0
+    selectionActive: false,
+    selectionMinFreq: 0,
+    selectionMaxFreq: 0,
     formants: {
         f1: { freq: 500, q: 5, gain: 15, enabled: true },
         f2: { freq: 1500, q: 6, gain: 12, enabled: true },
@@ -210,6 +218,10 @@ function initAudio() {
     // Master Gain
     masterGain = audioCtx.createGain();
     masterGain.gain.value = 0; // Start muted
+    visMasterGain = audioCtx.createGain();
+    visMasterGain.gain.value = 0;
+    silentTarget = audioCtx.createGain();
+    silentTarget.gain.value = 0;
 
     // Analyser for visualization
     analyser = audioCtx.createAnalyser();
@@ -223,21 +235,41 @@ function initAudio() {
     f4Node = audioCtx.createBiquadFilter(); f4Node.type = 'peaking'; f4Node.gain.value = state.formants.f4.gain;
     f5Node = audioCtx.createBiquadFilter(); f5Node.type = 'peaking'; f5Node.gain.value = state.formants.f5.gain;
 
+    visF1Node = audioCtx.createBiquadFilter(); visF1Node.type = 'peaking'; visF1Node.gain.value = state.formants.f1.gain;
+    visF2Node = audioCtx.createBiquadFilter(); visF2Node.type = 'peaking'; visF2Node.gain.value = state.formants.f2.gain;
+    visF3Node = audioCtx.createBiquadFilter(); visF3Node.type = 'peaking'; visF3Node.gain.value = state.formants.f3.gain;
+    visF4Node = audioCtx.createBiquadFilter(); visF4Node.type = 'peaking'; visF4Node.gain.value = state.formants.f4.gain;
+    visF5Node = audioCtx.createBiquadFilter(); visF5Node.type = 'peaking'; visF5Node.gain.value = state.formants.f5.gain;
+
     // Spectral Tilt Filter (Highshelf)
     spectralTiltNode = audioCtx.createBiquadFilter();
     spectralTiltNode.type = 'highshelf';
     // Anchor the shelf slightly above the fundamental so H0 isn't attenuated, but higher harmonics are.
     spectralTiltNode.frequency.value = 400;
 
-    // Connect Filter Chain: Source -> SpectralTilt -> F1 -> F2 -> F3 -> F4 -> F5 -> MasterGain -> Analyser -> Destination
+    visSpectralTiltNode = audioCtx.createBiquadFilter();
+    visSpectralTiltNode.type = 'highshelf';
+    visSpectralTiltNode.frequency.value = 400;
+
+    // Connect Filter Chain: Source -> SpectralTilt -> F1 -> F2 -> F3 -> F4 -> F5 -> MasterGain -> Destination
     spectralTiltNode.connect(f1Node);
     f1Node.connect(f2Node);
     f2Node.connect(f3Node);
     f3Node.connect(f4Node);
     f4Node.connect(f5Node);
     f5Node.connect(masterGain);
-    masterGain.connect(analyser);
-    analyser.connect(audioCtx.destination);
+    masterGain.connect(audioCtx.destination); // Audio straight to out
+
+    // Visualizer path
+    visSpectralTiltNode.connect(visF1Node);
+    visF1Node.connect(visF2Node);
+    visF2Node.connect(visF3Node);
+    visF3Node.connect(visF4Node);
+    visF4Node.connect(visF5Node);
+    visF5Node.connect(visMasterGain);
+    visMasterGain.connect(analyser);
+    analyser.connect(silentTarget);
+    silentTarget.connect(audioCtx.destination);
 
     updateFilterParams();
 }
@@ -254,6 +286,11 @@ function startAudio() {
     masterGain.gain.cancelScheduledValues(audioCtx.currentTime);
     masterGain.gain.setValueAtTime(0, audioCtx.currentTime);
     masterGain.gain.linearRampToValueAtTime(targetIntensity, audioCtx.currentTime + 0.1);
+    if (visMasterGain) {
+        visMasterGain.gain.cancelScheduledValues(audioCtx.currentTime);
+        visMasterGain.gain.setValueAtTime(0, audioCtx.currentTime);
+        visMasterGain.gain.linearRampToValueAtTime(targetIntensity, audioCtx.currentTime + 0.1);
+    }
 
     els.btnPlay.textContent = isMobilePage ? '■ Stop' : 'Stop Audio';
     els.btnPlay.classList.add('playing');
@@ -269,6 +306,11 @@ function stopAudio() {
     masterGain.gain.cancelScheduledValues(audioCtx.currentTime);
     masterGain.gain.setValueAtTime(masterGain.gain.value, audioCtx.currentTime);
     masterGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.1);
+    if (visMasterGain) {
+        visMasterGain.gain.cancelScheduledValues(audioCtx.currentTime);
+        visMasterGain.gain.setValueAtTime(visMasterGain.gain.value, audioCtx.currentTime);
+        visMasterGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.1);
+    }
 
     setTimeout(() => {
         destroySource();
@@ -309,6 +351,7 @@ function startNoise() {
     noiseNode.connect(noiseFilter);
     noiseFilter.connect(noiseGain);
     noiseGain.connect(spectralTiltNode); // Pass noise through spectral tilt -> vocal tract filter!
+    if (visSpectralTiltNode) noiseGain.connect(visSpectralTiltNode);
 
     noiseNode.start();
 }
@@ -346,24 +389,36 @@ function createSource() {
         if (freq > audioCtx.sampleRate / 2) break;
 
         const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
+        const gain = audioCtx.createGain(); // Visualizer + Base Amplitude
+        const audioMute = audioCtx.createGain(); // Mute gate for Audio output
 
         osc.type = 'sine';
         osc.frequency.value = freq;
 
         // Calculate amplitude based on spectral slope (M1 vs M2) and Phonation Mode
         const dbGain = calcHarmonicGainDb(i, state.mechanism, state.phonationMode, state.airflow);
-        // Base scaling so it doesnt clip
-        const linearGain = dbToLinear(dbGain) * (1 / Math.sqrt(maxHarmonics));
+        let linearGain = dbToLinear(dbGain) * (1 / Math.sqrt(maxHarmonics));
 
+        // Always pass to visualizer
         gain.gain.value = linearGain;
 
+        // Apply Frequency Selection Mute to Audio Path ONLY
+        let muteVal = 1;
+        if (state.selectionActive) {
+            if (freq < state.selectionMinFreq || freq > state.selectionMaxFreq) {
+                muteVal = 0;
+            }
+        }
+        audioMute.gain.value = muteVal;
+
         osc.connect(gain);
-        gain.connect(spectralTiltNode);
+        gain.connect(visSpectralTiltNode); // To Visualizer
+        gain.connect(audioMute); // To Audio Gate
+        audioMute.connect(spectralTiltNode); // To Audio Output
 
         osc.start(time);
 
-        harmonicsOscs.push({ osc, gain, harmonic: i });
+        harmonicsOscs.push({ osc, gain, audioMute, harmonic: i });
     }
 
     updateSpectralTilt();
@@ -374,7 +429,7 @@ function destroySource() {
     harmonicsOscs.forEach(h => {
         h.gain.gain.linearRampToValueAtTime(0, time + 0.1);
         setTimeout(() => {
-            try { h.osc.stop(); h.osc.disconnect(); h.gain.disconnect(); } catch (e) { }
+            try { h.osc.stop(); h.osc.disconnect(); h.gain.disconnect(); if (h.audioMute) h.audioMute.disconnect(); } catch (e) { }
         }, 150);
     });
     harmonicsOscs = [];
@@ -409,6 +464,7 @@ function calcAerodynamics() {
     if (isPlaying && masterGain && audioCtx) {
         const targetIntensity = Math.min(1.0, state.pressure * 0.8) * state.masterVolume;
         masterGain.gain.setTargetAtTime(targetIntensity, audioCtx.currentTime, 0.05);
+        if (visMasterGain) visMasterGain.gain.setTargetAtTime(targetIntensity, audioCtx.currentTime, 0.05);
     }
     updateNoiseLevel();
     // Do not call analyzeAcoustics() here as calcAerodynamics() will trigger it
@@ -535,9 +591,18 @@ function updateSourceParams() {
 
             // Calculate new amplitude based on current state
             const dbGain = calcHarmonicGainDb(h.harmonic, state.mechanism, state.phonationMode, state.airflow);
-            const linearGain = dbToLinear(dbGain) * (1 / Math.sqrt(maxHarmonics));
+            let linearGain = dbToLinear(dbGain) * (1 / Math.sqrt(maxHarmonics));
+
+            // Apply Frequency Selection Mute
+            let muteVal = 1;
+            if (state.selectionActive) {
+                if (freq < state.selectionMinFreq || freq > state.selectionMaxFreq) {
+                    muteVal = 0;
+                }
+            }
 
             h.gain.gain.setTargetAtTime(linearGain, time, 0.05);
+            if (h.audioMute) h.audioMute.gain.setTargetAtTime(muteVal, time, 0.05);
         });
     }
 
@@ -549,18 +614,24 @@ function updateFilterParams() {
 
     const time = audioCtx.currentTime;
 
-    const updateNode = (node, key) => {
+    const updateNode = (node, visNode, key) => {
         node.frequency.setTargetAtTime(state.formants[key].freq, time, 0.05);
         node.Q.setTargetAtTime(state.formants[key].q, time, 0.05);
         // Toggle bypass by setting gain to 0
         node.gain.setTargetAtTime(state.formants[key].enabled ? state.formants[key].gain : 0, time, 0.05);
+
+        if (visNode) {
+            visNode.frequency.setTargetAtTime(state.formants[key].freq, time, 0.05);
+            visNode.Q.setTargetAtTime(state.formants[key].q, time, 0.05);
+            visNode.gain.setTargetAtTime(state.formants[key].enabled ? state.formants[key].gain : 0, time, 0.05);
+        }
     };
 
-    updateNode(f1Node, 'f1');
-    updateNode(f2Node, 'f2');
-    updateNode(f3Node, 'f3');
-    updateNode(f4Node, 'f4');
-    updateNode(f5Node, 'f5');
+    updateNode(f1Node, visF1Node, 'f1');
+    updateNode(f2Node, visF2Node, 'f2');
+    updateNode(f3Node, visF3Node, 'f3');
+    updateNode(f4Node, visF4Node, 'f4');
+    updateNode(f5Node, visF5Node, 'f5');
 
     analyzeAcoustics();
 }
@@ -936,6 +1007,32 @@ function drawVisualizer() {
     canvasCtx.fillStyle = '#0d1117';
     canvasCtx.fillRect(0, 0, width, height);
 
+    // Draw Selection Background Highlight (Glassmorphism-ish)
+    if (state.selectionActive) {
+        const x1 = Math.max(0, freqToX(state.selectionMinFreq, width));
+        const x2 = Math.min(width, freqToX(state.selectionMaxFreq, width));
+        const selWidth = x2 - x1;
+
+        if (selWidth > 0) {
+            const selGradient = canvasCtx.createLinearGradient(0, 0, 0, height);
+            selGradient.addColorStop(0, 'rgba(255, 255, 255, 0.15)');
+            selGradient.addColorStop(1, 'rgba(255, 255, 255, 0.02)');
+            canvasCtx.fillStyle = selGradient;
+            canvasCtx.fillRect(x1, 0, selWidth, height);
+
+            canvasCtx.beginPath();
+            canvasCtx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+            canvasCtx.setLineDash([4, 4]);
+            canvasCtx.lineWidth = 1;
+            canvasCtx.moveTo(x1, 0);
+            canvasCtx.lineTo(x1, height);
+            canvasCtx.moveTo(x2, 0);
+            canvasCtx.lineTo(x2, height);
+            canvasCtx.stroke();
+            canvasCtx.setLineDash([]);
+        }
+    }
+
     // Tuner-style pitch display from mic input
     if (state.isMicActive && micAnalyser) {
         let detectedPitch = -1;
@@ -1037,18 +1134,33 @@ function drawVisualizer() {
         const gradient = canvasCtx.createLinearGradient(0, 0, 0, height);
         gradient.addColorStop(0, 'rgba(88, 166, 255, 0.5)');
         gradient.addColorStop(1, 'rgba(88, 166, 255, 0.0)');
-        drawSpectrum(analyser, 'rgba(88, 166, 255, 0.8)', gradient, 1.5);
 
-        // --- Draw Harmonic Peak Labels (1fo, 2fo, 3fo...) ---
         const bufferLength = analyser.frequencyBinCount;
         const dataArray = new Float32Array(bufferLength);
         analyser.getFloatFrequencyData(dataArray);
+
+        if (state.selectionActive) {
+            canvasCtx.globalAlpha = 0.25; // Dim out-of-range
+            drawSpectrum(analyser, 'rgba(88, 166, 255, 0.8)', gradient, 1.5, dataArray);
+            canvasCtx.globalAlpha = 1.0;
+
+            const x1 = Math.max(0, freqToX(state.selectionMinFreq, width));
+            const x2 = Math.min(width, freqToX(state.selectionMaxFreq, width));
+
+            canvasCtx.save();
+            canvasCtx.beginPath();
+            canvasCtx.rect(x1, 0, x2 - x1, height);
+            canvasCtx.clip();
+            drawSpectrum(analyser, 'rgba(88, 166, 255, 0.8)', gradient, 1.5, dataArray);
+            canvasCtx.restore();
+        } else {
+            drawSpectrum(analyser, 'rgba(88, 166, 255, 0.8)', gradient, 1.5, dataArray);
+        }
 
         const maxDb = analyser.maxDecibels;
         const minDb = analyser.minDecibels;
         const dbRange = maxDb - minDb;
 
-        canvasCtx.fillStyle = 'rgba(255, 255, 255, 0.9)';
         canvasCtx.font = '10px monospace';
         canvasCtx.textAlign = 'center';
 
@@ -1081,6 +1193,12 @@ function drawVisualizer() {
                 const displayVal = Math.pow(normalizedValue, 1.5); // use same boost as drawing
                 const y = height - (displayVal * height * 0.9);
                 const x = freqToX(peakFreq, width);
+
+                if (state.selectionActive && (expectedFreq < state.selectionMinFreq || expectedFreq > state.selectionMaxFreq)) {
+                    canvasCtx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+                } else {
+                    canvasCtx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                }
 
                 canvasCtx.fillText(`${h}fo`, x, y - 8);
             }
@@ -1415,6 +1533,11 @@ function updateSpectralTilt() {
         const anchorFreq = state.pitch * 1.5;
         spectralTiltNode.frequency.setTargetAtTime(anchorFreq, audioCtx.currentTime, 0.1);
         spectralTiltNode.gain.setTargetAtTime(state.spectrumSlope, audioCtx.currentTime, 0.1);
+
+        if (visSpectralTiltNode) {
+            visSpectralTiltNode.frequency.setTargetAtTime(anchorFreq, audioCtx.currentTime, 0.1);
+            visSpectralTiltNode.gain.setTargetAtTime(state.spectrumSlope, audioCtx.currentTime, 0.1);
+        }
     }
 }
 
@@ -1518,8 +1641,13 @@ window.addEventListener('resize', () => {
 // Interactive Spectrum
 let isDraggingFormant = false;
 let activeFormantKey = null;
+let isDraggingSelection = false;
+let selectionStartFreq = 0;
 
-function getNearestFormant(freq) {
+function getNearestFormant(freq, y = 0, height = 1000) {
+    // If clicking in the bottom 50% of the canvas, don't grab formants.
+    if (y > height * 0.5) return null;
+
     let nearestKey = null;
     let minDiff = Infinity;
     for (let i = 1; i <= 5; i++) {
@@ -1527,7 +1655,7 @@ function getNearestFormant(freq) {
         if (!state.formants[key].enabled) continue;
         const diff = Math.abs(state.formants[key].freq - freq);
         // Generous grab radius around the peak
-        if (diff < minDiff && diff < 800) {
+        if (diff < minDiff && diff < 300) {
             minDiff = diff;
             nearestKey = key;
         }
@@ -1539,43 +1667,93 @@ function handleCanvasInteraction(e) {
     if (!isPlaying) return;
 
     const rect = els.canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
+
+    // Support both mouse and touch
+    let clientX = e.clientX;
+    let clientY = e.clientY;
+    if (e.touches && e.touches.length > 0) {
+        clientX = e.touches[0].clientX;
+        clientY = e.touches[0].clientY;
+    } else if (e.changedTouches && e.changedTouches.length > 0) {
+        clientX = e.changedTouches[0].clientX;
+        clientY = e.changedTouches[0].clientY;
+    }
+
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
     const width = els.canvas.width || rect.width;
+    const height = els.canvas.height || rect.height;
 
     // Map X to Frequency
     let freq = (x / width) * MAX_FREQ_DISPLAY;
     freq = Math.max(50, Math.min(MAX_FREQ_DISPLAY, freq));
 
-    if (e.type === 'mousedown') {
-        activeFormantKey = getNearestFormant(freq);
+    if (e.type === 'mousedown' || e.type === 'touchstart') {
+        activeFormantKey = getNearestFormant(freq, y, height);
         if (activeFormantKey) {
             isDraggingFormant = true;
             els.canvas.classList.add('grabbing');
+        } else {
+            // Start selection area
+            isDraggingSelection = true;
+            selectionStartFreq = freq;
+            state.selectionMinFreq = freq;
+            state.selectionMaxFreq = freq;
+            state.selectionActive = true;
+            updateSourceParams(); // Ensure audio respects immediately
         }
     }
 
-    if (isDraggingFormant && activeFormantKey) {
-        freq = Math.round(freq);
-        state.formants[activeFormantKey].freq = freq;
+    if (e.type === 'mousemove' || e.type === 'touchmove') {
+        if (isDraggingFormant && activeFormantKey) {
+            if (e.type === 'touchmove' && e.cancelable) e.preventDefault(); // Prevent scrolling on mobile
+            freq = Math.round(freq);
+            state.formants[activeFormantKey].freq = freq;
 
-        // Update corresponding UI slider
-        els[`${activeFormantKey}Slider`].value = freq;
-        els[`${activeFormantKey}Val`].textContent = freq;
+            // Update corresponding UI slider
+            els[`${activeFormantKey}Slider`].value = freq;
+            els[`${activeFormantKey}Val`].textContent = freq;
 
-        updateFilterParams();
+            updateFilterParams();
+        } else if (isDraggingSelection) {
+            if (e.type === 'touchmove' && e.cancelable) e.preventDefault(); // Prevent scrolling on mobile
+            state.selectionMinFreq = Math.min(selectionStartFreq, freq);
+            state.selectionMaxFreq = Math.max(selectionStartFreq, freq);
+            updateSourceParams();
+        }
     }
 
-    if (e.type === 'mouseup' || e.type === 'mouseleave') {
-        isDraggingFormant = false;
-        activeFormantKey = null;
-        els.canvas.classList.remove('grabbing');
+    if (e.type === 'mouseup' || e.type === 'mouseleave' || e.type === 'touchend' || e.type === 'touchcancel') {
+        if (isDraggingFormant) {
+            isDraggingFormant = false;
+            activeFormantKey = null;
+            els.canvas.classList.remove('grabbing');
+        } else if (isDraggingSelection) {
+            isDraggingSelection = false;
+
+            // If dragging distance is very small, treat as a click to reset/clear selection
+            const freqDiff = Math.abs(state.selectionMaxFreq - state.selectionMinFreq);
+            if (freqDiff < (MAX_FREQ_DISPLAY * 0.02)) {
+                state.selectionActive = false;
+                state.selectionMinFreq = 0;
+                state.selectionMaxFreq = 0;
+            } else {
+                state.selectionMinFreq = Math.round(state.selectionMinFreq);
+                state.selectionMaxFreq = Math.round(state.selectionMaxFreq);
+            }
+            updateSourceParams();
+        }
     }
 }
 
 els.canvas.addEventListener('mousedown', handleCanvasInteraction);
-els.canvas.addEventListener('mousemove', handleCanvasInteraction);
+els.canvas.addEventListener('mousemove', handleCanvasInteraction, { passive: false });
 els.canvas.addEventListener('mouseup', handleCanvasInteraction);
 els.canvas.addEventListener('mouseleave', handleCanvasInteraction);
+els.canvas.addEventListener('touchstart', handleCanvasInteraction, { passive: false });
+els.canvas.addEventListener('touchmove', handleCanvasInteraction, { passive: false });
+els.canvas.addEventListener('touchend', handleCanvasInteraction);
+els.canvas.addEventListener('touchcancel', handleCanvasInteraction);
 
 // Init notes & analysis
 els.pitchNote.textContent = freqToNote(state.pitch);

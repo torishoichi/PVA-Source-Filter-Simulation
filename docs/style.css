@@ -852,6 +852,7 @@ input[type=range]::-webkit-slider-thumb:hover {
     display: flex;
     align-items: center;
     gap: 8px;
+    margin-left: auto;
 }
 
 .btn-sm {
