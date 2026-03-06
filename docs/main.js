@@ -1183,8 +1183,11 @@ function drawVisualizer() {
 
         const f1 = findPeak(300, 1000);
         const f2 = findPeak(1000, 2500);
+        const f3 = findPeak(2500, 3500);
+        const f4 = findPeak(3500, 4500);
+        const f5 = findPeak(4500, 5500);
 
-        return { f1, f2 };
+        return { f1, f2, f3, f4, f5 };
     };
 
     // 1. Draw Simulated Spectrum (Blue, filled)
@@ -1283,7 +1286,7 @@ function drawVisualizer() {
 
         const estFormants = estimateFormantsFromSpectrum(state.cachedMicData, minDb, dbRange, nyq);
 
-        const drawMicFormantMarker = (formant, label) => {
+        const drawMicFormantMarker = (formant, label, colorHex) => {
             if (!formant) return;
             const x = freqToX(formant.freq, width);
             const normalizedValue = Math.max(0, (formant.db - minDb) / dbRange);
@@ -1292,8 +1295,10 @@ function drawVisualizer() {
             const y = Math.max(height - (displayVal * height * 0.9), 20);
 
             // Animated vertical dashed line
+            canvasCtx.save();
             canvasCtx.beginPath();
-            canvasCtx.strokeStyle = 'rgba(46, 160, 67, 0.6)';
+            canvasCtx.globalAlpha = 0.6;
+            canvasCtx.strokeStyle = colorHex;
             canvasCtx.lineDashOffset = -Date.now() / 20; // Animate dash pattern falling
             canvasCtx.setLineDash([4, 4]);
             canvasCtx.moveTo(x, y);
@@ -1302,17 +1307,23 @@ function drawVisualizer() {
             canvasCtx.setLineDash([]);
 
             // Label pill
-            canvasCtx.fillStyle = 'rgba(46, 160, 67, 0.9)';
+            canvasCtx.globalAlpha = 0.9;
+            canvasCtx.fillStyle = colorHex;
             canvasCtx.font = 'bold 10px monospace';
             const txtWidth = canvasCtx.measureText(label).width;
             canvasCtx.fillRect(x - txtWidth / 2 - 5, y - 20, txtWidth + 10, 16);
+            canvasCtx.globalAlpha = 1.0;
             canvasCtx.fillStyle = '#fff';
             canvasCtx.textAlign = 'center';
             canvasCtx.fillText(label, x, y - 8);
+            canvasCtx.restore();
         };
 
-        drawMicFormantMarker(estFormants.f1, 'Mic F1');
-        drawMicFormantMarker(estFormants.f2, 'Mic F2');
+        drawMicFormantMarker(estFormants.f1, 'Mic F1', '#ff7b72'); // Red
+        drawMicFormantMarker(estFormants.f2, 'Mic F2', '#79c0ff'); // Blue
+        drawMicFormantMarker(estFormants.f3, 'Mic F3', '#a371f7'); // Purple
+        drawMicFormantMarker(estFormants.f4, 'Mic F4', '#f0883e'); // Orange
+        drawMicFormantMarker(estFormants.f5, 'Mic F5', '#d2a8ff'); // Pink
     }
 
     // 3. Draw Formant Overlay Envelopes (Only when simulating)
