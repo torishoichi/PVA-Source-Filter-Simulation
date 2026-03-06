@@ -50,6 +50,7 @@ const state = {
     cachedMicData: null,
     cachedMicPitch: -1,
     micGain: 1.0,
+    micFormantMethod: 'peak', // 'peak' or 'lpc'
     spectrumSlope: -12, // dB/octave attenuation
     showSlopeLine: false, // Toggle for slope approximation line
     acousticMode: 'Neutral', // 'Neutral', 'Yell', 'Whoop'
@@ -72,6 +73,7 @@ const els = {
     btnMic: document.getElementById('mic-toggle'),
     btnMicPause: document.getElementById('mic-pause'),
     btnSlopeLine: document.getElementById('slope-line-toggle'),
+    micMethodSelect: document.getElementById('mic-formant-method'),
     canvas: document.getElementById('spectrum-canvas'),
     masterVolume: document.getElementById('master-volume'),
     micGainSlider: document.getElementById('mic-gain'),
@@ -1147,47 +1149,197 @@ function drawVisualizer() {
         canvasCtx.stroke();
     };
 
-    // Estimate broad formant peaks from a spectrum array using smoothing
-    const estimateFormantsFromSpectrum = (dataArray, minDb, dbRange, nyq) => {
+    // Estimate formants using Peak Picking with pitch-aware smoothing and pre-emphasis
+    const estimatePeakFormants = (dataArray, minDb, dbRange, nyq, pitch) => {
         const bufferLength = dataArray.length;
         const smoothed = new Float32Array(bufferLength);
-        const windowSize = Math.max(2, Math.floor(bufferLength * 0.01));
+
+        let windowSize = Math.max(2, Math.floor(bufferLength * 0.01));
+        if (pitch > 50 && pitch < 1200) {
+            // Smooth over harmonics based on detected pitch
+            windowSize = Math.max(2, Math.floor((pitch / nyq) * bufferLength * 0.7));
+        }
 
         for (let i = 0; i < bufferLength; i++) {
             let sum = 0;
             let count = 0;
             for (let j = Math.max(0, i - windowSize); j <= Math.min(bufferLength - 1, i + windowSize); j++) {
-                sum += dataArray[j];
+                const f = (j * nyq) / bufferLength;
+                const tilt = Math.max(0, 6 * Math.log2(Math.max(10, f) / 1000));
+                sum += dataArray[j] + tilt;
                 count++;
             }
             smoothed[i] = sum / count;
         }
 
-        const findPeak = (minHz, maxHz) => {
-            let peakVal = -Infinity;
-            let peakFreq = 0;
-            for (let i = 0; i < bufferLength; i++) {
-                const f = (i * nyq) / bufferLength;
-                if (f >= minHz && f <= maxHz) {
-                    if (smoothed[i] > peakVal) {
-                        peakVal = smoothed[i];
-                        peakFreq = f;
-                    }
+        const findPeakWithParabolicInterpolation = (minHz, maxHz) => {
+            let peakBinVal = -Infinity;
+            let peakBinIndex = -1;
+
+            const minBin = Math.floor((minHz / nyq) * bufferLength);
+            const maxBin = Math.floor((maxHz / nyq) * bufferLength);
+
+            for (let i = Math.max(1, minBin); i <= Math.min(bufferLength - 2, maxBin); i++) {
+                if (smoothed[i] > peakBinVal && smoothed[i] > smoothed[i - 1] && smoothed[i] > smoothed[i + 1]) {
+                    peakBinVal = smoothed[i];
+                    peakBinIndex = i;
                 }
             }
-            if (peakVal > minDb + (dbRange * 0.25)) {
-                return { freq: peakFreq, db: peakVal };
+
+            if (peakBinIndex !== -1 && peakBinVal > minDb + (dbRange * 0.15)) {
+                // Parabolic Interpolation
+                const alpha = smoothed[peakBinIndex - 1];
+                const beta = smoothed[peakBinIndex];
+                const gamma = smoothed[peakBinIndex + 1];
+
+                const denom = alpha - 2 * beta + gamma;
+                let p = 0;
+                if (Math.abs(denom) > 1e-6) {
+                    p = 0.5 * (alpha - gamma) / denom;
+                }
+                const truePeakFreq = ((peakBinIndex + p) * nyq) / bufferLength;
+                const tiltToRemove = Math.max(0, 6 * Math.log2(Math.max(10, truePeakFreq) / 1000));
+
+                return { freq: truePeakFreq, db: beta - tiltToRemove };
             }
             return null;
         };
 
-        const f1 = findPeak(300, 1000);
-        const f2 = findPeak(1000, 2500);
-        const f3 = findPeak(2500, 3500);
-        const f4 = findPeak(3500, 4500);
-        const f5 = findPeak(4500, 5500);
+        return {
+            f1: findPeakWithParabolicInterpolation(300, 1000),
+            f2: findPeakWithParabolicInterpolation(1000, 2500),
+            f3: findPeakWithParabolicInterpolation(2500, 3500),
+            f4: findPeakWithParabolicInterpolation(3500, 4500),
+            f5: findPeakWithParabolicInterpolation(4500, 5500)
+        };
+    };
 
-        return { f1, f2, f3, f4, f5 };
+    let lpcTimeData = null;
+    const estimateLpcFormants = (analyzer, minDb, dbRange, nyq) => {
+        const p = 40; // LPC order (40 is typical for 48kHz to capture all resonances)
+        const timeDomainSize = analyzer.fftSize;
+        if (!lpcTimeData || lpcTimeData.length !== timeDomainSize) {
+            lpcTimeData = new Float32Array(timeDomainSize);
+        }
+        analyzer.getFloatTimeDomainData(lpcTimeData);
+
+        // Check RMS to avoid analyzing pure silence/noise which produces unstable LPC
+        let rms = 0;
+        for (let i = 0; i < timeDomainSize; i++) {
+            rms += lpcTimeData[i] * lpcTimeData[i];
+        }
+        rms = Math.sqrt(rms / timeDomainSize);
+        if (rms < 0.005) return { f1: null, f2: null, f3: null, f4: null, f5: null };
+
+        // 1. Pre-emphasis and Windowing using Double Precision (Float64)
+        const preEmpTime = new Float64Array(timeDomainSize);
+        for (let i = 0; i < timeDomainSize; i++) {
+            const x_n = lpcTimeData[i];
+            const x_n1 = i > 0 ? lpcTimeData[i - 1] : 0;
+            const signal = x_n - 0.95 * x_n1; // Pre-emphasis flattens the spectrum
+            // Hann windowing
+            const window = 0.5 * (1 - Math.cos(2 * Math.PI * i / (timeDomainSize - 1)));
+            preEmpTime[i] = signal * window;
+        }
+
+        // 2. Autocorrelation (R)
+        const R = new Float64Array(p + 1);
+        for (let k = 0; k <= p; k++) {
+            let sum = 0;
+            for (let n = 0; n < timeDomainSize - k; n++) {
+                sum += preEmpTime[n] * preEmpTime[n + k];
+            }
+            R[k] = sum;
+        }
+
+        // 3. Levinson-Durbin Recursion
+        const a = new Float64Array(p + 1);
+        const kArr = new Float64Array(p + 1);
+        let E = R[0];
+        a[0] = 1;
+
+        if (E <= 1e-10) return { f1: null, f2: null, f3: null, f4: null, f5: null };
+
+        for (let i = 1; i <= p; i++) {
+            let sum = 0;
+            for (let j = 1; j < i; j++) {
+                sum += a[j] * R[i - j];
+            }
+            kArr[i] = (R[i] - sum) / E;
+
+            // Stability check - if Reflection coefficient >= 1, filter is unstable
+            if (Math.abs(kArr[i]) >= 1.0) {
+                break; // Stop at previous stable order
+            }
+
+            const a_prev = new Float64Array(a);
+            a[i] = kArr[i];
+            for (let j = 1; j < i; j++) {
+                a[j] = a_prev[j] - kArr[i] * a_prev[i - j];
+            }
+            E = (1 - kArr[i] * kArr[i]) * E;
+            if (E <= 1e-10 || isNaN(E)) {
+                break;
+            }
+        }
+
+        // 4. Evaluate Frequency Response of the LPC filter
+        const N = 2048; // Higher resolution for smooth envelope
+        const envelope = new Float64Array(N);
+        const maxDb = minDb + dbRange;
+
+        for (let k = 0; k < N; k++) {
+            const omega = Math.PI * (k / N);
+            let real = 1.0;
+            let imag = 0.0;
+            for (let i = 1; i <= p; i++) {
+                // Evaluate 1 - sum(a_i * z^-i)
+                real -= a[i] * Math.cos(i * omega);
+                imag += a[i] * Math.sin(i * omega);
+            }
+            const magSq = real * real + imag * imag;
+            const mag = 1.0 / Math.sqrt(magSq);
+            // Convert to dB, add approximate offset 
+            const db = 20 * Math.log10(magSq === 0 ? 1e-10 : mag) + (maxDb - 30);
+            envelope[k] = db;
+        }
+
+        // 5. Peak picking strategy
+        const findPeakInEnvelope = (minHz, maxHz) => {
+            const minBin = Math.floor((minHz / nyq) * N);
+            const maxBin = Math.ceil((maxHz / nyq) * N);
+            let peakVal = -Infinity;
+            let peakBin = -1;
+
+            for (let i = Math.max(1, minBin); i <= Math.min(N - 2, maxBin); i++) {
+                if (envelope[i] > peakVal && envelope[i] > envelope[i - 1] && envelope[i] > envelope[i + 1]) {
+                    peakVal = envelope[i];
+                    peakBin = i;
+                }
+            }
+
+            if (peakBin !== -1 && peakVal > minDb + (dbRange * 0.05)) { // Lowered threshold slightly
+                // Parabolic interpolation for sub-bin precision
+                const alpha = envelope[peakBin - 1];
+                const beta = envelope[peakBin];
+                const gamma = envelope[peakBin + 1];
+                const denom = alpha - 2 * beta + gamma;
+                let p_interp = 0;
+                if (Math.abs(denom) > 1e-6) p_interp = 0.5 * (alpha - gamma) / denom;
+                const trueFreq = ((peakBin + p_interp) * nyq) / N;
+
+                return { freq: trueFreq, db: beta };
+            }
+            return null;
+        };
+
+        return {
+            f1: findPeakInEnvelope(300, 1000),
+            f2: findPeakInEnvelope(1000, 2500),
+            f3: findPeakInEnvelope(2500, 3500),
+            f4: findPeakInEnvelope(3500, 4500),
+            f5: findPeakInEnvelope(4500, 5500)
+        };
     };
 
     // 1. Draw Simulated Spectrum (Blue, filled)
@@ -1284,7 +1436,9 @@ function drawVisualizer() {
         const dbRange = maxDb - minDb;
         const nyq = audioCtx.sampleRate / 2;
 
-        const estFormants = estimateFormantsFromSpectrum(state.cachedMicData, minDb, dbRange, nyq);
+        const estFormants = state.micFormantMethod === 'lpc'
+            ? estimateLpcFormants(micAnalyser, minDb, dbRange, nyq)
+            : estimatePeakFormants(state.cachedMicData, minDb, dbRange, nyq, state.cachedMicPitch);
 
         const drawMicFormantMarker = (formant, label, colorHex) => {
             if (!formant) return;
@@ -1722,6 +1876,13 @@ els.btnSlopeLine.addEventListener('click', () => {
     state.showSlopeLine = !state.showSlopeLine;
     els.btnSlopeLine.classList.toggle('slope-line-active', state.showSlopeLine);
 });
+
+// Mic Formant Method Toggle
+if (els.micMethodSelect) {
+    els.micMethodSelect.addEventListener('change', (e) => {
+        state.micFormantMethod = e.target.value;
+    });
+}
 
 function updateSpectralTilt() {
     if (spectralTiltNode) {
