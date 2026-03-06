@@ -132,7 +132,13 @@ const els = {
     f5Q: document.getElementById('f5-q'),
     f5Toggle: document.getElementById('f5-toggle'),
 
-    presets: document.querySelectorAll('.preset-btn')
+    presets: document.querySelectorAll('.preset-btn'),
+
+    // Vocal Tract Coach
+    tractCanvas: document.getElementById('tract-canvas'),
+    targetTimbre: document.getElementById('target-timbre'),
+    matchScore: document.getElementById('match-score'),
+    coachingHints: document.getElementById('coaching-hints'),
 };
 
 // Canvas context
@@ -634,6 +640,18 @@ function updateFilterParams() {
     updateNode(f5Node, visF5Node, 'f5');
 
     analyzeAcoustics();
+
+    // Update vocal tract shape from current formants
+    if (typeof FormantToTractMapper !== 'undefined') {
+        FormantToTractMapper.update(
+            state.formants.f1.freq,
+            state.formants.f2.freq,
+            state.formants.f3.freq,
+            state.formants.f4.freq,
+            state.formants.f5.freq,
+            state.nasalance || 0
+        );
+    }
 }
 
 // --- LF Glottal Waveform Model ---
@@ -1129,6 +1147,46 @@ function drawVisualizer() {
         canvasCtx.stroke();
     };
 
+    // Estimate broad formant peaks from a spectrum array using smoothing
+    const estimateFormantsFromSpectrum = (dataArray, minDb, dbRange, nyq) => {
+        const bufferLength = dataArray.length;
+        const smoothed = new Float32Array(bufferLength);
+        const windowSize = Math.max(2, Math.floor(bufferLength * 0.01));
+
+        for (let i = 0; i < bufferLength; i++) {
+            let sum = 0;
+            let count = 0;
+            for (let j = Math.max(0, i - windowSize); j <= Math.min(bufferLength - 1, i + windowSize); j++) {
+                sum += dataArray[j];
+                count++;
+            }
+            smoothed[i] = sum / count;
+        }
+
+        const findPeak = (minHz, maxHz) => {
+            let peakVal = -Infinity;
+            let peakFreq = 0;
+            for (let i = 0; i < bufferLength; i++) {
+                const f = (i * nyq) / bufferLength;
+                if (f >= minHz && f <= maxHz) {
+                    if (smoothed[i] > peakVal) {
+                        peakVal = smoothed[i];
+                        peakFreq = f;
+                    }
+                }
+            }
+            if (peakVal > minDb + (dbRange * 0.25)) {
+                return { freq: peakFreq, db: peakVal };
+            }
+            return null;
+        };
+
+        const f1 = findPeak(300, 1000);
+        const f2 = findPeak(1000, 2500);
+
+        return { f1, f2 };
+    };
+
     // 1. Draw Simulated Spectrum (Blue, filled)
     if (isPlaying && analyser) {
         const gradient = canvasCtx.createLinearGradient(0, 0, 0, height);
@@ -1216,6 +1274,45 @@ function drawVisualizer() {
         }
 
         drawSpectrum(micAnalyser, 'rgba(46, 160, 67, 0.9)', null, 1.2, state.cachedMicData);
+
+        // --- Real-time Formant Tracking (Mic F1 / F2) ---
+        const maxDb = micAnalyser.maxDecibels;
+        const minDb = micAnalyser.minDecibels;
+        const dbRange = maxDb - minDb;
+        const nyq = audioCtx.sampleRate / 2;
+
+        const estFormants = estimateFormantsFromSpectrum(state.cachedMicData, minDb, dbRange, nyq);
+
+        const drawMicFormantMarker = (formant, label) => {
+            if (!formant) return;
+            const x = freqToX(formant.freq, width);
+            const normalizedValue = Math.max(0, (formant.db - minDb) / dbRange);
+            const displayVal = Math.pow(normalizedValue, 1.5);
+            // Draw marker near the top of the spectrum
+            const y = Math.max(height - (displayVal * height * 0.9), 20);
+
+            // Animated vertical dashed line
+            canvasCtx.beginPath();
+            canvasCtx.strokeStyle = 'rgba(46, 160, 67, 0.6)';
+            canvasCtx.lineDashOffset = -Date.now() / 20; // Animate dash pattern falling
+            canvasCtx.setLineDash([4, 4]);
+            canvasCtx.moveTo(x, y);
+            canvasCtx.lineTo(x, height);
+            canvasCtx.stroke();
+            canvasCtx.setLineDash([]);
+
+            // Label pill
+            canvasCtx.fillStyle = 'rgba(46, 160, 67, 0.9)';
+            canvasCtx.font = 'bold 10px monospace';
+            const txtWidth = canvasCtx.measureText(label).width;
+            canvasCtx.fillRect(x - txtWidth / 2 - 5, y - 20, txtWidth + 10, 16);
+            canvasCtx.fillStyle = '#fff';
+            canvasCtx.textAlign = 'center';
+            canvasCtx.fillText(label, x, y - 8);
+        };
+
+        drawMicFormantMarker(estFormants.f1, 'Mic F1');
+        drawMicFormantMarker(estFormants.f2, 'Mic F2');
     }
 
     // 3. Draw Formant Overlay Envelopes (Only when simulating)
@@ -1319,6 +1416,76 @@ function drawVisualizer() {
         canvasCtx.fillText(`Slope: ${slopeDbPerOctave}dB/oct`, freqToX(f0, width) + 5, 40);
     }
 
+    // 5. Draw Target Harmonic Overlay (cyan dashed lines at target pitch harmonics)
+    if (typeof VocalTractData !== 'undefined') {
+        const targetKey = els.targetTimbre ? els.targetTimbre.value : 'none';
+        if (targetKey !== 'none') {
+            const preset = VocalTractData.targetPresets[targetKey];
+            if (preset && preset.source && preset.source.pitch) {
+                const targetF0 = preset.source.pitch;
+                const targetFormants = preset.formants || {};
+
+                canvasCtx.save();
+                canvasCtx.setLineDash([4, 4]);
+                canvasCtx.lineWidth = 1.5;
+
+                const maxHarmonics = Math.floor(MAX_FREQ_DISPLAY / targetF0);
+                for (let h = 1; h <= maxHarmonics && h <= 12; h++) {
+                    const hFreq = targetF0 * h;
+                    if (hFreq > MAX_FREQ_DISPLAY) break;
+                    const hx = freqToX(hFreq, width);
+
+                    // Check if this harmonic sits near a target formant
+                    let nearFormant = false;
+                    let formantColor = 'rgba(88, 166, 255, 0.25)';
+                    const fKeys = ['f1', 'f2', 'f3', 'f4', 'f5'];
+                    const fColors = ['rgba(255, 123, 114, 0.5)', 'rgba(121, 192, 255, 0.5)', 'rgba(163, 113, 247, 0.5)', 'rgba(240, 136, 62, 0.5)', 'rgba(210, 168, 255, 0.5)'];
+                    for (let fi = 0; fi < fKeys.length; fi++) {
+                        const fVal = targetFormants[fKeys[fi]];
+                        if (fVal && Math.abs(hFreq - fVal) < targetF0 * 0.4) {
+                            nearFormant = true;
+                            formantColor = fColors[fi];
+                            break;
+                        }
+                    }
+
+                    // Draw subtle background highlight for the entire harmonic column if near a formant
+                    if (nearFormant) {
+                        canvasCtx.fillStyle = formantColor.replace('0.5', '0.15').replace('0.25', '0.1'); // Make it very transparent
+                        canvasCtx.fillRect(hx - 10, 0, 20, height);
+                    }
+
+                    // Vertical dashed line
+                    canvasCtx.beginPath();
+                    canvasCtx.strokeStyle = nearFormant ? formantColor : 'rgba(88, 166, 255, 0.3)';
+                    canvasCtx.lineWidth = nearFormant ? 3 : 1.5;
+                    if (nearFormant) {
+                        canvasCtx.setLineDash([8, 6]); // Longer dashes for emphasized lines
+                    } else {
+                        canvasCtx.setLineDash([4, 4]);
+                    }
+                    canvasCtx.moveTo(hx, 0);
+                    canvasCtx.lineTo(hx, height);
+                    canvasCtx.stroke();
+
+                    // Label target harmonics at bottom with background pill
+                    if (nearFormant) {
+                        canvasCtx.fillStyle = 'rgba(0,0,0,0.6)'; // Pill background
+                        canvasCtx.fillRect(hx - 14, height - 16, 28, 14);
+
+                        canvasCtx.fillStyle = formantColor;
+                        canvasCtx.font = 'bold 11px monospace';
+                        canvasCtx.textAlign = 'center';
+                        canvasCtx.fillText(`${h}fo`, hx, height - 5);
+                    }
+                }
+
+                canvasCtx.setLineDash([]);
+                canvasCtx.restore();
+            }
+        }
+    }
+
     animationId = requestAnimationFrame(drawVisualizer);
 }
 
@@ -1384,6 +1551,24 @@ els.btnMic.addEventListener('click', async () => {
             // Connect mic source -> gain -> analyzer entirely locally (NO route to audioCtx.destination)
             micSource.connect(micGainNode);
             micGainNode.connect(micAnalyser);
+
+            // Fix: WebKit/Blink optimizes away disconnected media stream graphs.
+            // Create a silent dummy oscillator attached to destination to keep the audio tick active, 
+            // and link the analyser to it so the browser considers the mic stream "consumed".
+            const silenceFilter = audioCtx.createGain();
+            silenceFilter.gain.value = 0;
+            micAnalyser.connect(silenceFilter);
+
+            // Add an oscillator that generates 0Hz (DC) just to keep the graph alive
+            const dummyOsc = audioCtx.createOscillator();
+            dummyOsc.frequency.value = 0;
+            dummyOsc.connect(silenceFilter);
+            dummyOsc.start();
+
+            // Store reference so it can be stopped later
+            state.micDummyOsc = dummyOsc;
+
+            silenceFilter.connect(audioCtx.destination);
 
             state.isMicActive = true;
             els.btnMic.classList.add('mic-active');
@@ -1769,4 +1954,205 @@ if (guideToggle && guidePanel) {
         guidePanel.style.display = isVisible ? 'none' : 'block';
         guideToggle.classList.toggle('active', !isVisible);
     });
+}
+
+// =============================================
+// Vocal Tract Coach Integration
+// =============================================
+{
+    let currentTargetKey = 'none';
+    let tractAnimId = null;
+    let lastTractTime = 0;
+
+    // Initialize vocal tract model
+    if (typeof VocalTract !== 'undefined' && els.tractCanvas) {
+        VocalTract.init();
+        VocalTractUI.init();
+
+        // Initial formant → tract mapping
+        FormantToTractMapper.update(
+            state.formants.f1.freq,
+            state.formants.f2.freq,
+            state.formants.f3.freq,
+            state.formants.f4.freq,
+            state.formants.f5.freq,
+            0
+        );
+
+        // Populate target selector from VocalTractData
+        if (typeof VocalTractData !== 'undefined' && els.targetTimbre) {
+            const yellGroup = els.targetTimbre.querySelector('optgroup[label="Yell Targets"]');
+            const whoopGroup = els.targetTimbre.querySelector('optgroup[label="Whoop Targets"]');
+            const vowelGroup = els.targetTimbre.querySelector('optgroup[label="Vowel Targets"]');
+
+            for (const [key, preset] of Object.entries(VocalTractData.targetPresets)) {
+                const opt = document.createElement('option');
+                opt.value = key;
+                opt.textContent = preset.label ? preset.label.ja : key;
+                if (preset.category === 'yell' && yellGroup) yellGroup.appendChild(opt);
+                else if (preset.category === 'whoop' && whoopGroup) whoopGroup.appendChild(opt);
+                else if (vowelGroup) vowelGroup.appendChild(opt);
+            }
+        }
+
+        // Target selector change handler
+        if (els.targetTimbre) {
+            els.targetTimbre.addEventListener('change', (e) => {
+                currentTargetKey = e.target.value;
+
+                if (currentTargetKey === 'none') {
+                    VocalTractUI.clearGhost();
+                    if (els.matchScore) {
+                        els.matchScore.textContent = '\u2014';
+                        els.matchScore.className = 'match-value';
+                        const fill = document.getElementById('match-progress-fill');
+                        if (fill) {
+                            fill.style.width = '0%';
+                            fill.className = 'match-progress-fill';
+                        }
+                        const container = document.getElementById('match-score-container');
+                        if (container) container.classList.remove('perfect-match');
+                    }
+                    if (els.coachingHints) {
+                        els.coachingHints.innerHTML = '<div class="hint-placeholder">Select a Target to see coaching hints</div>';
+                    }
+                } else {
+                    VocalTractUI.setGhostFromPreset(currentTargetKey);
+                    updateCoachingDisplay();
+                }
+            });
+        }
+
+        // Tract canvas animation loop
+        function drawTractLoop(timestamp) {
+            if (!els.tractCanvas) return;
+
+            const dt = lastTractTime ? (timestamp - lastTractTime) / 1000 : 0.016;
+            lastTractTime = timestamp;
+
+            // Smooth transition of diameters
+            VocalTract.update(Math.min(dt, 0.05));
+
+            // Resize canvas to container
+            const container = els.tractCanvas.parentElement;
+            if (container) {
+                const rect = container.getBoundingClientRect();
+                if (els.tractCanvas.width !== Math.floor(rect.width) || els.tractCanvas.height !== Math.floor(rect.height)) {
+                    els.tractCanvas.width = Math.floor(rect.width);
+                    els.tractCanvas.height = Math.floor(rect.height);
+                }
+            }
+
+            const ctx = els.tractCanvas.getContext('2d');
+            VocalTractUI.draw(ctx, els.tractCanvas.width, els.tractCanvas.height);
+
+            tractAnimId = requestAnimationFrame(drawTractLoop);
+        }
+
+        tractAnimId = requestAnimationFrame(drawTractLoop);
+    }
+
+    // Coaching display update
+    function updateCoachingDisplay() {
+        if (currentTargetKey === 'none' || typeof CoachingEngine === 'undefined') return;
+
+        const currentState = {
+            f1: state.formants.f1.freq,
+            f2: state.formants.f2.freq,
+            f3: state.formants.f3.freq,
+            f4: state.formants.f4.freq,
+            f5: state.formants.f5.freq,
+            pitch: state.pitch,
+            mechanism: state.mechanism,
+            pressure: state.pressure,
+            resistance: state.resistance,
+        };
+
+        // Match score
+        const score = CoachingEngine.getMatchScore(currentState, currentTargetKey);
+        if (els.matchScore) {
+            els.matchScore.textContent = score + '%';
+
+            let statusClass = 'poor';
+            if (score >= 90) statusClass = 'perfect';
+            else if (score >= 80) statusClass = 'good';
+            else if (score >= 50) statusClass = 'ok';
+
+            els.matchScore.className = 'match-value ' + statusClass;
+
+            const fill = document.getElementById('match-progress-fill');
+            if (fill) {
+                fill.style.width = score + '%';
+                fill.className = 'match-progress-fill ' + statusClass;
+            }
+            const container = document.getElementById('match-score-container');
+            if (container) {
+                if (score >= 90) container.classList.add('perfect-match');
+                else container.classList.remove('perfect-match');
+            }
+        }
+
+        // Coaching hints
+        const hints = CoachingEngine.evaluate(currentState, currentTargetKey);
+        const preset = VocalTractData.targetPresets[currentTargetKey];
+        if (els.coachingHints) {
+            let html = '';
+
+            // Target description
+            const desc = preset && preset.description ? preset.description.ja : '';
+            if (desc) html += '<div class="target-description">' + desc + '</div>';
+
+            // Target Harmonic Structure
+            if (preset && preset.source && preset.source.pitch && preset.formants) {
+                html += '<div class="target-harmonics-display">';
+                html += '<div class="th-title">Target Harmonics (f0=' + preset.source.pitch + 'Hz)</div>';
+                html += '<div class="target-harmonics-list">';
+                const tF0 = preset.source.pitch;
+                const maxH = Math.min(10, Math.floor(5000 / tF0));
+                const fKeys = ['f1', 'f2', 'f3', 'f4', 'f5'];
+                const fLabels = ['F1', 'F2', 'F3', 'F4', 'F5'];
+                for (let h = 1; h <= maxH; h++) {
+                    const hFreq = tF0 * h;
+                    let boostLabel = '';
+                    for (let fi = 0; fi < fKeys.length; fi++) {
+                        const fVal = preset.formants[fKeys[fi]];
+                        if (fVal && Math.abs(hFreq - fVal) < tF0 * 0.4) {
+                            boostLabel = fLabels[fi];
+                            break;
+                        }
+                    }
+                    const cls = boostLabel ? 'target-harmonic-chip boosted' : 'target-harmonic-chip';
+                    const label = h + 'fo=' + hFreq + 'Hz' + (boostLabel ? ' →' + boostLabel : '');
+                    html += '<span class="' + cls + '">' + label + '</span>';
+                }
+                html += '</div></div>';
+            }
+
+            // Hints or match OK
+            if (hints.length === 0) {
+                html += '<div class="hint-match-ok">✅ 良好なマッチです！</div>';
+            } else {
+                const maxHints = 4;
+                for (let i = 0; i < Math.min(hints.length, maxHints); i++) {
+                    const h = hints[i];
+                    html += '<div class="hint-item priority-' + (h.priority || 'medium') + '">'
+                        + '<span class="hint-icon">' + (h.icon || '') + '</span>'
+                        + h.text
+                        + '</div>';
+                }
+            }
+
+            els.coachingHints.innerHTML = html;
+        }
+    }
+
+    // Hook into analyzeAcoustics to update coaching  
+    const _origAnalyze = analyzeAcoustics;
+    // eslint-disable-next-line no-global-assign  
+    analyzeAcoustics = function () {
+        _origAnalyze();
+        if (currentTargetKey !== 'none') {
+            updateCoachingDisplay();
+        }
+    };
 }
