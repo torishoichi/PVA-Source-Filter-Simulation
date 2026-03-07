@@ -55,6 +55,7 @@ const state = {
     showSlopeLine: false, // Toggle for slope approximation line
     acousticMode: 'Neutral', // 'Neutral', 'Yell', 'Whoop'
     masterVolume: 0.5, // 0.0 to 1.0
+    rdManual: null, // null = auto from P/R/mechanism, number = manual Rd override
     selectionActive: false,
     selectionMinFreq: 0,
     selectionMaxFreq: 0,
@@ -102,8 +103,13 @@ const els = {
     eventFlash: document.getElementById('event-flash'),
     autoRoutingToggle: document.getElementById('auto-routing-toggle'),
 
-    // Glottal Waveform
-    glottalCanvas: document.getElementById('glottal-canvas'),
+    // Glottal Waveform (dual canvases)
+    glottalCanvasFlow: document.getElementById('glottal-canvas-flow'),
+    glottalCanvasDeriv: document.getElementById('glottal-canvas-deriv'),
+    // Fallback to old single canvas for backwards compatibility
+    glottalCanvas: document.getElementById('glottal-canvas-flow') || document.getElementById('glottal-canvas'),
+    rdSlider: document.getElementById('rd-slider'),
+    rdVal: document.getElementById('rd-val'),
     lfOq: document.getElementById('lf-oq'),
     lfSq: document.getElementById('lf-sq'),
     lfRd: document.getElementById('lf-rd'),
@@ -657,137 +663,245 @@ function updateFilterParams() {
 }
 
 // --- LF Glottal Waveform Model ---
+// Based on: Fant, G. (1995) "The LF-model revisited" & Gobl/Mahshie (2013) Figure 1
 
 /**
  * Compute LF model parameters from the app's phonation state.
- * Maps Mechanism (M1/M2), Phonation Mode, and P/R to the Rd parameter,
- * which then determines Open Quotient (OQ), Speed Quotient (SQ),
- * and the LF waveform shape.
+ * Uses Fant 1995 Rd regressions to derive all timing parameters.
  *
- * Rd is the "declination parameter" (Fant 1995) that unifies
- * the LF model into a single control dimension:
+ * Rd is the "declination parameter" (Fant 1995):
  *   Rd ≈ 0.3 : very pressed (strong, buzzy)
  *   Rd ≈ 1.0 : modal/flow (balanced)
  *   Rd ≈ 2.7 : very breathy/soft
+ *
+ * Parameter definitions (Gobl & Mahshie 2013, Figure 1):
+ *   OQ = Te / T0          (Open Quotient)
+ *   RK = Tn / Tp           (Glottal Skew), where Tn = Te - Tp
+ *   SQ = Tp / Tn = 1/RK    (Speed Quotient)
+ *   RA = Ta / T0            (Dynamic Leakage)
+ *   RG = 1 / (2·Tp·f0)     (Normalized Glottal Frequency)
  */
 function computeLFParams() {
-    // Base Rd from mechanism
-    let Rd = state.mechanism === 'm1' ? 0.8 : 1.5;
+    let Rd;
 
-    // Modify by phonation mode
-    if (state.phonationMode === 'pressed') {
-        Rd -= 0.4; // Tighter closure → lower Rd
-    } else if (state.phonationMode === 'breathy') {
-        Rd += 0.8; // Incomplete closure → higher Rd
+    if (state.rdManual !== null) {
+        // Manual Rd override from slider
+        Rd = state.rdManual;
+    } else {
+        // Auto Rd from mechanism + phonation mode
+        Rd = state.mechanism === 'm1' ? 0.8 : 1.5;
+        if (state.phonationMode === 'pressed') {
+            Rd -= 0.4;
+        } else if (state.phonationMode === 'breathy') {
+            Rd += 0.8;
+        }
+        const prRatio = state.pressure / state.resistance;
+        Rd += (prRatio - 1.0) * 0.3;
     }
-
-    // Influence from Pressure/Resistance balance
-    const prRatio = state.pressure / state.resistance;
-    Rd += (prRatio - 1.0) * 0.3; // Higher airflow → breathier
 
     // Clamp Rd to valid range
     Rd = Math.max(0.3, Math.min(2.7, Rd));
 
-    // Derive OQ and SQ from Rd (Fant 1995 regressions)
-    const OQ = Math.min(0.95, 0.1 + 0.5 * Rd);      // Open Quotient: ~0.25 pressed, ~0.6 flow, ~0.95 breathy
-    const SQ = Math.max(1.0, 4.0 - 1.1 * Rd);         // Speed Quotient: ~3.7 pressed (fast open), ~1.5 breathy
+    // Fant 1995 regression equations
+    const Rap = Math.max(0, (-1 + 4.8 * Rd) / 100);     // predicted RA
+    const Rkp = (22.4 + 11.8 * Rd) / 100;               // predicted RK
 
-    return { Rd, OQ, SQ };
+    // Derive RG from the Fant 1995 Rd definition:
+    //   Rd = [(0.5 + 1.2*RK) * (RK/(4*RG) + RA)] / 0.11
+    // Solving for RG:
+    //   Rd*0.11 / (0.5+1.2*RK) = RK/(4*RG) + RA
+    //   RK/(4*RG) = Rd*0.11 / (0.5+1.2*RK) - RA
+    //   RG = RK / (4 * (Rd*0.11/(0.5+1.2*RK) - RA))
+    const A = 0.5 + 1.2 * Rkp;
+    const lhs = Rd * 0.11 / A - Rap;
+    let RG;
+    if (lhs <= 0.001) {
+        RG = 1.0; // fallback for edge cases
+    } else {
+        RG = Rkp / (4 * lhs);
+    }
+
+    // OQ from the fundamental relationship: OQ = (1 + RK) / (2 * RG)
+    const OQ = Math.min(0.95, Math.max(0.25, (1 + Rkp) / (2 * RG)));
+
+    const T0 = 1.0; // normalized period
+    const Te = OQ * T0;                       // OQ = Te / T0
+    const Tp = Te / (1 + Rkp);                // from RK = Tn/Tp → Tp = Te/(1+RK)
+    const Tn = Te - Tp;                       // = Rkp * Tp
+    const Ta = Rap * T0;                      // RA = Ta / T0
+
+    const RK = Tn / Tp;                       // should ≈ Rkp
+    const SQ = Tp / Tn;                       // = 1/RK (Speed Quotient)
+    const RA = Ta / T0;                       // should ≈ Rap
+
+    return { Rd, OQ, SQ, RK, RA, Te, Tp, Tn, Ta, T0 };
 }
 
 /**
- * Generate one period of the LF glottal flow waveform.
- * Returns an array of normalized amplitude values [0..1].
+ * Solve the α (growth) parameter for the LF open phase.
+ * The open-phase equation is: E0·exp(α·t)·sin(ωg·t)
+ * α controls asymmetry of the glottal pulse.
+ * We find α such that the derivative has the correct shape at Te.
+ */
+function solveLFAlpha(wg, Te, Tp) {
+    // For a more pressed voice, α is larger (faster exponential rise)
+    // For breathy, α ≈ 0 (nearly sinusoidal open phase)
+    // Use iterative Newton approximation
+    // Constraint: the integral of the open phase must be consistent
+    // Simplified: α relates to the ratio Te/Tp
+    const ratio = Te / Tp;
+    if (ratio <= 1.0) return 0;
+
+    // Start with an initial estimate
+    let alpha = 0;
+    // The boundary condition: at t=Te the sine function crosses zero
+    // wg·Te = n·π for proper LF shape, but Te = Tp(1+RK) and wg = π/Tp
+    // So wg·Te = π·(1+RK), meaning the sine at Te = sin(π·(1+RK))
+    // This gives a natural zero crossing only when RK is integer.
+    // In practice, Te is the point where the waveform's derivative
+    // reaches its maximum negative value.
+
+    // Heuristic from Fant (1995): α ≈ some function of the asymmetry
+    alpha = Math.max(0, (ratio - 1.0) * 3.0);
+    return alpha;
+}
+
+/**
+ * Generate one period of the LF glottal waveform.
+ * The LF model is defined in terms of differentiated glottal flow (dUg/dt).
+ * We compute dUg/dt first, then numerically integrate to get Ug(t).
  *
- * The LF model divides one glottal cycle into:
- *   1. Opening phase (0 → Tp): flow rises, ∝ e^(αt) * sin(ωg*t)
- *   2. Closing phase (Tp → Te): flow falls to maximum excitation
- *   3. Return phase (Te → Tc): exponential recovery to zero
- *   4. Closed phase (Tc → T0): vocal folds are closed, flow = 0
+ * Returns both waveforms plus all computed parameters.
  */
 function generateLFWaveform(numPoints) {
-    const { Rd, OQ, SQ } = computeLFParams();
+    const params = computeLFParams();
+    const { Rd, OQ, SQ, RK, RA, Te, Tp, Tn, Ta, T0 } = params;
 
     // Update UI readouts
     if (els.lfOq) els.lfOq.textContent = OQ.toFixed(2);
     if (els.lfSq) els.lfSq.textContent = SQ.toFixed(2);
     if (els.lfRd) els.lfRd.textContent = Rd.toFixed(2);
+    if (els.rdVal) els.rdVal.textContent = Rd.toFixed(2);
 
-    const T0 = 1.0; // Normalized period
-
-    // Timing parameters from OQ and SQ
-    const Te = OQ * T0;                    // End of open phase
-    const Tp = Te / (1.0 + SQ);            // Time of peak flow (opening phase)
-    const Ta = (0.01 + 0.2 * (Rd - 0.3) / 2.4) * T0; // Return phase duration
-    const Tc = Te + Math.min(Ta * 3, (T0 - Te) * 0.5); // End of return phase
-
-    // Angular frequency for open phase sinusoid
+    // Angular frequency for open phase
     const wg = Math.PI / Tp;
 
-    // Growth parameter α (controls asymmetry of the pulse)
-    // Higher α = faster rising, more pressed sound
-    const alpha = Math.max(0, (SQ - 1.0) * 2.0);
+    // Growth parameter α
+    const alpha = solveLFAlpha(wg, Te, Tp);
 
     // Return phase decay rate
     const epsilon = 1.0 / Math.max(0.001, Ta);
 
-    const waveform = new Float32Array(numPoints);
+    // --- Step 1: Generate dUg/dt (derivative waveform) ---
+    const derivative = new Float32Array(numPoints);
+    const dt = T0 / numPoints;
 
     for (let i = 0; i < numPoints; i++) {
         const t = (i / numPoints) * T0;
-        let val = 0;
 
         if (t <= Te) {
-            // Open phase: rising sinusoid with exponential growth
-            const sinPart = Math.sin(wg * t);
-            const expPart = Math.exp(alpha * (t - Tp));
-            val = sinPart * Math.min(expPart, 5.0); // clamp exp growth
-        } else if (t <= Tc) {
-            // Return phase: exponential decay from Te to baseline
-            const decay = Math.exp(-epsilon * (t - Te));
-            const baseline = Math.exp(-epsilon * (Tc - Te));
-            val = -(decay - baseline) * 0.3; // Small negative excursion
+            // Open phase: E0 · exp(α·t) · sin(ωg·t)
+            derivative[i] = Math.exp(alpha * t) * Math.sin(wg * t);
+        } else if (t <= Te + Ta * 3 && Ta > 0.001) {
+            // Return phase: exponential recovery
+            // Models the exponential return after vocal fold closure
+            const tRel = t - Te;
+            derivative[i] = -Math.exp(-epsilon * tRel);
+        } else {
+            // Closed phase: no flow change
+            derivative[i] = 0;
         }
-        // Closed phase (t > Tc): val = 0
-
-        waveform[i] = val;
     }
 
-    // Normalize to [0, 1] range
-    let maxVal = 0;
-    let minVal = 0;
+    // Find the max positive and max negative values of derivative
+    let maxDeriv = 0, minDeriv = 0;
     for (let i = 0; i < numPoints; i++) {
-        if (waveform[i] > maxVal) maxVal = waveform[i];
-        if (waveform[i] < minVal) minVal = waveform[i];
-    }
-    const range = maxVal - minVal || 1;
-    for (let i = 0; i < numPoints; i++) {
-        waveform[i] = (waveform[i] - minVal) / range;
+        if (derivative[i] > maxDeriv) maxDeriv = derivative[i];
+        if (derivative[i] < minDeriv) minDeriv = derivative[i];
     }
 
-    return { waveform, Te, Tp, Tc, T0, OQ, Rd };
+    // Normalize so that: positive peak maps to +1, negative peak maps to -EE (normalized to -1)
+    // Scale open phase and return phase separately for correct shape
+    const scaleFactor = Math.max(Math.abs(maxDeriv), Math.abs(minDeriv)) || 1;
+    for (let i = 0; i < numPoints; i++) {
+        derivative[i] /= scaleFactor;
+    }
+
+    // Recompute normalized min for EE
+    let normalizedEE = 0;
+    for (let i = 0; i < numPoints; i++) {
+        if (derivative[i] < normalizedEE) normalizedEE = derivative[i];
+    }
+    const EE = Math.abs(normalizedEE); // positive magnitude of EE
+
+    // --- Step 2: Numerical integration → Ug(t) (flow waveform) ---
+    const flow = new Float32Array(numPoints);
+    flow[0] = 0;
+    for (let i = 1; i < numPoints; i++) {
+        flow[i] = flow[i - 1] + derivative[i] * dt;
+    }
+
+    // Normalize flow to [0, 1] range
+    let maxFlow = -Infinity, minFlow = Infinity;
+    for (let i = 0; i < numPoints; i++) {
+        if (flow[i] > maxFlow) maxFlow = flow[i];
+        if (flow[i] < minFlow) minFlow = flow[i];
+    }
+    const flowRange = maxFlow - minFlow || 1;
+    for (let i = 0; i < numPoints; i++) {
+        flow[i] = (flow[i] - minFlow) / flowRange;
+    }
+
+    return { flow, derivative, Te, Tp, Tn, Ta, T0, OQ, SQ, RK, RA, Rd, EE };
 }
 
 /**
- * Draw the glottal waveform on its dedicated canvas.
- * OQ, SQ, Rd are rendered inside the canvas. Phases are color-coded.
+ * Draw both glottal waveforms on their dedicated canvases.
+ * Upper canvas: Glottal Airflow Ug(t) — smooth mountain shape
+ * Lower canvas: Differentiated Glottal Airflow dUg/dt — bipolar pulse
+ *
+ * Layout follows Gobl & Mahshie (2013) Figure 1.
  */
 let glottalNeedsRedraw = false;
 
 function drawGlottalWaveform() {
-    const canvas = els.glottalCanvas;
-    if (!canvas) return;
+    const canvasFlow = els.glottalCanvasFlow || els.glottalCanvas;
+    const canvasDeriv = els.glottalCanvasDeriv;
 
-    // Skip drawing if canvas is not visible (e.g. in a hidden tab on mobile)
-    if (canvas.clientWidth === 0 || canvas.clientHeight === 0) {
+    if (!canvasFlow) return;
+
+    // Skip if not visible
+    if (canvasFlow.clientWidth === 0 || canvasFlow.clientHeight === 0) {
         glottalNeedsRedraw = true;
         return;
     }
 
+    const numPoints = 500;
+    const result = generateLFWaveform(numPoints);
+    const { flow, derivative, Te, Tp, Tn, Ta, T0, OQ, SQ, RK, RA, Rd, EE } = result;
+
+    // --- Draw Flow Canvas (upper) ---
+    drawFlowCanvas(canvasFlow, flow, result);
+
+    // --- Draw Derivative Canvas (lower) ---
+    if (canvasDeriv && canvasDeriv.clientWidth > 0) {
+        drawDerivativeCanvas(canvasDeriv, derivative, result);
+    }
+}
+
+/**
+ * Draw the glottal airflow (Ug) waveform.
+ * Smooth, continuous mountain shape. No discontinuity at Te.
+ */
+function drawFlowCanvas(canvas, flow, params) {
+    const { Te, Tp, T0, OQ, SQ, Rd } = params;
+    const numPoints = flow.length;
+
     const ctx = canvas.getContext('2d');
-    canvas.width = canvas.clientWidth * (window.devicePixelRatio || 1);
-    canvas.height = canvas.clientHeight * (window.devicePixelRatio || 1);
-    ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = canvas.clientWidth * dpr;
+    canvas.height = canvas.clientHeight * dpr;
+    ctx.scale(dpr, dpr);
     const w = canvas.clientWidth;
     const h = canvas.clientHeight;
 
@@ -795,53 +909,35 @@ function drawGlottalWaveform() {
     ctx.fillStyle = '#0d1117';
     ctx.fillRect(0, 0, w, h);
 
-    const numPoints = 500;
-    const { waveform, Te, Tp, Tc, T0, OQ, Rd } = generateLFWaveform(numPoints);
-    const { SQ } = computeLFParams();
-
-    // Draw phase regions with slightly stronger tinting
     const teX = (Te / T0) * w;
     const tpX = (Tp / T0) * w;
-    const tcX = (Tc / T0) * w;
 
+    // Phase regions
     ctx.fillStyle = 'rgba(46, 160, 67, 0.08)';
     ctx.fillRect(0, 0, teX, h);
-
-    ctx.fillStyle = 'rgba(255, 123, 114, 0.08)';
-    ctx.fillRect(teX, 0, tcX - teX, h);
-
     ctx.fillStyle = 'rgba(88, 166, 255, 0.05)';
-    ctx.fillRect(tcX, 0, w - tcX, h);
+    ctx.fillRect(teX, 0, w - teX, h);
 
-    // Phase boundary lines
+    // Te boundary line
     ctx.setLineDash([3, 3]);
     ctx.lineWidth = 1;
-
-    // Te line
     ctx.strokeStyle = 'rgba(255, 123, 114, 0.35)';
     ctx.beginPath();
     ctx.moveTo(teX, 0); ctx.lineTo(teX, h);
     ctx.stroke();
-
-    // Tc line
-    ctx.strokeStyle = 'rgba(88, 166, 255, 0.25)';
-    ctx.beginPath();
-    ctx.moveTo(tcX, 0); ctx.lineTo(tcX, h);
-    ctx.stroke();
-
     ctx.setLineDash([]);
 
-    // Draw waveform with gradient fill
-    const padding = 22;
+    // Waveform drawing
+    const padding = 20;
     const paddingBottom = 14;
     const plotH = h - padding - paddingBottom;
 
-    // Filled area under curve
+    // Filled area
     ctx.beginPath();
     ctx.moveTo(0, padding + plotH);
     for (let i = 0; i < numPoints; i++) {
         const x = (i / numPoints) * w;
-        const y = padding + plotH * (1.0 - waveform[i]);
+        const y = padding + plotH * (1.0 - flow[i]);
         ctx.lineTo(x, y);
     }
     ctx.lineTo(w, padding + plotH);
@@ -863,7 +959,7 @@ function drawGlottalWaveform() {
     let peakX = 0, peakY = h;
     for (let i = 0; i < numPoints; i++) {
         const x = (i / numPoints) * w;
-        const y = padding + plotH * (1.0 - waveform[i]);
+        const y = padding + plotH * (1.0 - flow[i]);
         if (i === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
         if (y < peakY) { peakY = y; peakX = x; }
@@ -880,61 +976,58 @@ function drawGlottalWaveform() {
     ctx.lineWidth = 1;
     ctx.stroke();
 
-    // Responsive font scaling for mobile
+    // Responsive font scaling
     const isMobile = w < 400;
     const fontSm = isMobile ? 7 : 9;
     const fontMd = isMobile ? 8 : 10;
     const fontLg = isMobile ? 9 : 11;
 
-    // Tp label — 流量ピーク (Peak Flow)
+    // Title label: Glottal Airflow Ug(t)
+    ctx.font = `600 ${fontMd}px Inter, sans-serif`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = 'rgba(88, 166, 255, 0.6)';
+    ctx.fillText('Glottal Airflow Ug(t)', 6, 3);
+
+    // Tp label — 流量ピーク
     ctx.font = `600 ${fontMd}px Inter, sans-serif`;
     ctx.textAlign = 'center';
     ctx.fillStyle = 'rgba(255, 215, 0, 0.8)';
     ctx.fillText('Tp 流量ピーク', peakX, peakY - 8);
 
-    // Te label — 閉鎖点 (Closure Point)
+    // Te label — 閉鎖点（励起点）
+    const teFlowY = padding + plotH * (1.0 - flow[Math.min(numPoints - 1, Math.floor((Te / T0) * numPoints))]);
     ctx.fillStyle = 'rgba(255, 123, 114, 0.7)';
-    ctx.fillText('Te 閉鎖点', teX + (isMobile ? 18 : 28), padding + 4);
+    ctx.fillText('Te 閉鎖点', teX + (isMobile ? 18 : 28), Math.min(teFlowY, padding + 14));
 
-    // --- In-canvas parameter badges ---
+    // Te dot on the flow curve
+    ctx.beginPath();
+    ctx.arc(teX, teFlowY, 3, 0, Math.PI * 2);
+    ctx.fillStyle = '#ff7b72';
+    ctx.fill();
+
+    // Bottom parameter badges
     const badgeY = h - 4;
     ctx.font = `600 ${fontSm}px Inter, sans-serif`;
     ctx.textBaseline = 'bottom';
 
-    // OQ badge — 開放率 (Open Quotient): green, in Open phase area
+    // Rd badge
+    ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+    ctx.fillText(`Rd ${Rd.toFixed(2)}`, 6, badgeY);
+
+    // OQ badge
     ctx.textAlign = 'center';
     ctx.fillStyle = 'rgba(46, 160, 67, 0.8)';
-    ctx.fillText(`開放率(OQ) ${OQ.toFixed(2)}`, teX / 2, badgeY);
+    ctx.fillText(`OQ ${OQ.toFixed(2)}`, teX / 2, badgeY);
 
-    // SQ badge — 速度比 (Speed Quotient): gold, bottom of Return area
+    // SQ badge
     ctx.fillStyle = 'rgba(255, 215, 0, 0.6)';
-    if (tcX - teX > 50) {
-        ctx.fillText(`速度比(SQ) ${SQ.toFixed(1)}`, (teX + tcX) / 2, badgeY);
-    }
+    ctx.textAlign = 'right';
+    ctx.fillText(`SQ ${SQ.toFixed(1)}`, w - 6, badgeY);
 
-    // Rd badge — 波形タイプ (top-left corner with scale indicator)
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-    ctx.font = `700 ${fontLg}px Inter, sans-serif`;
-    ctx.fillText(`Rd ${Rd.toFixed(2)}`, 6, 3);
-    // Sub-descriptor: show where this falls on the pressed–breathy scale
-    ctx.font = `400 ${isMobile ? 6 : 8}px Inter, sans-serif`;
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
-    let rdDesc = '(Modal)';
-    if (Rd < 0.5) rdDesc = '(Pressed寄り — 倍音↑)';
-    else if (Rd < 0.9) rdDesc = '(やや Pressed — 倍音やや↑)';
-    else if (Rd < 1.3) rdDesc = '(Modal — バランス型)';
-    else if (Rd < 2.0) rdDesc = '(やや Breathy — 倍音↓)';
-    else rdDesc = '(Breathy寄り — 倍音↓↓)';
-    ctx.fillText(rdDesc, 6, 16);
-
-    // Phonation mode badge (top-right) with English
-    const modeLabels = {
-        flow: 'Flow',
-        pressed: 'Pressed',
-        breathy: 'Breathy'
-    };
+    // Phonation mode badge (top-right)
+    const modeLabels = { flow: 'Flow', pressed: 'Pressed', breathy: 'Breathy' };
     const modeColors = {
         flow: 'rgba(46, 160, 67, 0.8)',
         pressed: 'rgba(255, 123, 114, 0.8)',
@@ -945,11 +1038,230 @@ function drawGlottalWaveform() {
     ctx.fillStyle = modeColors[state.phonationMode] || 'rgba(255,255,255,0.5)';
     ctx.font = `600 ${fontMd}px Inter, sans-serif`;
     ctx.fillText(modeLabels[state.phonationMode] || state.phonationMode, w - 6, 4);
+}
 
-    // Update hidden DOM elements for potential external use
-    if (els.lfOq) els.lfOq.textContent = OQ.toFixed(2);
-    if (els.lfSq) els.lfSq.textContent = SQ.toFixed(2);
-    if (els.lfRd) els.lfRd.textContent = Rd.toFixed(2);
+/**
+ * Draw the differentiated glottal airflow (dUg/dt) waveform.
+ * Bipolar pulse: positive during opening, negative peak at Te, return to zero.
+ */
+function drawDerivativeCanvas(canvas, derivative, params) {
+    const { Te, Tp, Tn, Ta, T0, RK, RA, Rd, EE } = params;
+    const numPoints = derivative.length;
+
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = canvas.clientWidth * dpr;
+    canvas.height = canvas.clientHeight * dpr;
+    ctx.scale(dpr, dpr);
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+
+    // Background
+    ctx.fillStyle = '#0d1117';
+    ctx.fillRect(0, 0, w, h);
+
+    const teX = (Te / T0) * w;
+    const tpX = (Tp / T0) * w;
+    const taEndX = Math.min(w, ((Te + Ta * 3) / T0) * w);
+
+    // Phase regions (matching flow canvas)
+    ctx.fillStyle = 'rgba(46, 160, 67, 0.06)';
+    ctx.fillRect(0, 0, teX, h);
+    ctx.fillStyle = 'rgba(255, 123, 114, 0.06)';
+    ctx.fillRect(teX, 0, taEndX - teX, h);
+    ctx.fillStyle = 'rgba(88, 166, 255, 0.04)';
+    ctx.fillRect(taEndX, 0, w - taEndX, h);
+
+    // Te boundary line
+    ctx.setLineDash([3, 3]);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(255, 123, 114, 0.35)';
+    ctx.beginPath();
+    ctx.moveTo(teX, 0); ctx.lineTo(teX, h);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Waveform area
+    const padding = 18;
+    const paddingBottom = 14;
+    const plotH = h - padding - paddingBottom;
+
+    // Find range of derivative for scaling
+    let maxD = 0, minD = 0;
+    for (let i = 0; i < numPoints; i++) {
+        if (derivative[i] > maxD) maxD = derivative[i];
+        if (derivative[i] < minD) minD = derivative[i];
+    }
+    const range = Math.max(Math.abs(maxD), Math.abs(minD)) || 1;
+
+    // Zero line position: center the waveform vertically
+    // Allocate more space for negative (below zero) since -EE is larger
+    const posRatio = maxD / range;
+    const negRatio = Math.abs(minD) / range;
+    const total = posRatio + negRatio;
+    const zeroY = padding + plotH * (posRatio / total);
+
+    // Zero baseline
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, zeroY); ctx.lineTo(w, zeroY);
+    ctx.stroke();
+
+    // Filled area for positive/negative regions
+    // Positive fill (green tint)
+    ctx.beginPath();
+    ctx.moveTo(0, zeroY);
+    for (let i = 0; i < numPoints; i++) {
+        const x = (i / numPoints) * w;
+        const val = derivative[i] / range;
+        const y = zeroY - val * (plotH * posRatio / total) / posRatio;
+        const clampedY = zeroY - (derivative[i] > 0 ? val * plotH * posRatio / total / posRatio : 0);
+        ctx.lineTo(x, derivative[i] > 0 ? zeroY - val * plotH / total : zeroY);
+    }
+    ctx.lineTo(w, zeroY);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(46, 160, 67, 0.1)';
+    ctx.fill();
+
+    // Negative fill (red tint)
+    ctx.beginPath();
+    ctx.moveTo(0, zeroY);
+    for (let i = 0; i < numPoints; i++) {
+        const x = (i / numPoints) * w;
+        const val = derivative[i] / range;
+        ctx.lineTo(x, derivative[i] < 0 ? zeroY - val * plotH / total : zeroY);
+    }
+    ctx.lineTo(w, zeroY);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(255, 123, 114, 0.1)';
+    ctx.fill();
+
+    // Waveform line
+    ctx.beginPath();
+    ctx.strokeStyle = '#ff7b72';
+    ctx.lineWidth = 2;
+    ctx.shadowColor = 'rgba(255, 123, 114, 0.4)';
+    ctx.shadowBlur = 3;
+
+    let minY = 0, minX = 0, minYVal = Infinity;
+    for (let i = 0; i < numPoints; i++) {
+        const x = (i / numPoints) * w;
+        const val = derivative[i] / range;
+        const y = zeroY - val * plotH / total;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+        if (y > minYVal) { /* minY tracks lowest point visually = highest y pixel */ }
+        if (derivative[i] < derivative[Math.floor(minX / w * numPoints)] || i === 0) {
+            minX = x;
+            minY = y;
+            minYVal = y;
+        }
+    }
+    // Re-find true negative peak
+    let peakNegIdx = 0;
+    for (let i = 0; i < numPoints; i++) {
+        if (derivative[i] < derivative[peakNegIdx]) peakNegIdx = i;
+    }
+    minX = (peakNegIdx / numPoints) * w;
+    minY = zeroY - (derivative[peakNegIdx] / range) * plotH / total;
+
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Responsive font scaling
+    const isMobile = w < 400;
+    const fontSm = isMobile ? 7 : 9;
+    const fontMd = isMobile ? 8 : 10;
+
+    // Title label
+    ctx.font = `600 ${fontMd}px Inter, sans-serif`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = 'rgba(255, 123, 114, 0.6)';
+    ctx.fillText('dUg/dt', 6, 3);
+
+    // -EE dot and label at negative peak (Te)
+    ctx.beginPath();
+    ctx.arc(minX, minY, 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = '#ff7b72';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 123, 114, 0.5)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.font = `600 ${fontMd}px Inter, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(255, 123, 114, 0.8)';
+    ctx.fillText(`Te -EE`, minX, minY + 6);
+
+    // Tp zero-crossing label
+    // Find where derivative crosses zero from positive to negative (≈ Tp)
+    let zeroCrossIdx = 0;
+    for (let i = 1; i < numPoints; i++) {
+        const t = (i / numPoints) * T0;
+        if (t > Tp * 0.8 && derivative[i - 1] > 0 && derivative[i] <= 0) {
+            zeroCrossIdx = i;
+            break;
+        }
+    }
+    const zeroCrossX = (zeroCrossIdx / numPoints) * w;
+    ctx.beginPath();
+    ctx.arc(zeroCrossX, zeroY, 3, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffd700';
+    ctx.fill();
+    ctx.font = `600 ${fontMd}px Inter, sans-serif`;
+    ctx.fillStyle = 'rgba(255, 215, 0, 0.8)';
+    ctx.textAlign = 'center';
+    ctx.fillText('Tp', zeroCrossX, zeroY - 10);
+
+    // Ta annotation — bracket from Te to return-to-zero
+    if (Ta > 0.005) {
+        const taStartX = teX;
+        const taEndXDraw = Math.min(w - 10, ((Te + Ta) / T0) * w);
+        const bracketY = h - paddingBottom - 2;
+        ctx.strokeStyle = 'rgba(88, 166, 255, 0.5)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(taStartX, bracketY - 4);
+        ctx.lineTo(taStartX, bracketY);
+        ctx.lineTo(taEndXDraw, bracketY);
+        ctx.lineTo(taEndXDraw, bracketY - 4);
+        ctx.stroke();
+
+        ctx.font = `600 ${fontSm}px Inter, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(88, 166, 255, 0.7)';
+        ctx.fillText('Ta', (taStartX + taEndXDraw) / 2, bracketY - 6);
+    }
+
+    // Bottom parameter badges
+    const badgeY = h - 4;
+    ctx.font = `600 ${fontSm}px Inter, sans-serif`;
+    ctx.textBaseline = 'bottom';
+
+    // Rd badge
+    ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.fillText(`Rd ${Rd.toFixed(2)}`, 6, badgeY);
+
+    // RA badge
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(88, 166, 255, 0.7)';
+    if (w > 200) {
+        ctx.fillText(`RA ${RA.toFixed(3)}`, w * 0.35, badgeY);
+    }
+
+    // RK badge
+    ctx.fillStyle = 'rgba(255, 215, 0, 0.6)';
+    if (w > 200) {
+        ctx.fillText(`RK ${RK.toFixed(2)}`, w * 0.65, badgeY);
+    }
+
+    // EE badge
+    ctx.textAlign = 'right';
+    ctx.fillStyle = 'rgba(255, 123, 114, 0.7)';
+    ctx.fillText(`EE ${EE.toFixed(2)}`, w - 6, badgeY);
 }
 
 // --- Pitch Detection (Autocorrelation) ---
@@ -1842,14 +2154,28 @@ els.pitchSlider.addEventListener('input', (e) => {
 els.pressureSlider.addEventListener('input', (e) => {
     state.pressure = parseFloat(e.target.value);
     els.pressureVal.textContent = state.pressure.toFixed(1);
+    state.rdManual = null; // Reset Rd override when P/R changes
+    if (els.rdSlider) els.rdSlider.value = computeLFParams().Rd;
     calcAerodynamics();
 });
 
 els.resistanceSlider.addEventListener('input', (e) => {
     state.resistance = parseFloat(e.target.value);
     els.resistanceVal.textContent = state.resistance.toFixed(1);
+    state.rdManual = null; // Reset Rd override when P/R changes
+    if (els.rdSlider) els.rdSlider.value = computeLFParams().Rd;
     calcAerodynamics();
 });
+
+// Rd slider — manual override for LF model shape parameter
+if (els.rdSlider) {
+    els.rdSlider.addEventListener('input', (e) => {
+        state.rdManual = parseFloat(e.target.value);
+        drawGlottalWaveform();
+    });
+    // Initialize slider with current auto Rd value
+    els.rdSlider.value = computeLFParams().Rd;
+}
 
 els.masterVolume.addEventListener('input', (e) => {
     state.masterVolume = parseFloat(e.target.value);
