@@ -871,6 +871,30 @@ input[type=range]::-webkit-slider-thumb:hover {
     box-shadow: 0 0 10px rgba(88, 166, 255, 0.4);
 }
 
+/* Fullscreen mode for Power Spectrum panel */
+.visualizer-panel.is-fullscreen {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    border-radius: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-color);
+    padding: 16px 24px;
+    overflow: hidden;
+}
+
+.visualizer-panel.is-fullscreen .canvas-container {
+    flex: 1;
+    height: auto;
+}
+
+.visualizer-panel.is-fullscreen #spectrum-fullscreen-btn {
+    background-color: var(--accent-color);
+    color: #0d1117;
+    box-shadow: 0 0 10px rgba(88, 166, 255, 0.4);
+}
+
 .canvas-container {
     position: relative;
     width: 100%;

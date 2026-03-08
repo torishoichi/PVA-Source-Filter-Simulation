@@ -74,6 +74,7 @@ const els = {
     btnMic: document.getElementById('mic-toggle'),
     btnMicPause: document.getElementById('mic-pause'),
     btnSlopeLine: document.getElementById('slope-line-toggle'),
+    btnFullscreen: document.getElementById('spectrum-fullscreen-btn'),
     micMethodSelect: document.getElementById('mic-formant-method'),
     canvas: document.getElementById('spectrum-canvas'),
     masterVolume: document.getElementById('master-volume'),
@@ -2202,6 +2203,21 @@ els.btnSlopeLine.addEventListener('click', () => {
     state.showSlopeLine = !state.showSlopeLine;
     els.btnSlopeLine.classList.toggle('slope-line-active', state.showSlopeLine);
 });
+
+// Fullscreen Toggle for Power Spectrum panel
+if (els.btnFullscreen) {
+    const visualizerPanel = els.btnFullscreen.closest('.visualizer-panel');
+    if (visualizerPanel) {
+        els.btnFullscreen.addEventListener('click', () => {
+            visualizerPanel.classList.toggle('is-fullscreen');
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && visualizerPanel.classList.contains('is-fullscreen')) {
+                visualizerPanel.classList.remove('is-fullscreen');
+            }
+        });
+    }
+}
 
 // Mic Formant Method Toggle
 if (els.micMethodSelect) {
