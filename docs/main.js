@@ -56,6 +56,7 @@ const state = {
     acousticMode: 'Neutral', // 'Neutral', 'Yell', 'Whoop'
     masterVolume: 0.5, // 0.0 to 1.0
     rdManual: null, // null = auto from P/R/mechanism, number = manual Rd override
+    logScale: false, // Toggle for logarithmic frequency axis
     selectionActive: false,
     selectionMinFreq: 0,
     selectionMaxFreq: 0,
@@ -74,6 +75,7 @@ const els = {
     btnMic: document.getElementById('mic-toggle'),
     btnMicPause: document.getElementById('mic-pause'),
     btnSlopeLine: document.getElementById('slope-line-toggle'),
+    btnLogScale: document.getElementById('log-scale-toggle'),
     btnFullscreen: document.getElementById('spectrum-fullscreen-btn'),
     micMethodSelect: document.getElementById('mic-formant-method'),
     canvas: document.getElementById('spectrum-canvas'),
@@ -168,11 +170,24 @@ function freqToNote(freq) {
     return noteNames[n] + octave;
 }
 
-// Map frequency to canvas x coordinate using a semi-log or linear scale
-// For formants up to ~5kHz, linear is often easier to interpret on a small display overlay
+// Map frequency to canvas x coordinate (linear or logarithmic)
 const MAX_FREQ_DISPLAY = 6000;
+const MIN_FREQ_LOG = 50; // Lower bound for log scale
 function freqToX(freq, width) {
+    if (state.logScale) {
+        const clampedFreq = Math.max(MIN_FREQ_LOG, freq);
+        return (Math.log10(clampedFreq / MIN_FREQ_LOG) / Math.log10(MAX_FREQ_DISPLAY / MIN_FREQ_LOG)) * width;
+    }
     return (freq / MAX_FREQ_DISPLAY) * width;
+}
+
+// Inverse: canvas x coordinate back to frequency
+function xToFreq(x, width) {
+    if (state.logScale) {
+        const ratio = x / width;
+        return MIN_FREQ_LOG * Math.pow(MAX_FREQ_DISPLAY / MIN_FREQ_LOG, ratio);
+    }
+    return (x / width) * MAX_FREQ_DISPLAY;
 }
 
 // Calculate the dB gain for a specific harmonic based on mechanism & phonation mode
@@ -1401,12 +1416,30 @@ function drawVisualizer() {
     canvasCtx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
     canvasCtx.lineWidth = 1;
     canvasCtx.beginPath();
-    for (let i = 1; i <= 5; i++) {
-        const x = freqToX(i * 1000, width);
+
+    const gridFreqs = state.logScale
+        ? [100, 200, 500, 1000, 2000, 5000]
+        : [1000, 2000, 3000, 4000, 5000];
+
+    for (const gf of gridFreqs) {
+        const x = freqToX(gf, width);
         canvasCtx.moveTo(x, 0);
         canvasCtx.lineTo(x, height);
     }
     canvasCtx.stroke();
+
+    // Grid frequency labels (drawn on canvas so they match the actual scale)
+    if (state.logScale) {
+        canvasCtx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+        canvasCtx.font = '9px Inter, sans-serif';
+        canvasCtx.textAlign = 'center';
+        canvasCtx.textBaseline = 'bottom';
+        for (const gf of gridFreqs) {
+            const x = freqToX(gf, width);
+            const label = gf >= 1000 ? `${gf / 1000}k` : `${gf}`;
+            canvasCtx.fillText(label, x, height - 2);
+        }
+    }
 
     const nyquist = audioCtx ? audioCtx.sampleRate / 2 : 24000;
 
@@ -2204,6 +2237,21 @@ els.btnSlopeLine.addEventListener('click', () => {
     els.btnSlopeLine.classList.toggle('slope-line-active', state.showSlopeLine);
 });
 
+// Log/Linear Frequency Scale Toggle
+if (els.btnLogScale) {
+    els.btnLogScale.addEventListener('click', () => {
+        state.logScale = !state.logScale;
+        els.btnLogScale.classList.toggle('log-active', state.logScale);
+        els.btnLogScale.textContent = state.logScale ? 'Lin' : 'Log';
+
+        // Hide static HTML x-axis labels when in log mode (canvas draws its own)
+        const xAxis = document.querySelector('.x-axis');
+        if (xAxis) {
+            xAxis.style.display = state.logScale ? 'none' : '';
+        }
+    });
+}
+
 // Fullscreen Toggle for Power Spectrum panel
 if (els.btnFullscreen) {
     const visualizerPanel = els.btnFullscreen.closest('.visualizer-panel');
@@ -2383,8 +2431,8 @@ function handleCanvasInteraction(e) {
     const width = els.canvas.width || rect.width;
     const height = els.canvas.height || rect.height;
 
-    // Map X to Frequency
-    let freq = (x / width) * MAX_FREQ_DISPLAY;
+    // Map X to Frequency (log-aware)
+    let freq = xToFreq(x, width);
     freq = Math.max(50, Math.min(MAX_FREQ_DISPLAY, freq));
 
     if (e.type === 'mousedown' || e.type === 'touchstart') {

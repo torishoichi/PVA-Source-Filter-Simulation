@@ -871,6 +871,12 @@ input[type=range]::-webkit-slider-thumb:hover {
     box-shadow: 0 0 10px rgba(88, 166, 255, 0.4);
 }
 
+.btn.log-active {
+    background-color: var(--accent-color);
+    color: #0d1117;
+    box-shadow: 0 0 10px rgba(88, 166, 255, 0.4);
+}
+
 /* Fullscreen mode for Power Spectrum panel */
 .visualizer-panel.is-fullscreen {
     position: fixed;

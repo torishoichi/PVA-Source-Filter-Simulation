@@ -231,6 +231,12 @@ canvas {
     border-color: var(--accent);
 }
 
+.btn-icon-sm.log-active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #0d1117;
+}
+
 .control-val {
     font-size: 0.65rem;
     color: var(--accent-hover);
