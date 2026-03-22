@@ -1819,11 +1819,11 @@ function drawVisualizer() {
             canvasCtx.restore();
         };
 
-        drawMicFormantMarker(estFormants.f1, 'Mic F1', '#ff7b72'); // Red
-        drawMicFormantMarker(estFormants.f2, 'Mic F2', '#79c0ff'); // Blue
-        drawMicFormantMarker(estFormants.f3, 'Mic F3', '#a371f7'); // Purple
-        drawMicFormantMarker(estFormants.f4, 'Mic F4', '#f0883e'); // Orange
-        drawMicFormantMarker(estFormants.f5, 'Mic F5', '#d2a8ff'); // Pink
+        drawMicFormantMarker(estFormants.f1, 'Mic fR1', '#ff7b72'); // Red
+        drawMicFormantMarker(estFormants.f2, 'Mic fR2', '#79c0ff'); // Blue
+        drawMicFormantMarker(estFormants.f3, 'Mic fR3', '#a371f7'); // Purple
+        drawMicFormantMarker(estFormants.f4, 'Mic fR4', '#f0883e'); // Orange
+        drawMicFormantMarker(estFormants.f5, 'Mic fR5', '#d2a8ff'); // Pink
     }
 
     // 3. Draw Formant Overlay Envelopes (Only when simulating)
@@ -1864,11 +1864,11 @@ function drawVisualizer() {
             canvasCtx.fillText(label, cx - 10, 20);
         };
 
-        drawFormantEnvelope(state.formants.f1.freq, state.formants.f1.q, 'F1', '#ff7b72', state.formants.f1.enabled); // Red
-        drawFormantEnvelope(state.formants.f2.freq, state.formants.f2.q, 'F2', '#79c0ff', state.formants.f2.enabled); // Blue
-        drawFormantEnvelope(state.formants.f3.freq, state.formants.f3.q, 'F3', '#a371f7', state.formants.f3.enabled); // Purple
-        drawFormantEnvelope(state.formants.f4.freq, state.formants.f4.q, 'F4', '#f0883e', state.formants.f4.enabled); // Orange
-        drawFormantEnvelope(state.formants.f5.freq, state.formants.f5.q, 'F5', '#d2a8ff', state.formants.f5.enabled); // Pink
+        drawFormantEnvelope(state.formants.f1.freq, state.formants.f1.q, 'fR1', '#ff7b72', state.formants.f1.enabled); // Red
+        drawFormantEnvelope(state.formants.f2.freq, state.formants.f2.q, 'fR2', '#79c0ff', state.formants.f2.enabled); // Blue
+        drawFormantEnvelope(state.formants.f3.freq, state.formants.f3.q, 'fR3', '#a371f7', state.formants.f3.enabled); // Purple
+        drawFormantEnvelope(state.formants.f4.freq, state.formants.f4.q, 'fR4', '#f0883e', state.formants.f4.enabled); // Orange
+        drawFormantEnvelope(state.formants.f5.freq, state.formants.f5.q, 'fR5', '#d2a8ff', state.formants.f5.enabled); // Pink
     }
 
     // 4. Draw Slope Approximation Line (dashed yellow)
@@ -2672,7 +2672,7 @@ if (guideToggle && guidePanel) {
                 const tF0 = preset.source.pitch;
                 const maxH = Math.min(10, Math.floor(5000 / tF0));
                 const fKeys = ['f1', 'f2', 'f3', 'f4', 'f5'];
-                const fLabels = ['F1', 'F2', 'F3', 'F4', 'F5'];
+                const fLabels = ['fR1', 'fR2', 'fR3', 'fR4', 'fR5'];
                 for (let h = 1; h <= maxH; h++) {
                     const hFreq = tF0 * h;
                     let boostLabel = '';
