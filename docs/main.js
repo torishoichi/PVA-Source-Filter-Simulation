@@ -2613,12 +2613,21 @@ function handleCanvasInteraction(e) {
         if (isDraggingFormant && activeFormantKey) {
             if (e.type === 'touchmove' && e.cancelable) e.preventDefault(); // Prevent scrolling on mobile
             freq = Math.round(freq);
+
+            // Clamp to ordering constraint (cannot cross adjacent formants)
+            const idx = parseInt(activeFormantKey.slice(1), 10); // 'f1' → 1
+            const prev = idx > 1 ? state.formants[`f${idx - 1}`].freq + FORMANT_GAP_HZ : -Infinity;
+            const next = idx < 5 ? state.formants[`f${idx + 1}`].freq - FORMANT_GAP_HZ : Infinity;
+            // Also respect the slider's original absolute range
+            const slider = els[`${activeFormantKey}Slider`];
+            const origMin = parseFloat(slider.dataset.origMin || slider.min);
+            const origMax = parseFloat(slider.dataset.origMax || slider.max);
+            freq = Math.max(origMin, prev, Math.min(origMax, next, freq));
+
             state.formants[activeFormantKey].freq = freq;
-
-            // Update corresponding UI slider
-            els[`${activeFormantKey}Slider`].value = freq;
+            slider.value = freq;
             els[`${activeFormantKey}Val`].textContent = freq;
-
+            reorderFormantBounds();
             updateFilterParams();
         } else if (isDraggingSelection) {
             if (e.type === 'touchmove' && e.cancelable) e.preventDefault(); // Prevent scrolling on mobile
