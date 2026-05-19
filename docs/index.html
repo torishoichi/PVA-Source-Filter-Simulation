@@ -388,6 +388,15 @@
                         <div class="canvas-primary-actions">
                             <button id="spectrum-fullscreen-btn" class="btn btn-icon" title="Fullscreen">⛶</button>
                             <button id="audio-toggle" class="btn primary">▶ Play</button>
+                            <button id="mic-toggle" class="btn btn-sm btn-mic-icon" title="Mic" aria-label="Toggle microphone">
+                                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
+                                    stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <rect x="9" y="3" width="6" height="12" rx="3" />
+                                    <path d="M5 11a7 7 0 0 0 14 0" />
+                                    <path d="M12 18v3" />
+                                    <path d="M9 21h6" />
+                                </svg>
+                            </button>
                         </div>
                     </div>
                     <div class="canvas-header-bottom">
@@ -402,17 +411,11 @@
                             <input type="range" id="spectrum-slope" min="-24" max="0" value="-12" step="1">
                             <span class="control-val" id="slope-val">-12dB</span>
                         </div>
-                        <span class="control-divider"></span>
+                        <div class="canvas-control-group" title="倍音のラフネス・ゾーンを表示（ERB帯重なり＝Rough、n≥9＝Unresolved、5kHz↑＝Ceiling）">
+                            <button id="roughness-toggle" class="inline-toggle-btn" type="button"
+                                title="倍音のラフネス・ゾーンを表示">Roughness</button>
+                        </div>
                         <div class="canvas-control-buttons mic-group">
-                            <button id="mic-toggle" class="btn btn-sm btn-mic-icon" title="Mic" aria-label="Toggle microphone">
-                                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
-                                    stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                    <rect x="9" y="3" width="6" height="12" rx="3" />
-                                    <path d="M5 11a7 7 0 0 0 14 0" />
-                                    <path d="M12 18v3" />
-                                    <path d="M9 21h6" />
-                                </svg>
-                            </button>
                             <div class="mic-controls">
                                 <div class="canvas-control-group" title="マイク入力の感度">
                                     <label for="mic-gain">Gain</label>
@@ -445,6 +448,98 @@
                         <span>5kHz</span>
                     </div>
                 </div>
+
+                <!-- Roughness educational legend (visible when Roughness toggle is ON) -->
+                <div id="roughness-legend" class="roughness-legend" style="display:none;">
+                    <div class="rl-header">
+                        <span class="rl-header-label">現在の分類 @ f₀ =</span>
+                        <span class="rl-f0" id="rl-f0">— Hz</span>
+                        <input type="range" id="rl-pitch-mirror" class="rl-pitch-mirror" min="80" max="1000" value="220" step="1" aria-label="f₀ slider (mirror)">
+                        <span class="rl-line-break"></span>
+                        <span class="rl-term rl-term-roughness"><strong>Roughness</strong>: 隣接倍音が ERB 内で重なり buzzy（f₀ 依存・連続的）</span>
+                        <span class="rl-term rl-term-resolution"><strong>Resolution</strong>: ピッチに統合されるか（n&lt;9 かつ &lt;5 kHz なら統合）</span>
+                    </div>
+                    <div class="rl-zones">
+                        <div class="rl-zone rl-pure">
+                            <div class="rl-zone-head"><span class="rl-dot"></span><span class="rl-name">Pure &amp; Resolved</span></div>
+                            <div class="rl-cond">条件: f₀ &gt; ERB(n·f₀) かつ n &lt; 9</div>
+                            <div class="rl-range" data-zone="pure">H1〜H—</div>
+                            <div class="rl-desc">隣接倍音が ERB の外 → 一音ずつ分離して聞こえ、澄んだピッチ感を作る。</div>
+                        </div>
+                        <div class="rl-zone rl-rough-res">
+                            <div class="rl-zone-head"><span class="rl-dot"></span><span class="rl-name">Rough &amp; Resolved</span></div>
+                            <div class="rl-cond">条件: f₀ ≤ ERB(n·f₀) かつ n ≤ 8</div>
+                            <div class="rl-range" data-zone="rough-res">—</div>
+                            <div class="rl-desc">ERB 内に隣接倍音が入り始めるが n≤8 → buzzy だがピッチに統合される（音色の濃さ）。</div>
+                            <div class="rl-empty-note" data-zone="rough-res" style="display:none;"></div>
+                        </div>
+                        <div class="rl-zone rl-rough-unr">
+                            <div class="rl-zone-head"><span class="rl-dot"></span><span class="rl-name">Rough &amp; Unresolved</span></div>
+                            <div class="rl-cond">条件: f₀ ≤ ERB(n·f₀) かつ n ≥ 9</div>
+                            <div class="rl-range" data-zone="rough-unr">—</div>
+                            <div class="rl-desc">ERB 重なり＋pitch dominance 外 → buzzy で<strong>ピッチに統合されない</strong>。ノイズ的にもにじむ。</div>
+                        </div>
+                        <div class="rl-zone rl-ceiling">
+                            <div class="rl-zone-head"><span class="rl-dot"></span><span class="rl-name">Ceiling (&gt;5 kHz)</span></div>
+                            <div class="rl-cond">条件: n·f₀ ≥ 5000 Hz<br>＝ n ≥ ⌈5000/f₀⌉</div>
+                            <div class="rl-range" data-zone="ceiling">—</div>
+                            <div class="rl-desc">pitch dominance region 外 → 聞こえるが音程判断に使われない。</div>
+                        </div>
+                    </div>
+                    <div class="rl-interval-table">
+                        <div class="rl-interval-title">倍音間隔（f₀ 非依存・H<sub>n</sub>→H<sub>n+1</sub> の cent 値）</div>
+
+                        <div class="rl-interval-grid">
+                            <div class="rl-cell"><span class="rl-cell-h">H1→H2</span><span class="rl-cell-c">1200c</span><span class="rl-cell-n">Oct</span></div>
+                            <div class="rl-cell"><span class="rl-cell-h">H2→H3</span><span class="rl-cell-c">702c</span><span class="rl-cell-n">P5</span></div>
+                            <div class="rl-cell"><span class="rl-cell-h">H3→H4</span><span class="rl-cell-c">498c</span><span class="rl-cell-n">P4</span></div>
+                            <div class="rl-cell"><span class="rl-cell-h">H4→H5</span><span class="rl-cell-c">386c</span><span class="rl-cell-n">M3</span></div>
+                            <div class="rl-cell rl-cell-edge"><span class="rl-cell-h">H5→H6</span><span class="rl-cell-c">316c</span><span class="rl-cell-n">m3</span></div>
+                            <div class="rl-cell"><span class="rl-cell-h">H6→H7</span><span class="rl-cell-c">267c</span><span class="rl-cell-n">&lt;m3</span></div>
+                            <div class="rl-cell"><span class="rl-cell-h">H7→H8</span><span class="rl-cell-c">231c</span><span class="rl-cell-n">&lt;m3</span></div>
+                            <div class="rl-cell"><span class="rl-cell-h">H8→H9</span><span class="rl-cell-c">204c</span><span class="rl-cell-n">M2</span></div>
+                            <div class="rl-cell"><span class="rl-cell-h">H9→H10</span><span class="rl-cell-c">182c</span><span class="rl-cell-n">&lt;M2</span></div>
+                            <div class="rl-cell"><span class="rl-cell-h">H10→H11</span><span class="rl-cell-c">165c</span><span class="rl-cell-n">&lt;M2</span></div>
+                        </div>
+
+                        <details class="rl-deep">
+                            <summary class="rl-deep-summary">詳細解説 — cent とは / buzzy 感との関係</summary>
+                            <div class="rl-deep-body">
+                                <section class="rl-deep-section">
+                                    <h4 class="rl-deep-h">cent とは / なぜ cent で並べるか</h4>
+                                    <p class="rl-deep-p"><strong>cent</strong>＝音と音の距離を「耳の感じ方」で測る単位。Hz は物理的な差、cent は <strong>比（何倍か）</strong>。100 cent = 半音、1200 cent = 1 オクターブ。</p>
+                                    <p class="rl-deep-p">倍音は Hz だと等間隔（隣との差はいつも f₀）。でも耳は等間隔とは感じない — H1→H2 は <strong>2倍 = 1200c</strong>、H10→H11 は <strong>1.1倍 = 165c</strong>。差はどちらも f₀ Hz なのに、上に行くほど耳の中でギュッと詰まる。</p>
+                                </section>
+                                <section class="rl-deep-section">
+                                    <h4 class="rl-deep-h">f₀ 非依存性と buzzy 感の本体</h4>
+                                    <p class="rl-deep-p"><strong>f₀ 非依存:</strong> cent 値は比 (n+1)/n だけで決まり、f₀ に依らない。バス声でもソプラノでも H5→H6 は同じ <strong>316c</strong>。声の高低を問わず効く普遍スケール。</p>
+                                    <p class="rl-deep-p"><strong>buzzy の本体:</strong> cent が縮むこと自体がラフネスを生むのではない。cent が縮むことで <strong>隣接倍音が同じ ERB に入り込む</strong> のがラフの本体（Plomp &amp; Levelt 1965）。</p>
+                                    <p class="rl-deep-p">高周波では <strong>ERB ≈ 187 cents</strong> でほぼ一定になるため、<strong>「約 200c 以下の音程はラフ閾値」</strong> という近似が使える。典型 f₀ では <strong>H8→H9 = 204c がちょうど境界</strong>、H9→H10 = 182c から確実にラフ帯。</p>
+                                </section>
+                            </div>
+                        </details>
+                    </div>
+                    <details class="rl-deep">
+                        <summary class="rl-deep-summary">詳細解説 — 分類の仕組みと ERB</summary>
+                        <div class="rl-deep-body">
+                            <section class="rl-deep-section">
+                                <h4 class="rl-deep-h">分類は2軸の AND</h4>
+                                <ul class="rl-deep-list">
+                                    <li><strong>Roughness 軸</strong>（f₀ 依存・連続的）— 隣接倍音が同じ ERB に入れば Rough。f₀ を変えると境界が動く。上端1段目の帯が対応。</li>
+                                    <li><strong>Resolution 軸</strong>（離散・固定）— n ≥ 9 の pitch dominance cutoff、および n·f₀ &gt; 5 kHz の天井。f₀ に依らず常に同じ境界。上端2段目の帯が対応。</li>
+                                </ul>
+                                <p class="rl-deep-p">この2軸を AND で重ねて Pure / Rough &amp; Resolved / Rough &amp; Unresolved / Ceiling の4ゾーンに分類。</p>
+                            </section>
+                            <section class="rl-deep-section">
+                                <h4 class="rl-deep-h">ERB = Equivalent Rectangular Bandwidth</h4>
+                                <p class="rl-deep-p">人の聴覚フィルタを矩形で近似したときの実効幅。<strong>同じ ERB 内に入る2音は、聴覚にとって1音として処理される</strong>（臨界帯域）。</p>
+                                <p class="rl-deep-p">Glasberg &amp; Moore (1990) の近似式: <code>ERB(f) = 24.7 × (4.37 f/1000 + 1)</code> Hz</p>
+                                <p class="rl-deep-p rl-deep-meta">H 番号は離散表示だが、実際の遷移は連続的。上端 Roughness 帯のグラデーションがそれを表現している。</p>
+                            </section>
+                        </div>
+                    </details>
+                </div>
+
             </section>
         </main>
     </div>
