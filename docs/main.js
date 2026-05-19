@@ -50,7 +50,7 @@ const state = {
     cachedMicData: null,
     cachedMicPitch: -1,
     micGain: 1.0,
-    micFormantMethod: 'peak', // 'peak' or 'lpc'
+    micFormantMethod: 'lpc', // 'peak' or 'lpc'
     spectrumSlope: -12, // dB/octave attenuation
     showSlopeLine: true, // Toggle for slope approximation line (default ON)
     acousticMode: 'Neutral', // 'Neutral', 'Yell', 'Whoop'

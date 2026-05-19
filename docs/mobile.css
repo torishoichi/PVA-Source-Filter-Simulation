@@ -99,6 +99,41 @@ body {
     flex: 0 0 auto;
 }
 
+/* Monochrome emoji icons inside top-bar buttons (drop the colored emoji look) */
+.bmc-link,
+#mic-toggle {
+    filter: grayscale(1);
+    transition: filter 0.15s, background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+#mic-toggle.mic-active {
+    filter: none;
+}
+
+/* Mic group: 🎤 + LPC + Pause. Expands into a bordered frame when mic is active. */
+.mic-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    border: 1px solid transparent;
+    border-radius: 12px;
+    padding: 0;
+    transition: border-color 0.15s, background 0.15s, padding 0.15s;
+}
+
+.mic-group:has(#mic-toggle.mic-active) {
+    border-color: var(--accent-color);
+    background: var(--accent-soft);
+    padding: 3px;
+}
+
+/* When grouped (mic active), drop borders on the non-toggle siblings so the outer
+   group frame looks unified. The #mic-toggle keeps its existing .mic-active styling. */
+.mic-group:has(#mic-toggle.mic-active) > :not(#mic-toggle) {
+    border-color: transparent;
+    background: transparent;
+}
+
 /* Generic icon button */
 .btn-icon {
     width: var(--tap-min);
