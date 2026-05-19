@@ -457,31 +457,31 @@
                         <input type="range" id="rl-pitch-mirror" class="rl-pitch-mirror" min="80" max="1000" value="220" step="1" aria-label="f₀ slider (mirror)">
                         <span class="rl-line-break"></span>
                         <span class="rl-term rl-term-roughness"><strong>Roughness</strong>: 隣接倍音が ERB 内で重なり buzzy（f₀ 依存・連続的）</span>
-                        <span class="rl-term rl-term-resolution"><strong>Resolution</strong>: ピッチに統合されるか（n&lt;9 かつ &lt;5 kHz なら統合）</span>
+                        <span class="rl-term rl-term-resolution"><strong>Resolution</strong>: ピッチに統合されるか（Hn&lt;9 かつ &lt;5 kHz なら統合）</span>
                     </div>
                     <div class="rl-zones">
                         <div class="rl-zone rl-pure">
                             <div class="rl-zone-head"><span class="rl-dot"></span><span class="rl-name">Pure &amp; Resolved</span></div>
-                            <div class="rl-cond">条件: f₀ &gt; ERB(n·f₀) かつ n &lt; 9</div>
+                            <div class="rl-cond">条件: f₀ &gt; ERB(Hn·f₀) かつ Hn &lt; 9</div>
                             <div class="rl-range" data-zone="pure">H1〜H—</div>
                             <div class="rl-desc">隣接倍音が ERB の外 → 一音ずつ分離して聞こえ、澄んだピッチ感を作る。</div>
                         </div>
                         <div class="rl-zone rl-rough-res">
                             <div class="rl-zone-head"><span class="rl-dot"></span><span class="rl-name">Rough &amp; Resolved</span></div>
-                            <div class="rl-cond">条件: f₀ ≤ ERB(n·f₀) かつ n ≤ 8</div>
+                            <div class="rl-cond">条件: f₀ ≤ ERB(Hn·f₀) かつ Hn ≤ 8</div>
                             <div class="rl-range" data-zone="rough-res">—</div>
                             <div class="rl-desc">ERB 内に隣接倍音が入り始めるが n≤8 → buzzy だがピッチに統合される（音色の濃さ）。</div>
                             <div class="rl-empty-note" data-zone="rough-res" style="display:none;"></div>
                         </div>
                         <div class="rl-zone rl-rough-unr">
                             <div class="rl-zone-head"><span class="rl-dot"></span><span class="rl-name">Rough &amp; Unresolved</span></div>
-                            <div class="rl-cond">条件: f₀ ≤ ERB(n·f₀) かつ n ≥ 9</div>
+                            <div class="rl-cond">条件: f₀ ≤ ERB(Hn·f₀) かつ Hn ≥ 9</div>
                             <div class="rl-range" data-zone="rough-unr">—</div>
                             <div class="rl-desc">ERB 重なり＋pitch dominance 外 → buzzy で<strong>ピッチに統合されない</strong>。ノイズ的にもにじむ。</div>
                         </div>
                         <div class="rl-zone rl-ceiling">
                             <div class="rl-zone-head"><span class="rl-dot"></span><span class="rl-name">Ceiling (&gt;5 kHz)</span></div>
-                            <div class="rl-cond">条件: n·f₀ ≥ 5000 Hz<br>＝ n ≥ ⌈5000/f₀⌉</div>
+                            <div class="rl-cond">条件: Hn·f₀ ≥ 5000 Hz<br>＝ Hn ≥ ⌈5000/f₀⌉</div>
                             <div class="rl-range" data-zone="ceiling">—</div>
                             <div class="rl-desc">pitch dominance region 外 → 聞こえるが音程判断に使われない。</div>
                         </div>
@@ -526,7 +526,7 @@
                                 <h4 class="rl-deep-h">分類は2軸の AND</h4>
                                 <ul class="rl-deep-list">
                                     <li><strong>Roughness 軸</strong>（f₀ 依存・連続的）— 隣接倍音が同じ ERB に入れば Rough。f₀ を変えると境界が動く。上端1段目の帯が対応。</li>
-                                    <li><strong>Resolution 軸</strong>（離散・固定）— n ≥ 9 の pitch dominance cutoff、および n·f₀ &gt; 5 kHz の天井。f₀ に依らず常に同じ境界。上端2段目の帯が対応。</li>
+                                    <li><strong>Resolution 軸</strong>（離散・固定）— Hn ≥ 9 の pitch dominance cutoff、および Hn·f₀ &gt; 5 kHz の天井。f₀ に依らず常に同じ境界。上端2段目の帯が対応。</li>
                                 </ul>
                                 <p class="rl-deep-p">この2軸を AND で重ねて Pure / Rough &amp; Resolved / Rough &amp; Unresolved / Ceiling の4ゾーンに分類。</p>
                             </section>
