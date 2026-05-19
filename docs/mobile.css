@@ -1034,24 +1034,23 @@ input[type="range"]::-moz-range-thumb {
 
 .tooltip::after {
     content: attr(data-tooltip);
-    position: absolute;
-    bottom: calc(100% + 8px);
-    left: 50%;
-    transform: translateX(-50%);
+    /* Fixed position banner just below the sticky header — same spot regardless of which [?] is tapped */
+    position: fixed;
+    top: calc(var(--top-bar-h) + var(--strip-h) + env(safe-area-inset-top) + 8px);
+    left: 12px;
+    right: 12px;
     background: var(--text-primary);
     color: #FCFAF3;
-    padding: 9px 11px;
+    padding: 10px 12px;
     border-radius: 8px;
-    font-size: 0.7rem;
+    font-size: 0.75rem;
     line-height: 1.55;
-    width: max-content;
-    max-width: 260px;
     white-space: pre-wrap;
     pointer-events: none;
     opacity: 0;
     visibility: hidden;
     transition: opacity 0.15s, visibility 0.15s;
-    z-index: 200;
+    z-index: 1000;
     box-shadow: var(--shadow-pop);
 }
 
