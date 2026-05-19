@@ -62,6 +62,7 @@ const state = {
     masterVolume: 0.5, // 0.0 to 1.0
     rdManual: null, // null = auto from P/R/mechanism, number = manual Rd override
     logScale: false, // Toggle for logarithmic frequency axis
+    roughnessVisible: false, // Toggle for roughness zone overlay (ERB + 5kHz ceiling)
     selectionActive: false,
     selectionMinFreq: 0,
     selectionMaxFreq: 0,
@@ -95,6 +96,9 @@ const els = {
     btnMicPause: document.getElementById('mic-pause'),
     btnSlopeLine: document.getElementById('slope-line-toggle'),
     btnLogScale: document.getElementById('log-scale-toggle'),
+    btnRoughness: document.getElementById('roughness-toggle'),
+    roughnessLegend: document.getElementById('roughness-legend'),
+    pitchMirror: document.getElementById('rl-pitch-mirror'),
     btnFullscreen: document.getElementById('spectrum-fullscreen-btn'),
     micMethodSelect: document.getElementById('mic-formant-method'),
     canvas: document.getElementById('spectrum-canvas'),
@@ -258,6 +262,52 @@ function calcHarmonicGainDb(harmonicNumber, mechanism, mode, airflow) {
 function dbToLinear(db) {
     return Math.pow(10, db / 20);
 }
+
+// --- Roughness / pitch-resolution helpers ---
+// Framework (Bozeman / PVA tradition):
+//   1. Is adjacent harmonic interval inside the auditory critical band (ERB)?
+//      No  → Pure & Resolved   (clear pitch, no buzz)
+//      Yes → further check harmonic number n:
+//           n ≤ 8 → Rough & Resolved   (buzzy but still pitch-integrated)
+//           n ≥ 9 → Rough & Unresolved (buzzy AND not pitch-integrated)
+//   2. n*f0 > 5 kHz → Ceiling (not used for pitch perception at all)
+const PITCH_CEILING_HZ = 5000;        // Pitch-dominance region cutoff (Plomp)
+const PITCH_INTEGRATION_LIMIT_N = 9;  // n ≥ 9 → no longer integrated into pitch percept
+
+// Glasberg & Moore (1990) ERB at center frequency f (Hz)
+function erbHz(f) {
+    return 24.7 * (4.37 * f / 1000 + 1);
+}
+
+// Lowest harmonic n where adjacent spacing f0 falls within ERB(n*f0)
+// → onset of "Rough" (Pure → Rough boundary)
+function computeResolvedLimit(f0) {
+    for (let n = 2; n <= 64; n++) {
+        if (f0 < erbHz(n * f0)) return n;
+    }
+    return Infinity;
+}
+
+// Returns one of: 'pure' | 'rough-res' | 'rough-unr' | 'ceiling'
+function classifyHarmonic(n, f0, nERB) {
+    if (n * f0 >= PITCH_CEILING_HZ) return 'ceiling';
+    if (n < nERB) return 'pure';
+    return n < PITCH_INTEGRATION_LIMIT_N ? 'rough-res' : 'rough-unr';
+}
+
+const ROUGH_ZONE_COLOR = {
+    'pure':       'rgba(33, 150, 243, 0.95)',
+    'rough-res':  'rgba(217, 125, 31, 0.95)',
+    'rough-unr':  'rgba(210, 69, 69, 0.95)',
+    'ceiling':    'rgba(140, 140, 140, 0.85)'
+};
+
+const ROUGH_ZONE_NAME = {
+    'pure':       'Pure & Resolved',
+    'rough-res':  'Rough & Resolved',
+    'rough-unr':  'Rough & Unresolved',
+    'ceiling':    'Ceiling (>5kHz)'
+};
 
 // Generate an audio buffer filled with white noise
 function createNoiseBuffer(ctx) {
@@ -1774,6 +1824,157 @@ function drawVisualizer() {
         const f0 = state.pitch;
         const searchRangeHz = f0 * 0.1; // Search +/- 10% around expected harmonic freq for the exact FFT bin peak
 
+        // Roughness overlay: two layered strips at top
+        //   Layer 1 (Roughness, ERB):  gradient blue → orange via f₀/ERB(f) ratio
+        //   Layer 2 (Resolution):      hard boundaries at H9*f₀ (Resolved→Unresolved) and 5 kHz (→Ceiling)
+        const roughOn = state.roughnessVisible;
+        const roughNERB = roughOn ? computeResolvedLimit(f0) : Infinity;
+        const roughNCeil = Math.floor(PITCH_CEILING_HZ / f0) + 1;
+
+        if (roughOn) {
+            const STRIP_GAP = 3;
+            const STRIP_H = 14;
+            const ROUGHNESS_Y = 6;
+            const RESOLUTION_Y = ROUGHNESS_Y + STRIP_H + STRIP_GAP;
+
+            // --- Layer 1: Roughness strip (gradient by f₀/ERB ratio) ---
+            // Color blend: t=0 (ratio≥1) → blue; t=1 (ratio→0) → orange
+            const PURE_RGB = [33, 150, 243];
+            const ROUGH_RGB = [217, 125, 31];
+            const colorAt = (f) => {
+                const erb = erbHz(Math.max(f, 1));
+                const ratio = f0 / erb;          // >1: pure / <1: rough
+                const t = Math.max(0, Math.min(1, 1 - ratio));
+                const r = Math.round(PURE_RGB[0] + (ROUGH_RGB[0] - PURE_RGB[0]) * t);
+                const g = Math.round(PURE_RGB[1] + (ROUGH_RGB[1] - PURE_RGB[1]) * t);
+                const b = Math.round(PURE_RGB[2] + (ROUGH_RGB[2] - PURE_RGB[2]) * t);
+                return `rgb(${r}, ${g}, ${b})`;
+            };
+            canvasCtx.save();
+            const step = 2; // 2-px resolution for the gradient strip
+            for (let px = 0; px < width; px += step) {
+                const f = (px / width) * MAX_FREQ_DISPLAY;
+                canvasCtx.fillStyle = colorAt(f);
+                canvasCtx.fillRect(px, ROUGHNESS_Y, step, STRIP_H);
+            }
+            // Strip outline
+            canvasCtx.strokeStyle = 'rgba(0, 0, 0, 0.18)';
+            canvasCtx.lineWidth = 1;
+            canvasCtx.strokeRect(0.5, ROUGHNESS_Y + 0.5, width - 1, STRIP_H - 1);
+            // Strip labels (Pure left, Rough right)
+            canvasCtx.font = 'bold 10px sans-serif';
+            canvasCtx.fillStyle = 'rgba(255,255,255,0.95)';
+            canvasCtx.textAlign = 'left';
+            canvasCtx.fillText('Roughness: Pure', 6, ROUGHNESS_Y + 10);
+            canvasCtx.textAlign = 'right';
+            canvasCtx.fillText('Rough', width - 6, ROUGHNESS_Y + 10);
+            canvasCtx.restore();
+
+            // --- Layer 2: Resolution strip (3 hard segments) ---
+            const xH9 = freqToX(Math.min(PITCH_INTEGRATION_LIMIT_N * f0, MAX_FREQ_DISPLAY), width);
+            const xCeil = freqToX(Math.min(PITCH_CEILING_HZ, MAX_FREQ_DISPLAY), width);
+            const segments = [
+                // [x0, x1, fill, label]
+                [0, Math.min(xH9, xCeil), 'rgba(46, 156, 100, 0.95)', 'Resolved (n<9)'],
+                [Math.min(xH9, xCeil), xCeil, 'rgba(210, 69, 69, 0.85)', 'Unresolved (n≥9)'],
+                [xCeil, width, 'rgba(140, 140, 140, 0.85)', 'Ceiling (>5kHz)']
+            ];
+            canvasCtx.save();
+            for (const [x0, x1, fill, label] of segments) {
+                if (x1 <= x0) continue;
+                canvasCtx.fillStyle = fill;
+                canvasCtx.fillRect(x0, RESOLUTION_Y, x1 - x0, STRIP_H);
+                // Segment label, only if wide enough
+                canvasCtx.font = 'bold 10px sans-serif';
+                const labelW = canvasCtx.measureText(label).width;
+                if (x1 - x0 > labelW + 12) {
+                    canvasCtx.fillStyle = 'rgba(255,255,255,0.95)';
+                    canvasCtx.textAlign = 'center';
+                    canvasCtx.fillText(label, (x0 + x1) / 2, RESOLUTION_Y + 10);
+                }
+            }
+            // Strip outline
+            canvasCtx.strokeStyle = 'rgba(0, 0, 0, 0.18)';
+            canvasCtx.lineWidth = 1;
+            canvasCtx.strokeRect(0.5, RESOLUTION_Y + 0.5, width - 1, STRIP_H - 1);
+            // Left margin label
+            canvasCtx.font = 'bold 10px sans-serif';
+            canvasCtx.fillStyle = 'rgba(255,255,255,0.95)';
+            canvasCtx.textAlign = 'left';
+            canvasCtx.fillText('Resolution:', 6, RESOLUTION_Y + 10);
+            canvasCtx.restore();
+
+            // Faint guides at H9*f₀ and 5kHz dropping down from strips into the spectrum
+            canvasCtx.save();
+            canvasCtx.setLineDash([3, 5]);
+            canvasCtx.lineWidth = 1;
+            if (PITCH_INTEGRATION_LIMIT_N * f0 < PITCH_CEILING_HZ && PITCH_INTEGRATION_LIMIT_N * f0 <= MAX_FREQ_DISPLAY) {
+                canvasCtx.strokeStyle = 'rgba(210, 69, 69, 0.35)';
+                canvasCtx.beginPath();
+                canvasCtx.moveTo(xH9, RESOLUTION_Y + STRIP_H);
+                canvasCtx.lineTo(xH9, height);
+                canvasCtx.stroke();
+            }
+            if (PITCH_CEILING_HZ <= MAX_FREQ_DISPLAY) {
+                canvasCtx.strokeStyle = 'rgba(140, 140, 140, 0.45)';
+                canvasCtx.beginPath();
+                canvasCtx.moveTo(xCeil, RESOLUTION_Y + STRIP_H);
+                canvasCtx.lineTo(xCeil, height);
+                canvasCtx.stroke();
+            }
+            canvasCtx.restore();
+
+            // Annotation in the empty area right of 5 kHz (under the Ceiling segment) — concise
+            if (PITCH_CEILING_HZ < MAX_FREQ_DISPLAY) {
+                canvasCtx.save();
+                canvasCtx.textAlign = 'left';
+                const annoX = Math.round(xCeil + 6);
+                const annoY1 = Math.round(RESOLUTION_Y + STRIP_H + 14);
+                canvasCtx.fillStyle = 'rgba(60, 60, 60, 1)';
+                canvasCtx.font = 'bold 12px sans-serif';
+                canvasCtx.fillText('├──┤ = ERB(n·f₀)', annoX, annoY1);
+                canvasCtx.fillStyle = 'rgba(110, 110, 110, 1)';
+                canvasCtx.font = '10px sans-serif';
+                canvasCtx.fillText('耳が1音にまとめちゃう幅', annoX, annoY1 + 13);
+                canvasCtx.fillStyle = 'rgba(60, 60, 60, 1)';
+                canvasCtx.font = '11px sans-serif';
+                canvasCtx.fillText('重なり = Rough', annoX, annoY1 + 28);
+                canvasCtx.restore();
+            }
+
+            // ERB-width markers: thin black lines, staircase descending left→right (1 step per H)
+            const ERB_BAR_Y_BASE = RESOLUTION_Y + STRIP_H + 6;
+            const ERB_Y_STEP = 5;
+            const maxH = Math.min(64, Math.floor(MAX_FREQ_DISPLAY / f0));
+            canvasCtx.save();
+            canvasCtx.strokeStyle = 'rgba(0, 0, 0, 0.85)';
+            canvasCtx.lineWidth = 1;
+            for (let n = 1; n <= maxH; n++) {
+                const freq = n * f0;
+                if (freq > MAX_FREQ_DISPLAY) break;
+                const erb = erbHz(freq);
+                const xLeft = freqToX(Math.max(freq - erb / 2, 1), width);
+                const xRight = freqToX(freq + erb / 2, width);
+                const y = ERB_BAR_Y_BASE + (n - 1) * ERB_Y_STEP;
+                canvasCtx.beginPath();
+                canvasCtx.moveTo(xLeft, y);
+                canvasCtx.lineTo(xRight, y);
+                canvasCtx.stroke();
+                // Tick caps
+                canvasCtx.beginPath();
+                canvasCtx.moveTo(xLeft, y - 2);
+                canvasCtx.lineTo(xLeft, y + 2);
+                canvasCtx.moveTo(xRight, y - 2);
+                canvasCtx.lineTo(xRight, y + 2);
+                canvasCtx.stroke();
+            }
+            canvasCtx.restore();
+
+
+            canvasCtx.font = '10px monospace';
+            canvasCtx.textAlign = 'center';
+        }
+
         for (let h = 1; (f0 * h) <= MAX_FREQ_DISPLAY && h <= MAX_HARMONICS_ON_SPECTRUM; h++) {
             const expectedFreq = f0 * h;
 
@@ -1803,6 +2004,8 @@ function drawVisualizer() {
 
                 if (state.selectionActive && (expectedFreq < state.selectionMinFreq || expectedFreq > state.selectionMaxFreq)) {
                     canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+                } else if (roughOn) {
+                    canvasCtx.fillStyle = ROUGH_ZONE_COLOR[classifyHarmonic(h, f0, roughNERB)];
                 } else {
                     canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.85)';
                 }
@@ -1906,10 +2109,11 @@ function drawVisualizer() {
             canvasCtx.stroke();
             canvasCtx.setLineDash([]);
 
-            // Label
+            // Label (placed below two-strip roughness band when ON, otherwise near top)
             canvasCtx.fillStyle = color;
             canvasCtx.font = '12px monospace';
-            canvasCtx.fillText(label, cx - 10, 20);
+            const fRxY = state.roughnessVisible ? 74 : 20;
+            canvasCtx.fillText(label, cx - 10, fRxY);
         };
 
         drawFormantEnvelope(state.formants.f1.freq, state.formants.f1.q, 'fR1', '#D24545', state.formants.f1.enabled); // Red
@@ -2243,14 +2447,28 @@ if (els.voiceTypeSelect && els.voiceTypeSelect.tagName === 'SELECT') {
     els.voiceTypeSelect.addEventListener('change', (e) => applyVoiceType(e.target.value));
 }
 
-els.pitchSlider.addEventListener('input', (e) => {
-    state.pitch = parseFloat(e.target.value);
+function applyPitchChange(newPitch) {
+    state.pitch = newPitch;
     els.pitchVal.textContent = state.pitch;
     els.pitchNote.textContent = freqToNote(state.pitch);
     autoSyncVoiceTypeFromPitch(state.pitch);
     updateSourceParams();
     analyzeAcoustics();
+    updateRoughnessReadout();
+    // Keep both sliders in sync without firing each other's input events
+    if (els.pitchSlider.value !== String(state.pitch)) els.pitchSlider.value = state.pitch;
+    if (els.pitchMirror && els.pitchMirror.value !== String(state.pitch)) els.pitchMirror.value = state.pitch;
+}
+
+els.pitchSlider.addEventListener('input', (e) => {
+    applyPitchChange(parseFloat(e.target.value));
 });
+
+if (els.pitchMirror) {
+    els.pitchMirror.addEventListener('input', (e) => {
+        applyPitchChange(parseFloat(e.target.value));
+    });
+}
 
 els.pressureSlider.addEventListener('input', (e) => {
     state.pressure = parseFloat(e.target.value);
@@ -2373,6 +2591,68 @@ els.btnSlopeLine.addEventListener('click', () => {
     state.showSlopeLine = !state.showSlopeLine;
     els.btnSlopeLine.classList.toggle('slope-line-active', state.showSlopeLine);
 });
+
+// Roughness overlay toggle: show/hide educational legend + populate zone ranges
+function formatHarmonicRange(fromN, toN) {
+    if (toN < fromN) return '(該当なし)';
+    if (fromN === toN) return `H${fromN}`;
+    return `H${fromN}〜H${toN}`;
+}
+
+function updateRoughnessReadout() {
+    const visible = state.roughnessVisible;
+    if (els.roughnessLegend) {
+        els.roughnessLegend.style.display = visible ? '' : 'none';
+    }
+    if (!visible || !els.roughnessLegend) return;
+
+    const f0 = state.pitch;
+    const nERB = computeResolvedLimit(f0);
+    const ceilN = Math.floor(PITCH_CEILING_HZ / f0) + 1;
+
+    // Header: current f₀ + sync mirror slider
+    const f0El = els.roughnessLegend.querySelector('#rl-f0');
+    if (f0El) f0El.textContent = `${Math.round(f0)} Hz (${freqToNote(f0)})`;
+    if (els.pitchMirror && els.pitchMirror.value !== String(Math.round(f0))) {
+        els.pitchMirror.value = Math.round(f0);
+    }
+
+    const pureEnd = isFinite(nERB) ? nERB - 1 : ceilN - 1;
+    const roughResStart = isFinite(nERB) ? nERB : Infinity;
+    const roughResEnd = Math.min(PITCH_INTEGRATION_LIMIT_N - 1, ceilN - 1);
+    const roughUnrStart = Math.max(isFinite(nERB) ? nERB : Infinity, PITCH_INTEGRATION_LIMIT_N);
+    const roughUnrEnd = ceilN - 1;
+
+    const setRange = (zone, text) => {
+        const el = els.roughnessLegend.querySelector(`.rl-range[data-zone="${zone}"]`);
+        if (el) el.textContent = text;
+    };
+    setRange('pure', formatHarmonicRange(1, pureEnd));
+
+    const roughResEmpty = !isFinite(roughResStart) || roughResStart > roughResEnd;
+    setRange('rough-res', roughResEmpty ? '(該当なし)' : formatHarmonicRange(roughResStart, roughResEnd));
+
+    const emptyNote = els.roughnessLegend.querySelector('.rl-empty-note[data-zone="rough-res"]');
+    if (emptyNote) {
+        if (roughResEmpty) {
+            emptyNote.innerHTML = `現在の f₀ (${Math.round(f0)} Hz) では ERB 幅 ≥ f₀ となるのが H${PITCH_INTEGRATION_LIMIT_N} 以降のため該当なし。<br>f₀ を <strong>≈ 120 Hz 以下</strong>（例: 80 Hz バス域）に下げると、H6–H8 がここに現れます。Bozeman 教科書の「H5–H8 = Rough &amp; Resolved」は低音前提の近似。`;
+            emptyNote.style.display = '';
+        } else {
+            emptyNote.style.display = 'none';
+        }
+    }
+
+    setRange('rough-unr', isFinite(roughUnrStart) ? formatHarmonicRange(roughUnrStart, roughUnrEnd) : '(該当なし)');
+    setRange('ceiling', `H${ceilN}↑ (= ⌈5000/${Math.round(f0)}⌉)`);
+}
+
+if (els.btnRoughness) {
+    els.btnRoughness.addEventListener('click', () => {
+        state.roughnessVisible = !state.roughnessVisible;
+        els.btnRoughness.classList.toggle('roughness-active', state.roughnessVisible);
+        updateRoughnessReadout();
+    });
+}
 
 // Log/Linear Frequency Scale Toggle
 if (els.btnLogScale) {

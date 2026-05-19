@@ -145,6 +145,13 @@ header p {
     padding: 16px 20px;
 }
 
+/* When Roughness legend is open, drop sticky so the (now tall) panel scrolls normally
+   with the page — otherwise it stays glued to the viewport top and blocks the f₀ slider below. */
+.visualizer-panel:has(#roughness-toggle.roughness-active) {
+    position: relative;
+    top: auto;
+}
+
 /* Controls */
 .control-group,
 .formant-control {
@@ -1235,10 +1242,314 @@ input[type=range]::-webkit-slider-thumb:hover {
 .btn.slope-line-active,
 .inline-toggle-btn.slope-line-active,
 .btn.log-active,
-.axis-scale-btn.log-active {
+.axis-scale-btn.log-active,
+.inline-toggle-btn.roughness-active {
     background-color: var(--accent-color);
     color: #fff;
     border-color: var(--accent-color);
+}
+
+/* Roughness educational legend below spectrum */
+.roughness-legend {
+    margin-top: 12px;
+    padding: 12px 14px;
+    background: var(--bg-soft);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    font-size: 0.78rem;
+    color: var(--text-primary);
+}
+.rl-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 10px;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px dashed var(--glass-border);
+}
+.rl-header-label {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+}
+.rl-f0 {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-weight: 700;
+    font-size: 0.92rem;
+    color: var(--accent-color);
+}
+.rl-erb-block {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.75rem;
+    color: var(--text-primary);
+    background: rgba(33, 150, 243, 0.08);
+    border: 1px solid rgba(33, 150, 243, 0.25);
+    padding: 3px 8px;
+    border-radius: 5px;
+    line-height: 1.4;
+}
+.rl-erb-block .rl-erb-key {
+    color: var(--text-secondary);
+    margin-right: 4px;
+}
+.rl-erb-block .rl-erb-val {
+    font-weight: 700;
+}
+.rl-erb-block .rl-erb-sep {
+    color: var(--text-secondary);
+    margin: 0 8px;
+    opacity: 0.5;
+}
+.rl-pitch-mirror {
+    flex: 0 0 180px;
+    height: 4px;
+    margin: 0 0 0 14px;  /* nudged right */
+}
+.rl-line-break {
+    flex-basis: 100%;
+    height: 0;
+}
+.rl-term {
+    font-size: 0.72rem;
+    line-height: 1.4;
+    padding: 3px 8px;
+    border-radius: 5px;
+    color: var(--text-primary);
+    background: rgba(0, 0, 0, 0.04);
+    border: 1px solid var(--glass-border);
+}
+.rl-term strong {
+    font-weight: 700;
+}
+.rl-term-roughness strong { color: #d97d1f; }
+.rl-term-resolution strong { color: #2e9c64; }
+.rl-header-hint {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    margin-left: auto;
+    white-space: nowrap;
+}
+.rl-zones {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+}
+.rl-zone {
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.5);
+    border-left: 3px solid transparent;
+    line-height: 1.45;
+}
+.rl-zone-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+.rl-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+}
+.rl-name {
+    font-weight: 700;
+    font-size: 0.82rem;
+}
+.rl-cond {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    background: rgba(0,0,0,0.04);
+    padding: 3px 6px;
+    border-radius: 4px;
+    margin-bottom: 4px;
+    line-height: 1.4;
+}
+.rl-range {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+.rl-desc {
+    font-size: 0.74rem;
+    color: var(--text-secondary);
+}
+.rl-empty-note {
+    margin-top: 6px;
+    padding: 6px 8px;
+    background: rgba(217, 125, 31, 0.08);
+    border: 1px dashed rgba(217, 125, 31, 0.4);
+    border-radius: 5px;
+    font-size: 0.7rem;
+    color: #8b5a1f;
+    line-height: 1.5;
+}
+.rl-pure       { border-left-color: rgba(33, 150, 243, 0.95); }
+.rl-pure       .rl-dot, .rl-pure .rl-name { color: #2196f3; }
+.rl-pure       .rl-dot { background: #2196f3; }
+.rl-rough-res  { border-left-color: rgba(217, 125, 31, 0.95); }
+.rl-rough-res  .rl-dot, .rl-rough-res .rl-name { color: #d97d1f; }
+.rl-rough-res  .rl-dot { background: #d97d1f; }
+.rl-rough-unr  { border-left-color: rgba(210, 69, 69, 0.95); }
+.rl-rough-unr  .rl-dot, .rl-rough-unr .rl-name { color: #d24545; }
+.rl-rough-unr  .rl-dot { background: #d24545; }
+.rl-ceiling    { border-left-color: rgba(120, 120, 120, 0.95); }
+.rl-ceiling    .rl-dot, .rl-ceiling .rl-name { color: #888; }
+.rl-ceiling    .rl-dot { background: #888; }
+.rl-interval-table {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--glass-border);
+}
+.rl-interval-title {
+    font-size: 0.74rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+.rl-interval-grid {
+    display: grid;
+    grid-template-columns: repeat(10, minmax(0, 1fr));
+    gap: 4px;
+}
+.rl-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 4px 2px;
+    background: rgba(0,0,0,0.03);
+    border-radius: 4px;
+    font-size: 0.68rem;
+    line-height: 1.3;
+}
+.rl-cell-edge {
+    background: rgba(217, 125, 31, 0.12);
+    border: 1px solid rgba(217, 125, 31, 0.35);
+}
+.rl-cell-h {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    color: var(--text-secondary);
+    font-size: 0.62rem;
+}
+.rl-cell-c {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-size: 0.78rem;
+}
+.rl-cell-n {
+    font-size: 0.62rem;
+    color: var(--text-secondary);
+}
+@media (max-width: 900px) {
+    .rl-interval-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
+/* "詳細解説" collapsible */
+.rl-deep {
+    margin-top: 12px;
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    overflow: hidden;
+}
+.rl-deep-summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 8px 12px;
+    background: rgba(0, 0, 0, 0.03);
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.15s;
+}
+.rl-deep-summary::-webkit-details-marker { display: none; }
+.rl-deep-summary::before {
+    content: "▸";
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    transition: transform 0.2s;
+    display: inline-block;
+}
+.rl-deep[open] > .rl-deep-summary::before { transform: rotate(90deg); }
+.rl-deep-summary:hover { background: rgba(0, 0, 0, 0.05); }
+.rl-deep-body {
+    padding: 10px 14px 12px;
+    background: rgba(255, 255, 255, 0.4);
+    border-top: 1px solid var(--glass-border);
+}
+.rl-deep-section + .rl-deep-section {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--glass-border);
+}
+.rl-deep-h {
+    margin: 0 0 6px 0;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+.rl-deep-list {
+    margin: 0 0 6px 0;
+    padding-left: 18px;
+    font-size: 0.74rem;
+    color: var(--text-primary);
+    line-height: 1.55;
+}
+.rl-deep-list li { margin-bottom: 4px; }
+.rl-deep-list li:last-child { margin-bottom: 0; }
+.rl-deep-p {
+    margin: 0 0 5px 0;
+    font-size: 0.74rem;
+    color: var(--text-primary);
+    line-height: 1.55;
+}
+.rl-deep-p:last-child { margin-bottom: 0; }
+.rl-deep-meta {
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+}
+.rl-deep-body code {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    background: rgba(0, 0, 0, 0.05);
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 0.78rem;
+}
+@media (max-width: 900px) {
+    .rl-zones { grid-template-columns: repeat(2, 1fr); }
+}
+
+
+/* Slope: small inner pill inside its canvas-control-group */
+#slope-line-toggle {
+    padding: 4px 14px;
+    font-size: 0.78rem;
+    line-height: 1.4;
+    min-width: 60px;
+    text-align: center;
+}
+
+/* Rough: standalone pill sized to match Volume/Slope group outer height */
+#roughness-toggle {
+    padding: 8px 22px;
+    font-size: 0.78rem;
+    line-height: 1.4;
+    min-width: 76px;
+    text-align: center;
+}
+
+/* Rough wrapper: drop the outer pill so the button itself is the single visible layer */
+.canvas-control-group:has(#roughness-toggle) {
+    background: transparent;
+    border-color: transparent;
+    padding: 0;
 }
 
 /* Inline toggle inside canvas-control-group */
@@ -1265,8 +1576,8 @@ input[type=range]::-webkit-slider-thumb:hover {
 /* Log toggle floating on canvas, near X-axis */
 .axis-scale-btn {
     position: absolute;
-    top: 8px;
-    left: 8px;
+    bottom: 22px;
+    right: 8px;
     background: var(--bg-elev);
     border: 1px solid var(--glass-border);
     color: var(--text-secondary);
