@@ -37,7 +37,7 @@ let micAnalyser = null;
 
 // --- Environment ---
 const IS_MOBILE = location.pathname.endsWith('mobile.html');
-const HARMONIC_LABEL = (h) => IS_MOBILE ? `H${h}` : `${h}fo`;
+const HARMONIC_LABEL = (h) => `H${h}`;
 const MAX_HARMONICS_ON_SPECTRUM = IS_MOBILE ? 10 : Infinity;
 
 // --- State Variables ---
@@ -2082,7 +2082,6 @@ els.btnMic.addEventListener('click', async () => {
             const svgPause = '<svg viewBox="0 0 24 24" width="' + (isMobilePage ? 20 : 12) + '" height="' + (isMobilePage ? 20 : 12) + '" fill="currentColor" style="vertical-align: ' + (isMobilePage ? 'top' : '-1px') + '; ' + (isMobilePage ? '' : 'margin-right: 4px;') + '"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>';
             els.btnMicPause.innerHTML = isMobilePage ? svgPause : `${svgPause}Pause`;
         }
-        if (!isMobilePage) els.btnMic.textContent = 'Mic: OFF';
     } else {
         // Request permissions and start
         try {
@@ -2135,7 +2134,6 @@ els.btnMic.addEventListener('click', async () => {
             if (els.btnMicPause) {
                 els.btnMicPause.style.display = 'inline-flex';
             }
-            if (!isMobilePage) els.btnMic.textContent = 'Mic: ON';
 
             // Kick off visualizer if it wasn't already running
             if (!isPlaying) {

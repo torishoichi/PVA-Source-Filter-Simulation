@@ -991,6 +991,17 @@ input[type=range]::-webkit-slider-thumb:hover {
     border-color: var(--vivid-red);
 }
 
+/* Icon-only Mic toggle (PC) — square button matching .btn-sm height */
+.btn-mic-icon {
+    padding: 4px !important;
+    width: 30px;
+    height: 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+
 .btn.mic-active:hover {
     background-color: #B83838;
     border-color: #B83838;
