@@ -518,12 +518,6 @@ input[type=range]::-webkit-slider-thumb:hover {
 }
 .phonation-summary-badge {
     margin-left: auto;
-    transition: opacity 0.15s;
-}
-/* When phonation is OPEN, hide summary badge (the inner one is shown) */
-.phonation-subsection[open] > .collapsible-summary .phonation-summary-badge {
-    opacity: 0;
-    pointer-events: none;
 }
 
 .status-row {
@@ -1164,7 +1158,9 @@ input[type=range]::-webkit-slider-thumb:hover {
     gap: 8px;
 }
 
-.mic-group:has(#mic-toggle.mic-active) .mic-controls {
+/* mic-toggle is now in canvas-primary-actions (sibling of mic-controls' grandparent),
+   so query at the canvas-header level which is the common ancestor */
+.canvas-header:has(#mic-toggle.mic-active) .mic-controls {
     display: inline-flex;
 }
 
