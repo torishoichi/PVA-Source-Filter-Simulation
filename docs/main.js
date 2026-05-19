@@ -2289,7 +2289,7 @@ els.micGainSlider.addEventListener('input', (e) => {
 
 els.spectrumSlopeSlider.addEventListener('input', (e) => {
     state.spectrumSlope = parseFloat(e.target.value);
-    els.slopeVal.textContent = state.spectrumSlope + 'dB';
+    if (els.slopeVal) els.slopeVal.textContent = state.spectrumSlope + 'dB';
     updateSpectralTilt();
 });
 

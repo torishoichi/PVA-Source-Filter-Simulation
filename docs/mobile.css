@@ -221,52 +221,47 @@ body {
     z-index: 95;
     display: flex;
     align-items: center;
-    gap: 10px;
+    justify-content: space-between;
+    gap: 6px;
     height: var(--strip-h);
-    padding: 0 12px;
+    padding: 0 10px;
     background: rgba(252, 250, 243, 0.94);
     backdrop-filter: blur(14px) saturate(140%);
     -webkit-backdrop-filter: blur(14px) saturate(140%);
     border-bottom: 1px solid var(--glass-border);
-    overflow-x: auto;
-    overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-}
-
-.acoustic-strip::-webkit-scrollbar {
-    display: none;
+    overflow: hidden;
 }
 
 .strip-item {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: 4px;
     color: var(--text-secondary);
     white-space: nowrap;
-    flex-shrink: 0;
+    flex: 0 0 auto;
 }
 
 .strip-label {
     color: var(--text-muted);
     font-weight: 500;
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     letter-spacing: -0.01em;
 }
 
-/* PC-matched prominent badge inside the strip */
-.acoustic-strip .status-badge {
-    font-size: 0.8rem;
-    padding: 4px 11px;
-    font-weight: 700;
-    border-radius: 8px;
-    min-width: 52px;
-    text-align: center;
-    line-height: 1.25;
+.acoustic-strip .tooltip {
+    font-size: 0.55rem;
+    padding: 0;
 }
 
-.acoustic-strip .tooltip {
-    font-size: 0.7rem;
+/* PC-matched prominent badge inside the strip — fixed width keeps layout stable across state changes */
+.acoustic-strip .status-badge {
+    font-size: 0.72rem;
+    padding: 3px 0;
+    width: 54px;
+    font-weight: 700;
+    border-radius: 7px;
+    text-align: center;
+    line-height: 1.25;
 }
 
 /* Event flash overlays the Auto toggle area when triggered */
