@@ -338,7 +338,8 @@ function initAudio() {
     vibratoAMGain.gain.value = 0;
     vibratoLFO.connect(vibratoFMGain);
     vibratoLFO.connect(vibratoAMGain);
-    vibratoAMGain.connect(masterGain.gain); // AM rides on masterGain
+    vibratoAMGain.connect(masterGain.gain); // AM rides on masterGain (audio)
+    vibratoAMGain.connect(visMasterGain.gain); // AM also rides on visMasterGain (spectrum)
     vibratoLFO.start();
 
     updateFilterParams();
@@ -562,8 +563,11 @@ function calcAerodynamics() {
 
     // Update UI
     els.airflowVal.textContent = state.airflow.toFixed(2);
-    els.modeStatus.textContent = state.phonationMode.charAt(0).toUpperCase() + state.phonationMode.slice(1);
-    els.modeStatus.className = `status-badge ${state.phonationMode}`;
+    const phonationLabel = state.phonationMode.charAt(0).toUpperCase() + state.phonationMode.slice(1);
+    document.querySelectorAll('.phonation-mode-badge').forEach(el => {
+        el.textContent = phonationLabel;
+        el.className = `status-badge phonation-mode-badge ${state.phonationMode}`;
+    });
 
     // Update intensity
     if (isPlaying && masterGain && audioCtx) {
@@ -2159,67 +2163,86 @@ if (els.btnMicPause) {
 }
 
 // Source Controls
-els.voiceTypeSelect.addEventListener('change', (e) => {
-    state.voiceType = e.target.value;
-    isPresetLoading = true; // Prevent acoustic triggers from overriding our intentional reset
+// Natural pitch range per voice type (PVA convention)
+const VOICE_TYPE_RANGES = {
+    treble:    { min: 260, max: 1000, defaultPitch: 440, defaultMech: 'm2' },
+    nontreble: { min: 80,  max: 500,  defaultPitch: 220, defaultMech: 'm1' },
+};
 
-    if (state.voiceType === 'treble') {
-        // Treble Voice Model Defaults
-        els.pitchSlider.min = 260; // ~C4
-        els.pitchSlider.max = 1000; // ~C6
+function updatePitchRangeHint() {
+    const pitchRangeEl = document.getElementById('pitch-range');
+    if (!pitchRangeEl) return;
+    const r = VOICE_TYPE_RANGES[state.voiceType];
+    pitchRangeEl.textContent = `${freqToNote(r.min)} – ${freqToNote(r.max)}`;
+}
 
-        // Prototypical Treble State: High pitch (A4), naturally tuned to Whoop/M2
-        state.pitch = 440;
-        els.pitchSlider.value = 440;
+// Called when user explicitly clicks Voice Type toggle — resets to preset
+function applyVoiceType(value) {
+    state.voiceType = value;
+    isPresetLoading = true;
 
-        // Reset F1 to a neutral 500Hz
-        state.formants.f1.freq = 500;
-        els.f1Slider.value = 500;
+    const r = VOICE_TYPE_RANGES[value];
+    state.pitch = r.defaultPitch;
+    els.pitchSlider.value = r.defaultPitch;
 
-        // Inherently forced to M2 at this pitch for Treble
+    state.formants.f1.freq = 500;
+    els.f1Slider.value = 500;
+
+    if (r.defaultMech === 'm2') {
         els.mechM2.checked = true; state.mechanism = 'm2';
-        state.phonationMode = 'flow';
-        els.resistanceSlider.value = 1.0; state.resistance = 1.0;
-        els.pressureSlider.value = 1.0; state.pressure = 1.0;
-
     } else {
-        // Non-Treble Voice Model Defaults
-        els.pitchSlider.min = 80; // ~E2
-        els.pitchSlider.max = 500; // ~B4
-
-        // Prototypical Non-Treble State: Low pitch (A3), preparing for Yell/M1
-        state.pitch = 220;
-        els.pitchSlider.value = 220;
-
-        // Reset F1 to a neutral 500Hz
-        state.formants.f1.freq = 500;
-        els.f1Slider.value = 500;
-
-        // Inherently comfortable in M1
         els.mechM1.checked = true; state.mechanism = 'm1';
-        state.phonationMode = 'flow';
-        els.resistanceSlider.value = 1.0; state.resistance = 1.0;
-        els.pressureSlider.value = 1.0; state.pressure = 1.0;
     }
+    state.phonationMode = 'flow';
+    els.resistanceSlider.value = 1.0; state.resistance = 1.0;
+    els.pressureSlider.value = 1.0; state.pressure = 1.0;
 
-    // UI Updates
     els.pitchVal.textContent = state.pitch;
     els.pitchNote.textContent = freqToNote(state.pitch);
     els.f1Val.textContent = state.formants.f1.freq;
     els.resistanceVal.textContent = state.resistance.toFixed(1);
     els.pressureVal.textContent = state.pressure.toFixed(1);
+    updatePitchRangeHint();
 
     updateSourceParams();
     updateFilterParams();
 
     isPresetLoading = false;
-    analyzeAcoustics(); // Trigger acoustics with new prototypical baseline
+    analyzeAcoustics();
+}
+
+// Auto-sync Voice Type radio when pitch slider crosses into exclusive zone.
+// Does NOT trigger applyVoiceType (no preset reset) — only updates the indicator.
+function autoSyncVoiceTypeFromPitch(pitch) {
+    let newType = state.voiceType;
+    if (pitch >= 500) newType = 'treble';
+    else if (pitch < 260) newType = 'nontreble';
+    // overlap zone (260 <= pitch < 500): keep current
+
+    if (newType === state.voiceType) return;
+    state.voiceType = newType;
+    document.querySelectorAll('input[name="voice-type"]').forEach(r => {
+        r.checked = (r.value === newType);
+    });
+    if (els.voiceTypeSelect && els.voiceTypeSelect.tagName === 'SELECT') {
+        els.voiceTypeSelect.value = newType;
+    }
+    updatePitchRangeHint();
+}
+
+// PC: radio group; Mobile: <select>. Both routed through applyVoiceType.
+document.querySelectorAll('input[name="voice-type"]').forEach(r => {
+    r.addEventListener('change', (e) => { if (e.target.checked) applyVoiceType(e.target.value); });
 });
+if (els.voiceTypeSelect && els.voiceTypeSelect.tagName === 'SELECT') {
+    els.voiceTypeSelect.addEventListener('change', (e) => applyVoiceType(e.target.value));
+}
 
 els.pitchSlider.addEventListener('input', (e) => {
     state.pitch = parseFloat(e.target.value);
     els.pitchVal.textContent = state.pitch;
     els.pitchNote.textContent = freqToNote(state.pitch);
+    autoSyncVoiceTypeFromPitch(state.pitch);
     updateSourceParams();
     analyzeAcoustics();
 });
@@ -2611,6 +2634,7 @@ els.canvas.addEventListener('touchcancel', handleCanvasInteraction);
 
 // Init notes & analysis
 els.pitchNote.textContent = freqToNote(state.pitch);
+updatePitchRangeHint();
 analyzeAcoustics();
 drawGlottalWaveform(); // Initial render
 

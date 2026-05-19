@@ -26,22 +26,25 @@
         <main class="dashboard">
             <!-- Source Panel -->
             <section class="panel source-panel glass">
-                <div class="panel-header-row">
-                    <h2>The Voice Source</h2>
-                    <label for="voice-type-select">Voice Type Profile <span class="tooltip"
-                            data-tooltip="トレブルボイス（ソプラノ、アルト、カウンターテナー等）か非トレブルボイス（テノール、バス等）かの区分です。トレブルボイスは音域が高いため共鳴に利用できる倍音が少なく、より早い段階でWhoopモード（fR1:1fo）に依存します。非トレブルボイスは音域が低く、低・中音域に多くの倍音を持つため、ターンオーバー（fR1:2fo交差）が主要な音響イベントとなります。">[?]</span></label>
-                    <select id="voice-type-select" class="voice-type-select">
-                        <option value="treble">Treble Voice</option>
-                        <option value="nontreble" selected>Non-Treble Voice</option>
-                    </select>
-                </div>
+                <h2>The Voice Source</h2>
                 <div class="control-group">
-                    <label for="pitch-slider">
-                        Fundamental Frequency (f₀) <span class="tooltip"
-                            data-tooltip="意図されたピッチ（音高）に相当する基本周波数です（PVA内では1foと表記）。この基本周波数の整数倍として倍音（2fo, 3fo...）が生成され、f0が高くなるほど倍音同士の周波数間隔は広くなります。">[?]</span>
-                        <span id="pitch-val">220</span> Hz
-                    </label>
-                    <input type="range" id="pitch-slider" min="50" max="1000" value="220" step="1">
+                    <div class="pitch-header">
+                        <label for="pitch-slider" class="label-main">
+                            Fundamental Frequency (f₀) <span class="tooltip"
+                                data-tooltip="意図されたピッチ（音高）に相当する基本周波数です（PVA内では1foと表記）。この基本周波数の整数倍として倍音（2fo, 3fo...）が生成され、f0が高くなるほど倍音同士の周波数間隔は広くなります。">[?]</span>
+                            <span id="pitch-val">220</span> Hz
+                        </label>
+                        <div class="pitch-meta">
+                            <div class="voice-type-compact" role="group" aria-label="Voice Type">
+                                <input type="radio" id="voice-type-nontreble" name="voice-type" value="nontreble" checked>
+                                <label for="voice-type-nontreble">Non-Treble</label>
+                                <input type="radio" id="voice-type-treble" name="voice-type" value="treble">
+                                <label for="voice-type-treble">Treble</label>
+                            </div>
+                            <span class="range-hint" id="pitch-range">E2 – B4</span>
+                        </div>
+                    </div>
+                    <input type="range" id="pitch-slider" min="80" max="1000" value="220" step="1">
                     <div class="notes-display" id="pitch-note">A3</div>
                     <div class="hint">歌う音の高さ。数字が大きいほど高い</div>
                 </div>
@@ -58,36 +61,40 @@
                     <div class="hint">M1=地声系（張りのある音）/ M2=裏声系（柔らかく抜ける音）</div>
                 </div>
 
-                <div class="control-group">
-                    <label for="pressure-slider">
-                        Subglottal Pressure (P) <span class="tooltip"
-                            data-tooltip="声門間圧力差（呼気圧）。気管内（声帯の下）と声道（声帯の上）の圧力差であり、声帯を振動させるための駆動力となります。">[?]</span>
-                        <span id="pressure-val">1.0</span>
-                    </label>
-                    <input type="range" id="pressure-slider" min="0.3" max="2.5" value="1.0" step="0.1">
-                    <div class="hint">息を押し出す強さ。強いほど音量・鋭さが増す</div>
-                </div>
+                <div class="subsection phonation-subsection">
+                    <h3 class="subsection-title">Phonation</h3>
 
-                <div class="control-group">
-                    <label for="resistance-slider">
-                        Glottal Resistance (R) <span class="tooltip"
-                            data-tooltip="声門抵抗。気流の圧力に対して、有能な声帯閉鎖を達成・維持するために必要な力であり、振動組織の衝突力を決定します。">[?]</span>
-                        <span id="resistance-val">1.0</span>
-                    </label>
-                    <input type="range" id="resistance-slider" min="0.3" max="2.5" value="1.0" step="0.1">
-                    <div class="hint">声帯の閉じ具合。強いほど芯のある音、弱いと息漏れ</div>
-                </div>
-
-                <div class="status-panel glass-dark">
-                    <div class="status-row">
-                        <span>Airflow (U = P/R): <span class="tooltip"
-                                data-tooltip="気流量。呼気圧（P）と声門抵抗（R）の力学的なバランスの結果として生じる媒介的な値です。">[?]</span></span>
-                        <span id="airflow-val" class="mono">1.00</span>
+                    <div class="control-group">
+                        <label for="pressure-slider">
+                            Subglottal Pressure (P) <span class="tooltip"
+                                data-tooltip="声門間圧力差（呼気圧）。気管内（声帯の下）と声道（声帯の上）の圧力差であり、声帯を振動させるための駆動力となります。">[?]</span>
+                            <span id="pressure-val">1.0</span>
+                        </label>
+                        <input type="range" id="pressure-slider" min="0.3" max="2.5" value="1.0" step="0.1">
+                        <div class="hint">息を押し出す強さ。強いほど音量・鋭さが増す</div>
                     </div>
-                    <div class="status-row">
-                        <span>Phonation Mode: <span class="tooltip"
-                                data-tooltip="圧力、気流、声門抵抗のバランスによる発声状態の分類です。これらが均衡した「フロー発声」、抵抗が過剰な「圧迫発声（Pressed）」、気流が過剰な「息漏れ発声（Breathy）」に分かれ、生成される波形の倍音の強さ（スペクトルスロープ）やノイズ比率に影響を与えます。">[?]</span></span>
-                        <span id="mode-status" class="status-badge flow">Flow</span>
+
+                    <div class="control-group">
+                        <label for="resistance-slider">
+                            Glottal Resistance (R) <span class="tooltip"
+                                data-tooltip="声門抵抗。気流の圧力に対して、有能な声帯閉鎖を達成・維持するために必要な力であり、振動組織の衝突力を決定します。">[?]</span>
+                            <span id="resistance-val">1.0</span>
+                        </label>
+                        <input type="range" id="resistance-slider" min="0.3" max="2.5" value="1.0" step="0.1">
+                        <div class="hint">声帯の閉じ具合。強いほど芯のある音、弱いと息漏れ</div>
+                    </div>
+
+                    <div class="status-panel glass-dark">
+                        <div class="status-row">
+                            <span>Airflow (U = P/R): <span class="tooltip"
+                                    data-tooltip="気流量。呼気圧（P）と声門抵抗（R）の力学的なバランスの結果として生じる媒介的な値です。">[?]</span></span>
+                            <span id="airflow-val" class="mono">1.00</span>
+                        </div>
+                        <div class="status-row">
+                            <span>Phonation Mode: <span class="tooltip"
+                                    data-tooltip="圧力、気流、声門抵抗のバランスによる発声状態の分類です。これらが均衡した「フロー発声」、抵抗が過剰な「圧迫発声（Pressed）」、気流が過剰な「息漏れ発声（Breathy）」に分かれ、生成される波形の倍音の強さ（スペクトルスロープ）やノイズ比率に影響を与えます。">[?]</span></span>
+                            <span id="mode-status" class="status-badge flow phonation-mode-badge">Flow</span>
+                        </div>
                     </div>
                 </div>
 
@@ -362,6 +369,11 @@
                             <h2 title="Source × Filter = Output">Power Spectrum</h2>
                             <div class="strategy-strip">
                                 <span class="strategy-item">
+                                    <span class="strategy-label">Phonation <span class="tooltip"
+                                            data-tooltip="圧力、気流、声門抵抗のバランスによる発声状態の分類です。これらが均衡した「フロー発声」、抵抗が過剰な「圧迫発声（Pressed）」、気流が過剰な「息漏れ発声（Breathy）」に分かれ、生成される波形の倍音の強さ（スペクトルスロープ）やノイズ比率に影響を与えます。">[?]</span></span>
+                                    <span class="status-badge flow phonation-mode-badge">Flow</span>
+                                </span>
+                                <span class="strategy-item">
                                     <span class="strategy-label">Timbre <span class="tooltip"
                                             data-tooltip="倍音と第1共鳴（fR1）の位置関係によって生じる音色の状態です。複数の倍音がfR1の下にある場合は「Open Timbre（開いた音色）」となり、第2倍音（2fo）がfR1を超えて上に行くと「Close Timbre（閉じた音色 / ターンオーバー）」へ移行します。">[?]</span></span>
                                     <span id="timbre-state" class="status-badge open">Open</span>
@@ -385,11 +397,10 @@
                             <span class="control-val" id="volume-val">50%</span>
                         </div>
                         <div class="canvas-control-group" title="高音側の減衰具合(声の暗さ/明るさ)">
-                            <label for="spectrum-slope">Slope</label>
+                            <button id="slope-line-toggle" class="inline-toggle-btn slope-line-active"
+                                title="Toggle slope approximation line on spectrum">Slope</button>
                             <input type="range" id="spectrum-slope" min="-24" max="0" value="-12" step="1">
                             <span class="control-val" id="slope-val">-12dB</span>
-                            <button id="slope-line-toggle" class="inline-toggle-btn slope-line-active"
-                                title="Toggle slope approximation line on spectrum">Line</button>
                         </div>
                         <span class="control-divider"></span>
                         <div class="canvas-control-buttons mic-group">

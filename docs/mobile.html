@@ -5,7 +5,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>PVA Simulator (Mobile)</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="mobile.css">
 </head>
 
@@ -28,6 +27,26 @@
         </div>
     </header>
 
+    <!-- Acoustic Strategy strip (always visible, sticky under top bar) -->
+    <div class="acoustic-strip">
+        <div class="strip-item">
+            <span class="strip-label">Phonation <span class="tooltip"
+                    data-tooltip="圧力、気流、声門抵抗のバランスによる発声状態の分類です。これらが均衡した「フロー発声」、抵抗が過剰な「圧迫発声（Pressed）」、気流が過剰な「息漏れ発声（Breathy）」に分かれ、生成される波形の倍音の強さ（スペクトルスロープ）やノイズ比率に影響を与えます。">[?]</span></span>
+            <span id="mode-status" class="status-badge flow phonation-mode-badge">Flow</span>
+        </div>
+        <div class="strip-item">
+            <span class="strip-label">Timbre <span class="tooltip"
+                    data-tooltip="倍音と第1共鳴（fR1）の位置関係によって生じる音色の状態です。複数の倍音がfR1の下にある場合は「Open Timbre（開いた音色）」となり、第2倍音（2fo）がfR1を超えて上に行くと「Close Timbre（閉じた音色 / ターンオーバー）」へ移行します。">[?]</span></span>
+            <span id="timbre-state" class="status-badge open">Open</span>
+        </div>
+        <div class="strip-item">
+            <span class="strip-label">Mode <span class="tooltip"
+                    data-tooltip="共鳴周波数を特定の倍音に追従させる（トラッキングする）戦略です。fR1を2foに同調させ続けると発散型共鳴器による「YELL（叫び）」となり、fR1を1foに同調させると収束型共鳴器による「WHOOP（フープ）」となります。">[?]</span></span>
+            <span id="acoustic-mode" class="status-badge neutral">Neutral</span>
+        </div>
+        <div id="event-flash" class="event-flash hidden">TURNING OVER!</div>
+    </div>
+
     <!-- Spectrum Canvas (always visible, sticky) -->
     <section class="spectrum-section">
         <div class="canvas-container">
@@ -43,11 +62,11 @@
                 <span class="control-val" id="volume-val">50%</span>
             </div>
             <div class="toolbar-item">
-                <span>Slope</span>
+                <button id="slope-line-toggle" class="inline-toggle-btn slope-line-active"
+                    title="Toggle slope approximation line">Slope</button>
                 <input type="range" id="spectrum-slope" min="-24" max="0" value="-12" step="1">
                 <span class="control-val" id="slope-val">-12dB</span>
             </div>
-            <button id="slope-line-toggle" class="btn-icon-sm">📈</button>
             <button id="log-scale-toggle" class="btn-icon-sm" title="Log/Lin">Log</button>
         </div>
         <div class="spectrum-toolbar" id="mic-toolbar" style="display:none;">
@@ -68,17 +87,6 @@
 
     <!-- Tab: Source -->
     <section class="tab-content active" id="tab-source">
-        <div class="card">
-            <div class="card-row">
-                <label>Voice Type <span class="tooltip"
-                        data-tooltip="トレブルボイス（ソプラノ、アルト、カウンターテナー等）か非トレブルボイス（テノール、バス等）かの区分です。トレブルボイスは音域が高いため共鳴に利用できる倍音が少なく、より早い段階でWhoopモード（fR1:1fo）に依存します。非トレブルボイスは音域が低く、低・中音域に多くの倍音を持つため、ターンオーバー（fR1:2fo交差）が主要な音響イベントとなります。">[?]</span></label>
-                <select id="voice-type-select" class="mobile-select">
-                    <option value="treble">Treble</option>
-                    <option value="nontreble" selected>Non-Treble</option>
-                </select>
-            </div>
-        </div>
-
         <div class="card">
             <label class="slider-label">
                 Pitch (f₀) <span class="tooltip"
@@ -116,6 +124,92 @@
             </label>
             <input type="range" id="resistance-slider" min="0.3" max="2.5" value="1.0" step="0.1" class="mobile-range">
         </div>
+
+        <details class="card vibrato-card">
+            <summary class="vibrato-summary">
+                <span class="vibrato-title">Vibrato</span>
+                <label class="vibrato-enable-toggle" title="Vibrato ON/OFF">
+                    <input type="checkbox" id="vibrato-enable">
+                    <span class="vibrato-enable-pill"><span class="vibrato-enable-text">OFF</span></span>
+                </label>
+                <span class="vibrato-chevron" aria-hidden="true">▾</span>
+            </summary>
+            <div class="vibrato-body">
+                <div class="vibrato-row">
+                    <label class="slider-label" for="vibrato-rate">
+                        Rate <span class="tooltip"
+                            data-tooltip="ビブラートの周波数（Hz）。古典声楽の正常範囲は 4.5〜6.5 Hz。5Hz未満=遅すぎる（ワブル）、7Hz超=速すぎる（トレモロ気味）。">[?]</span>
+                        <span class="slider-val"><span id="vibrato-rate-val">5.5</span> Hz</span>
+                    </label>
+                    <input type="range" id="vibrato-rate" min="0.5" max="12" value="5.5" step="0.1" class="mobile-range">
+                    <small class="vibrato-hint">揺れの速さ</small>
+                </div>
+
+                <div class="vibrato-row">
+                    <label class="slider-label" for="vibrato-extent">
+                        Extent <span class="tooltip"
+                            data-tooltip="ビブラートの振幅幅（cent）。典型値: クラシック ±50〜100¢、ポピュラー ±30〜60¢。±100¢ = ±半音。">[?]</span>
+                        <span class="slider-val">±<span id="vibrato-extent-val">50</span>¢</span>
+                    </label>
+                    <input type="range" id="vibrato-extent" min="0" max="200" value="50" step="1" class="mobile-range">
+                    <small class="vibrato-hint">揺れの幅（音程の振れ）</small>
+                </div>
+
+                <div class="vibrato-row">
+                    <label class="slider-label" for="vibrato-delay">
+                        Onset Delay <span class="tooltip"
+                            data-tooltip="発声開始からビブラートが乗り始めるまでの時間（ms）。0=即座にビブラート、300〜500ms=自然なストレート→ビブラート遷移。">[?]</span>
+                        <span class="slider-val"><span id="vibrato-delay-val">300</span> ms</span>
+                    </label>
+                    <input type="range" id="vibrato-delay" min="0" max="2000" value="300" step="50" class="mobile-range">
+                    <small class="vibrato-hint">歌い始めてから揺れるまでの間</small>
+                </div>
+
+                <div class="vibrato-row">
+                    <label class="slider-label" for="vibrato-ramp">
+                        Onset Ramp <span class="tooltip"
+                            data-tooltip="ビブラートが 0 から最大振幅まで立ち上がるのにかかる時間（ms）。ゆっくり立ち上がるほど自然なクラシック様式。">[?]</span>
+                        <span class="slider-val"><span id="vibrato-ramp-val">400</span> ms</span>
+                    </label>
+                    <input type="range" id="vibrato-ramp" min="0" max="2000" value="400" step="50" class="mobile-range">
+                    <small class="vibrato-hint">揺れが本来の大きさになるまで</small>
+                </div>
+
+                <div class="vibrato-row">
+                    <label class="slider-label" for="vibrato-am">
+                        AM Depth <span class="tooltip"
+                            data-tooltip="振幅変調の深さ（%）。周波数変調(FM)に連動して音量も揺れる。クラシック歌手は実際 FM+AM が併発する。0=純粋FM、20%程度=自然な揺れ。">[?]</span>
+                        <span class="slider-val"><span id="vibrato-am-val">10</span>%</span>
+                    </label>
+                    <input type="range" id="vibrato-am" min="0" max="50" value="10" step="1" class="mobile-range">
+                    <small class="vibrato-hint">音量も一緒にゆらす量</small>
+                </div>
+
+                <div class="vibrato-row vibrato-wave-row">
+                    <label class="slider-label" for="vibrato-wave">
+                        Waveform <span class="tooltip"
+                            data-tooltip="LFOの波形。Sine=最も自然、Triangle=やや鋭い折り返し、Sawtooth=非対称（上昇／急降下）。">[?]</span>
+                    </label>
+                    <select id="vibrato-wave" class="mobile-select vibrato-wave-select">
+                        <option value="sine" selected>Sine</option>
+                        <option value="triangle">Triangle</option>
+                        <option value="sawtooth">Sawtooth</option>
+                    </select>
+                    <small class="vibrato-hint">揺れ方の形（自然/カクッと/非対称）</small>
+                </div>
+            </div>
+        </details>
+
+        <div class="card">
+            <div class="card-row">
+                <label>Voice Type <span class="tooltip"
+                        data-tooltip="トレブルボイス（ソプラノ、アルト、カウンターテナー等）か非トレブルボイス（テノール、バス等）かの区分です。トレブルボイスは音域が高いため共鳴に利用できる倍音が少なく、より早い段階でWhoopモード（fR1:1fo）に依存します。非トレブルボイスは音域が低く、低・中音域に多くの倍音を持つため、ターンオーバー（fR1:2fo交差）が主要な音響イベントとなります。">[?]</span></label>
+                <select id="voice-type-select" class="mobile-select">
+                    <option value="nontreble" selected>Non-Treble (E2–B4)</option>
+                    <option value="treble">Treble (C4–C6)</option>
+                </select>
+            </div>
+        </div>
     </section>
 
     <!-- Tab: Filter -->
@@ -132,8 +226,10 @@
             <input type="range" id="f1-slider" min="250" max="1000" value="500" step="1"
                 class="mobile-range accent-red">
             <div class="q-row">
-                <span>Q</span>
+                <span class="q-label">Q <span class="tooltip"
+                        data-tooltip="Q値 = 共鳴の鋭さ・持続。高い→ピークが細く尖り、音に芯があり鳴り続ける（インパルス応答が長い）。低い→ピークが広く拡散し、柔らかく抜ける。物理的本質は減衰の小ささ（蓄積エネルギー÷散逸エネルギー）。口の開き（放射損失）、喉頭出口の絞り（SFC, 反射↑）、声道壁の張力で制御される。">[?]</span></span>
                 <input type="range" id="f1-q" min="1" max="20" value="5" step="0.1" class="mobile-range-sm">
+                <span class="q-val" id="f1-q-val">5.0</span>
             </div>
         </div>
 
@@ -148,8 +244,9 @@
             <input type="range" id="f2-slider" min="800" max="2500" value="1500" step="1"
                 class="mobile-range accent-blue">
             <div class="q-row">
-                <span>Q</span>
+                <span class="q-label">Q</span>
                 <input type="range" id="f2-q" min="1" max="20" value="6" step="0.1" class="mobile-range-sm">
+                <span class="q-val" id="f2-q-val">6.0</span>
             </div>
         </div>
 
@@ -164,8 +261,9 @@
             <input type="range" id="f3-slider" min="2000" max="4000" value="2800" step="1"
                 class="mobile-range accent-purple">
             <div class="q-row">
-                <span>Q</span>
+                <span class="q-label">Q</span>
                 <input type="range" id="f3-q" min="1" max="20" value="8" step="0.1" class="mobile-range-sm">
+                <span class="q-val" id="f3-q-val">8.0</span>
             </div>
         </div>
 
@@ -180,8 +278,9 @@
             <input type="range" id="f4-slider" min="2500" max="4500" value="3800" step="1"
                 class="mobile-range accent-orange">
             <div class="q-row">
-                <span>Q</span>
+                <span class="q-label">Q</span>
                 <input type="range" id="f4-q" min="1" max="20" value="10" step="0.1" class="mobile-range-sm">
+                <span class="q-val" id="f4-q-val">10.0</span>
             </div>
         </div>
 
@@ -196,8 +295,9 @@
             <input type="range" id="f5-slider" min="3500" max="6000" value="4800" step="1"
                 class="mobile-range accent-pink">
             <div class="q-row">
-                <span>Q</span>
+                <span class="q-label">Q</span>
                 <input type="range" id="f5-q" min="1" max="20" value="12" step="0.1" class="mobile-range-sm">
+                <span class="q-val" id="f5-q-val">12.0</span>
             </div>
         </div>
 
@@ -223,11 +323,6 @@
                 <span>Airflow (U = P/R) <span class="tooltip"
                         data-tooltip="気流量。呼気圧（P）と声門抵抗（R）の力学的なバランスの結果として生じる媒介的な値です。">[?]</span></span>
                 <span id="airflow-val" class="mono">1.00</span>
-            </div>
-            <div class="status-row">
-                <span>Phonation Mode <span class="tooltip"
-                        data-tooltip="圧力、気流、声門抵抗のバランスによる発声状態の分類です。これらが均衡した「フロー発声」、抵抗が過剰な「圧迫発声（Pressed）」、気流が過剰な「息漏れ発声（Breathy）」に分かれ、生成される波形の倍音の強さ（スペクトルスロープ）やノイズ比率に影響を与えます。">[?]</span></span>
-                <span id="mode-status" class="status-badge flow">Flow</span>
             </div>
         </div>
 
@@ -320,26 +415,6 @@
             <span id="lf-rd" style="display:none">1.00</span>
         </div>
 
-        <div class="card">
-            <div class="status-header">
-                <h3>Acoustic Strategy</h3>
-                <label class="toggle-checkbox">
-                    <input type="checkbox" id="auto-routing-toggle" checked>
-                    <span>Auto</span>
-                </label>
-            </div>
-            <div class="status-row">
-                <span>Timbre <span class="tooltip"
-                        data-tooltip="倍音と第1共鳴（fR1）の位置関係によって生じる音色の状態です。複数の倍音がfR1の下にある場合は「Open Timbre（開いた音色）」となり、第2倍音（2fo）がfR1を超えて上に行くと「Close Timbre（閉じた音色 / ターンオーバー）」へ移行します。">[?]</span></span>
-                <span id="timbre-state" class="mono">Open</span>
-            </div>
-            <div class="status-row">
-                <span>Mode <span class="tooltip"
-                        data-tooltip="共鳴周波数を特定の倍音に追従させる（トラッキングする）戦略です。fR1を2foに同調させ続けると発散型共鳴器による「YELL（叫び）」となり、fR1を1foに同調させると収束型共鳴器による「WHOOP（フープ）」となります。">[?]</span></span>
-                <span id="acoustic-mode" class="status-badge neutral">Neutral</span>
-            </div>
-            <div id="event-flash" class="event-flash hidden">TURNING OVER! (2f₀ > fR1)</div>
-        </div>
     </section>
 
     <footer class="book-ref">
