@@ -2203,6 +2203,7 @@ function applyVoiceType(value) {
     els.resistanceVal.textContent = state.resistance.toFixed(1);
     els.pressureVal.textContent = state.pressure.toFixed(1);
     updatePitchRangeHint();
+    reorderFormantBounds();
 
     updateSourceParams();
     updateFilterParams();
@@ -2429,12 +2430,37 @@ els.mechM1.addEventListener('change', handleMechChange);
 els.mechM2.addEventListener('change', handleMechChange);
 
 // Filter Controls
+const FORMANT_GAP_HZ = 10; // Minimum spacing between adjacent formants
+
+function reorderFormantBounds() {
+    for (let i = 1; i <= 5; i++) {
+        const slider = els[`f${i}Slider`];
+        if (!slider) continue;
+        if (!slider.dataset.origMin) {
+            slider.dataset.origMin = slider.min;
+            slider.dataset.origMax = slider.max;
+        }
+        const origMin = parseFloat(slider.dataset.origMin);
+        const origMax = parseFloat(slider.dataset.origMax);
+        const prevFreq = i > 1 ? state.formants[`f${i - 1}`].freq + FORMANT_GAP_HZ : -Infinity;
+        const nextFreq = i < 5 ? state.formants[`f${i + 1}`].freq - FORMANT_GAP_HZ : Infinity;
+        slider.min = Math.max(origMin, prevFreq);
+        slider.max = Math.min(origMax, nextFreq);
+    }
+}
+
 const bindFormantParams = (num) => {
     els[`f${num}Slider`].addEventListener('input', (e) => {
-        state.formants[`f${num}`].freq = parseFloat(e.target.value);
-        els[`f${num}Val`].textContent = state.formants[`f${num}`].freq;
+        let val = parseFloat(e.target.value);
+        const prev = num > 1 ? state.formants[`f${num - 1}`].freq + FORMANT_GAP_HZ : -Infinity;
+        const next = num < 5 ? state.formants[`f${num + 1}`].freq - FORMANT_GAP_HZ : Infinity;
+        val = Math.max(prev, Math.min(next, val));
+        if (parseFloat(e.target.value) !== val) e.target.value = val;
+        state.formants[`f${num}`].freq = val;
+        els[`f${num}Val`].textContent = val;
+        reorderFormantBounds();
         updateFilterParams();
-        analyzeAcoustics(); // Trigger acoustics analysis when formants move
+        analyzeAcoustics();
     });
 
     const qValEl = document.getElementById(`f${num}-q-val`);
@@ -2490,11 +2516,13 @@ els.presets.forEach(btn => {
             state.formants.f5.freq = p.f5;
 
             // Update UI
+            reorderFormantBounds(); // Widen all slider bounds first so the new preset values fit
             els.f1Slider.value = p.f1; els.f1Val.textContent = p.f1;
             els.f2Slider.value = p.f2; els.f2Val.textContent = p.f2;
             els.f3Slider.value = p.f3; els.f3Val.textContent = p.f3;
             els.f4Slider.value = p.f4; els.f4Val.textContent = p.f4;
             els.f5Slider.value = p.f5; els.f5Val.textContent = p.f5;
+            reorderFormantBounds(); // Re-tighten bounds based on the new values
 
             if (p.pitch) {
                 state.pitch = p.pitch;
@@ -2635,6 +2663,7 @@ els.canvas.addEventListener('touchcancel', handleCanvasInteraction);
 // Init notes & analysis
 els.pitchNote.textContent = freqToNote(state.pitch);
 updatePitchRangeHint();
+reorderFormantBounds();
 analyzeAcoustics();
 drawGlottalWaveform(); // Initial render
 
