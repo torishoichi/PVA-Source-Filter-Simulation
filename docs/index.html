@@ -61,42 +61,46 @@
                     <div class="hint">M1=地声系（張りのある音）/ M2=裏声系（柔らかく抜ける音）</div>
                 </div>
 
-                <div class="subsection phonation-subsection">
-                    <h3 class="subsection-title">Phonation</h3>
-
-                    <div class="control-group">
-                        <label for="pressure-slider">
-                            Subglottal Pressure (P) <span class="tooltip"
-                                data-tooltip="声門間圧力差（呼気圧）。気管内（声帯の下）と声道（声帯の上）の圧力差であり、声帯を振動させるための駆動力となります。">[?]</span>
-                            <span id="pressure-val">1.0</span>
-                        </label>
-                        <input type="range" id="pressure-slider" min="0.3" max="2.5" value="1.0" step="0.1">
-                        <div class="hint">息を押し出す強さ。強いほど音量・鋭さが増す</div>
-                    </div>
-
-                    <div class="control-group">
-                        <label for="resistance-slider">
-                            Glottal Resistance (R) <span class="tooltip"
-                                data-tooltip="声門抵抗。気流の圧力に対して、有能な声帯閉鎖を達成・維持するために必要な力であり、振動組織の衝突力を決定します。">[?]</span>
-                            <span id="resistance-val">1.0</span>
-                        </label>
-                        <input type="range" id="resistance-slider" min="0.3" max="2.5" value="1.0" step="0.1">
-                        <div class="hint">声帯の閉じ具合。強いほど芯のある音、弱いと息漏れ</div>
-                    </div>
-
-                    <div class="status-panel glass-dark">
-                        <div class="status-row">
-                            <span>Airflow (U = P/R): <span class="tooltip"
-                                    data-tooltip="気流量。呼気圧（P）と声門抵抗（R）の力学的なバランスの結果として生じる媒介的な値です。">[?]</span></span>
-                            <span id="airflow-val" class="mono">1.00</span>
+                <details class="phonation-subsection glass-dark collapsible" open>
+                    <summary class="collapsible-summary">
+                        <h3 class="tracker-title">Phonation</h3>
+                        <span class="status-badge flow phonation-mode-badge phonation-summary-badge">Flow</span>
+                    </summary>
+                    <div class="collapsible-body">
+                        <div class="control-group">
+                            <label for="pressure-slider">
+                                Subglottal Pressure (P) <span class="tooltip"
+                                    data-tooltip="声門間圧力差（呼気圧）。気管内（声帯の下）と声道（声帯の上）の圧力差であり、声帯を振動させるための駆動力となります。">[?]</span>
+                                <span id="pressure-val">1.0</span>
+                            </label>
+                            <input type="range" id="pressure-slider" min="0.3" max="2.5" value="1.0" step="0.1">
+                            <div class="hint">息を押し出す強さ。強いほど音量・鋭さが増す</div>
                         </div>
-                        <div class="status-row">
-                            <span>Phonation Mode: <span class="tooltip"
-                                    data-tooltip="圧力、気流、声門抵抗のバランスによる発声状態の分類です。これらが均衡した「フロー発声」、抵抗が過剰な「圧迫発声（Pressed）」、気流が過剰な「息漏れ発声（Breathy）」に分かれ、生成される波形の倍音の強さ（スペクトルスロープ）やノイズ比率に影響を与えます。">[?]</span></span>
-                            <span id="mode-status" class="status-badge flow phonation-mode-badge">Flow</span>
+
+                        <div class="control-group">
+                            <label for="resistance-slider">
+                                Glottal Resistance (R) <span class="tooltip"
+                                    data-tooltip="声門抵抗。気流の圧力に対して、有能な声帯閉鎖を達成・維持するために必要な力であり、振動組織の衝突力を決定します。">[?]</span>
+                                <span id="resistance-val">1.0</span>
+                            </label>
+                            <input type="range" id="resistance-slider" min="0.3" max="2.5" value="1.0" step="0.1">
+                            <div class="hint">声帯の閉じ具合。強いほど芯のある音、弱いと息漏れ</div>
+                        </div>
+
+                        <div class="status-panel glass-dark">
+                            <div class="status-row">
+                                <span>Airflow (U = P/R): <span class="tooltip"
+                                        data-tooltip="気流量。呼気圧（P）と声門抵抗（R）の力学的なバランスの結果として生じる媒介的な値です。">[?]</span></span>
+                                <span id="airflow-val" class="mono">1.00</span>
+                            </div>
+                            <div class="status-row">
+                                <span>Phonation Mode: <span class="tooltip"
+                                        data-tooltip="圧力、気流、声門抵抗のバランスによる発声状態の分類です。これらが均衡した「フロー発声」、抵抗が過剰な「圧迫発声（Pressed）」、気流が過剰な「息漏れ発声（Breathy）」に分かれ、生成される波形の倍音の強さ（スペクトルスロープ）やノイズ比率に影響を与えます。">[?]</span></span>
+                                <span id="mode-status" class="status-badge flow phonation-mode-badge">Flow</span>
+                            </div>
                         </div>
                     </div>
-                </div>
+                </details>
 
                 <details class="vibrato-panel glass-dark collapsible">
                     <summary class="collapsible-summary">
@@ -386,8 +390,6 @@
                             </div>
                         </div>
                         <div class="canvas-primary-actions">
-                            <button id="spectrum-fullscreen-btn" class="btn btn-icon" title="Fullscreen">⛶</button>
-                            <button id="audio-toggle" class="btn primary">▶ Play</button>
                             <button id="mic-toggle" class="btn btn-sm btn-mic-icon" title="Mic" aria-label="Toggle microphone">
                                 <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
                                     stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -397,6 +399,7 @@
                                     <path d="M9 21h6" />
                                 </svg>
                             </button>
+                            <button id="audio-toggle" class="btn primary">▶ Play</button>
                         </div>
                     </div>
                     <div class="canvas-header-bottom">

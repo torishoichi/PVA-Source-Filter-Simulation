@@ -498,6 +498,34 @@ input[type=range]::-webkit-slider-thumb:hover {
     border-radius: 0;
 }
 
+/* Phonation collapsible — mirror Vibrato panel pattern */
+.phonation-subsection {
+    margin-top: 20px;
+}
+.phonation-subsection .collapsible-body > .control-group {
+    margin-bottom: 16px;
+}
+.phonation-subsection .collapsible-body > .control-group:last-of-type {
+    margin-bottom: 12px;
+}
+.phonation-subsection .collapsible-body > .status-panel {
+    margin: 12px 0 0;
+    padding: 12px 0 0;
+    background: transparent;
+    border: none;
+    border-top: 1px solid var(--glass-border);
+    border-radius: 0;
+}
+.phonation-summary-badge {
+    margin-left: auto;
+    transition: opacity 0.15s;
+}
+/* When phonation is OPEN, hide summary badge (the inner one is shown) */
+.phonation-subsection[open] > .collapsible-summary .phonation-summary-badge {
+    opacity: 0;
+    pointer-events: none;
+}
+
 .status-row {
     display: flex;
     justify-content: space-between;
