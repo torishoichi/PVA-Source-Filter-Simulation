@@ -2040,19 +2040,18 @@ function drawVisualizer() {
         const drawMicFormantMarker = (formant, label, colorHex) => {
             if (!formant) return;
             const x = freqToX(formant.freq, width);
-            const normalizedValue = Math.max(0, (formant.db - minDb) / dbRange);
-            const displayVal = Math.pow(normalizedValue, 1.5);
-            // Draw marker near the top of the spectrum
-            const y = Math.max(height - (displayVal * height * 0.9), 20);
+            // Fixed y for all Mic fRx pills so they align horizontally regardless of peak intensity
+            const yPillTop = state.roughnessVisible ? 90 : 20;
+            const yPillBottom = yPillTop + 16;
 
-            // Animated vertical dashed line
+            // Animated vertical dashed line from below the pill down to canvas bottom
             canvasCtx.save();
             canvasCtx.beginPath();
             canvasCtx.globalAlpha = 0.6;
             canvasCtx.strokeStyle = colorHex;
             canvasCtx.lineDashOffset = -Date.now() / 20; // Animate dash pattern falling
             canvasCtx.setLineDash([4, 4]);
-            canvasCtx.moveTo(x, y);
+            canvasCtx.moveTo(x, yPillBottom + 2);
             canvasCtx.lineTo(x, height);
             canvasCtx.stroke();
             canvasCtx.setLineDash([]);
@@ -2062,11 +2061,11 @@ function drawVisualizer() {
             canvasCtx.fillStyle = colorHex;
             canvasCtx.font = 'bold 10px monospace';
             const txtWidth = canvasCtx.measureText(label).width;
-            canvasCtx.fillRect(x - txtWidth / 2 - 5, y - 20, txtWidth + 10, 16);
+            canvasCtx.fillRect(x - txtWidth / 2 - 5, yPillTop, txtWidth + 10, 16);
             canvasCtx.globalAlpha = 1.0;
             canvasCtx.fillStyle = '#fff';
             canvasCtx.textAlign = 'center';
-            canvasCtx.fillText(label, x, y - 8);
+            canvasCtx.fillText(label, x, yPillTop + 12);
             canvasCtx.restore();
         };
 
