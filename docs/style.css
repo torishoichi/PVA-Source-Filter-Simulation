@@ -991,15 +991,24 @@ input[type=range]::-webkit-slider-thumb:hover {
     border-color: var(--vivid-red);
 }
 
-/* Icon-only Mic toggle (PC) — square button matching .btn-sm height */
+/* Icon-only Mic toggle (PC) */
 .btn-mic-icon {
-    padding: 4px !important;
-    width: 30px;
-    height: 30px;
+    padding: 0 !important;
+    width: 38px;
+    height: 38px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     line-height: 1;
+}
+
+.btn-mic-icon:focus {
+    outline: none;
+}
+
+.btn-mic-icon:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 1px;
 }
 
 .btn.mic-active:hover {
