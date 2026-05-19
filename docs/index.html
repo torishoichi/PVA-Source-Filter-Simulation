@@ -5,7 +5,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Source-Filter Simulation (PVA Model)</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     <script>
         // Auto-redirect to mobile version on small screens
@@ -44,6 +43,7 @@
                     </label>
                     <input type="range" id="pitch-slider" min="50" max="1000" value="220" step="1">
                     <div class="notes-display" id="pitch-note">A3</div>
+                    <div class="hint">歌う音の高さ。数字が大きいほど高い</div>
                 </div>
 
                 <div class="control-group">
@@ -55,7 +55,7 @@
                         <input type="radio" id="mech-m2" name="mechanism" value="m2">
                         <label for="mech-m2">M2 (Head-like)</label>
                     </div>
-                    <div class="hint">M1: Richer harmonics (-12dB/oct). M2: Flutier, fewer harmonics (-18dB/oct).</div>
+                    <div class="hint">M1=地声系（張りのある音）/ M2=裏声系（柔らかく抜ける音）</div>
                 </div>
 
                 <div class="control-group">
@@ -65,6 +65,7 @@
                         <span id="pressure-val">1.0</span>
                     </label>
                     <input type="range" id="pressure-slider" min="0.3" max="2.5" value="1.0" step="0.1">
+                    <div class="hint">息を押し出す強さ。強いほど音量・鋭さが増す</div>
                 </div>
 
                 <div class="control-group">
@@ -74,6 +75,7 @@
                         <span id="resistance-val">1.0</span>
                     </label>
                     <input type="range" id="resistance-slider" min="0.3" max="2.5" value="1.0" step="0.1">
+                    <div class="hint">声帯の閉じ具合。強いほど芯のある音、弱いと息漏れ</div>
                 </div>
 
                 <div class="status-panel glass-dark">
@@ -89,15 +91,75 @@
                     </div>
                 </div>
 
-                <div class="glottal-waveform glass-dark">
-                    <div
-                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <h3 class="tracker-title" style="margin: 0;">Glottal Waveform (LF Model) <span class="tooltip"
-                                data-tooltip="Liljencrants-Fantモデル（1985）による声門流量波形のシミュレーションです。声帯が1周期で開閉する際の空気の流れ（声門流量パルス）を可視化します。この波形の形状が音源の倍音構造を決定し、発声モード（Flow/Pressed/Breathy）やメカニズム（M1/M2）によって大きく変化します。">[?]</span>
-                            <span class="guide-toggle" id="lf-guide-toggle">[??]</span>
-                        </h3>
+                <details class="vibrato-panel glass-dark collapsible">
+                    <summary class="collapsible-summary">
+                        <h3 class="tracker-title">Vibrato</h3>
+                        <label class="vibrato-enable-toggle" title="Vibrato ON/OFF">
+                            <input type="checkbox" id="vibrato-enable">
+                            <span class="vibrato-enable-pill"><span class="vibrato-enable-text">OFF</span></span>
+                        </label>
+                    </summary>
+                    <div class="collapsible-body">
+                        <div class="vibrato-grid">
+                            <div class="vibrato-row">
+                                <label for="vibrato-rate">Rate <span class="tooltip"
+                                        data-tooltip="ビブラートの周波数（Hz）。古典声楽の正常範囲は 4.5〜6.5 Hz。5Hz未満=遅すぎる（ワブル）、7Hz超=速すぎる（トレモロ気味）。">[?]</span></label>
+                                <input type="range" id="vibrato-rate" min="0.5" max="12" value="5.5" step="0.1">
+                                <span class="vibrato-val"><span id="vibrato-rate-val">5.5</span> Hz</span>
+                                <small class="vibrato-hint">揺れの速さ</small>
+                            </div>
+                            <div class="vibrato-row">
+                                <label for="vibrato-extent">Extent <span class="tooltip"
+                                        data-tooltip="ビブラートの振幅幅（cent）。典型値: クラシック ±50〜100¢、ポピュラー ±30〜60¢。±100¢ = ±半音。">[?]</span></label>
+                                <input type="range" id="vibrato-extent" min="0" max="200" value="50" step="1">
+                                <span class="vibrato-val">±<span id="vibrato-extent-val">50</span>¢</span>
+                                <small class="vibrato-hint">揺れの幅（音程の振れ）</small>
+                            </div>
+                            <div class="vibrato-row">
+                                <label for="vibrato-delay">Onset Delay <span class="tooltip"
+                                        data-tooltip="発声開始からビブラートが乗り始めるまでの時間（ms）。0=即座にビブラート、300〜500ms=自然なストレート→ビブラート遷移。">[?]</span></label>
+                                <input type="range" id="vibrato-delay" min="0" max="2000" value="300" step="50">
+                                <span class="vibrato-val"><span id="vibrato-delay-val">300</span> ms</span>
+                                <small class="vibrato-hint">歌い始めてから揺れるまでの間</small>
+                            </div>
+                            <div class="vibrato-row">
+                                <label for="vibrato-ramp">Onset Ramp <span class="tooltip"
+                                        data-tooltip="ビブラートが 0 から最大振幅まで立ち上がるのにかかる時間（ms）。ゆっくり立ち上がるほど自然なクラシック様式。">[?]</span></label>
+                                <input type="range" id="vibrato-ramp" min="0" max="2000" value="400" step="50">
+                                <span class="vibrato-val"><span id="vibrato-ramp-val">400</span> ms</span>
+                                <small class="vibrato-hint">揺れが本来の大きさになるまで</small>
+                            </div>
+                            <div class="vibrato-row">
+                                <label for="vibrato-am">AM Depth <span class="tooltip"
+                                        data-tooltip="振幅変調の深さ（%）。周波数変調(FM)に連動して音量も揺れる。クラシック歌手は実際 FM+AM が併発する。0=純粋FM、20%程度=自然な揺れ。">[?]</span></label>
+                                <input type="range" id="vibrato-am" min="0" max="50" value="10" step="1">
+                                <span class="vibrato-val"><span id="vibrato-am-val">10</span>%</span>
+                                <small class="vibrato-hint">音量も一緒にゆらす量</small>
+                            </div>
+                            <div class="vibrato-row">
+                                <label for="vibrato-wave">Waveform <span class="tooltip"
+                                        data-tooltip="LFOの波形。Sine=最も自然、Triangle=やや鋭い折り返し、Sawtooth=非対称（上昇／急降下）。">[?]</span></label>
+                                <select id="vibrato-wave" class="vibrato-wave-select">
+                                    <option value="sine" selected>Sine</option>
+                                    <option value="triangle">Triangle</option>
+                                    <option value="sawtooth">Sawtooth</option>
+                                </select>
+                                <small class="vibrato-hint">揺れ方の形（自然/カクッと/非対称）</small>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <details class="glottal-waveform glass-dark collapsible">
+                    <summary class="collapsible-summary">
+                        <h3 class="tracker-title">Glottal Waveform (LF Model) <span class="tooltip"
+                                data-tooltip="Liljencrants-Fantモデル（1985）による声門流量波形のシミュレーションです。声帯が1周期で開閉する際の空気の流れ（声門流量パルス）を可視化します。この波形の形状が音源の倍音構造を決定し、発声モード（Flow/Pressed/Breathy）やメカニズム（M1/M2）によって大きく変化します。">[?]</span></h3>
                         <span class="tooltip ref-tooltip"
                             data-tooltip="📄 Fant, G., Liljencrants, J., & Lin, Q. (1985). A four-parameter model of glottal flow. STL-QPSR, 26(4), 1-13.&#10;📄 Fant, G. (1995). The LF-model revisited. Transformations and frequency domain analysis. STL-QPSR, 36(2-3), 119-156.">Ref</span>
+                    </summary>
+                    <div class="collapsible-body">
+                    <div style="margin-bottom: 8px;">
+                        <span class="guide-toggle" id="lf-guide-toggle">[??] Show Guide</span>
                     </div>
 
                     <!-- Guide Panel (hidden by default) -->
@@ -163,6 +225,7 @@
                             <span id="rd-val" class="mono">—</span>
                         </label>
                         <input type="range" id="rd-slider" min="0.3" max="2.7" value="1.0" step="0.01">
+                        <div class="hint">声門波形の形。低い=圧迫的 / 中央=均衡 / 高い=息漏れ</div>
                     </div>
 
                     <div class="glottal-canvas-container">
@@ -179,29 +242,9 @@
                         <span class="legend-item closed-legend">Closed <span class="tooltip"
                                 data-tooltip="声門閉鎖相（Closed Phase）。声帯が完全に（または部分的に）閉じ、気流がゼロになる区間です。Pressed発声ではこの区間が長く、Breathy発声では短いか不完全閉鎖となります。">[?]</span></span>
                     </div>
-                </div>
+                    </div>
+                </details>
 
-                <div class="acoustic-tracker glass-dark">
-                    <div
-                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                        <h3 class="tracker-title" style="margin: 0;">Acoustic Strategy (f₀ vs fR1)</h3>
-                        <label class="toggle-checkbox">
-                            <input type="checkbox" id="auto-routing-toggle" checked>
-                            <span class="label-text" style="font-size:0.8rem; color:#8b949e;">Auto-Routing</span>
-                        </label>
-                    </div>
-                    <div class="status-row">
-                        <span>Timbre State: <span class="tooltip"
-                                data-tooltip="倍音と第1共鳴（fR1）の位置関係によって生じる音色の状態です。複数の倍音がfR1の下にある場合は「Open Timbre（開いた音色）」となり、第2倍音（2fo）がfR1を超えて上に行くと「Close Timbre（閉じた音色 / ターンオーバー）」へ移行します。">[?]</span></span>
-                        <span id="timbre-state" class="mono">Open</span>
-                    </div>
-                    <div class="status-row">
-                        <span>Acoustic Mode: <span class="tooltip"
-                                data-tooltip="共鳴周波数を特定の倍音に追従させる（トラッキングする）戦略です。fR1を2foに同調させ続けると発散型共鳴器による「YELL（叫び）」となり、fR1を1foに同調させると収束型共鳴器による「WHOOP（フープ）」となります。">[?]</span></span>
-                        <span id="acoustic-mode" class="status-badge neutral">Neutral</span>
-                    </div>
-                    <div id="event-flash" class="event-flash hidden">TURNING OVER! (2f₀ > fR1)</div>
-                </div>
             </section>
 
             <!-- Filter Panel -->
@@ -210,81 +253,93 @@
                         data-tooltip="声道を1/4波長共鳴管として扱う音響伝達特性（フィルター機能）です。声帯原音の音響エネルギーのうち、声道の形状によって決まる特定の周波数（共鳴ピーク）に近い成分を選択的に強化し、それ以外を減衰させます。">[?]</span>
                 </h2>
 
+                <div class="formant-grid">
                 <!-- F1 Control -->
                 <div class="formant-control">
-                    <div class="formant-header">
-                        <div class="label-row">
-                            <label for="f1-slider">fR1 <span class="tooltip"
-                                    data-tooltip="第1フォルマント（声道の最も低い共鳴）。音の「深さ」や「温かみ」に関与し、母音の開閉（Openness-Closeness）次元を決定します。声道を短くする、または口・顎を開くことでF1は上がり、声道を長くする、または口を閉じることでF1は下がります。このF1と倍音との交差が、音響的レジスター変化の主要な原因となります。">[?]</span>
-                                <span id="f1-val" class="accent-blue">500</span> Hz</label>
-                        </div>
+                    <div class="formant-row">
+                        <span class="formant-label">fR1 <span class="tooltip"
+                                data-tooltip="第1フォルマント（声道の最も低い共鳴）。音の「深さ」や「温かみ」に関与し、母音の開閉（Openness-Closeness）次元を決定します。声道を短くする、または口・顎を開くことでF1は上がり、声道を長くする、または口を閉じることでF1は下がります。このF1と倍音との交差が、音響的レジスター変化の主要な原因となります。">[?]</span></span>
+                        <span class="formant-val"><span id="f1-val">500</span> Hz</span>
                         <button class="toggle-btn active" id="f1-toggle">ON</button>
                     </div>
                     <input type="range" id="f1-slider" min="250" max="1000" value="500" step="1">
-                    <div class="q-control">
-                        <label for="f1-q">Q Factor:</label>
+                    <div class="hint">口・顎の開き。母音の「あ／い／う」を決める一番低い共鳴</div>
+                    <div class="q-row">
+                        <span class="q-label">Q <span class="tooltip"
+                                data-tooltip="Q値 = 共鳴の鋭さ・持続。高い→ピークが細く尖り、音に芯があり鳴り続ける（インパルス応答が長い）。低い→ピークが広く拡散し、柔らかく抜ける。物理的本質は減衰の小ささ（蓄積エネルギー÷散逸エネルギー）。口の開き（放射損失）、喉頭出口の絞り（SFC, 反射↑）、声道壁の張力で制御される。">[?]</span></span>
                         <input type="range" id="f1-q" min="1" max="20" value="5" step="0.1">
+                        <span class="q-val" id="f1-q-val">5.0</span>
+                        <small class="q-hint">共鳴の鋭さ（芯⇔広がり）</small>
                     </div>
                 </div>
 
                 <!-- F2 Control -->
                 <div class="formant-control">
-                    <div class="formant-header">
-                        <div class="label-row">
-                            <label for="f2-slider">fR2 <span id="f2-val">1500</span> Hz</label>
-                        </div>
+                    <div class="formant-row">
+                        <span class="formant-label">fR2</span>
+                        <span class="formant-val"><span id="f2-val">1500</span> Hz</span>
                         <button class="toggle-btn active" id="f2-toggle">ON</button>
                     </div>
                     <input type="range" id="f2-slider" min="800" max="2500" value="1500" step="1">
-                    <div class="q-control">
-                        <label for="f2-q">Q Factor:</label>
+                    <div class="hint">舌の前後位置。母音の前後性（「い／え」前 ⇔ 「う／お」後）</div>
+                    <div class="q-row">
+                        <span class="q-label">Q</span>
                         <input type="range" id="f2-q" min="1" max="20" value="6" step="0.1">
+                        <span class="q-val" id="f2-q-val">6.0</span>
+                        <small class="q-hint">共鳴の鋭さ</small>
                     </div>
                 </div>
 
-                <!-- F3 / SFC Control -->
+                <!-- F3 Control -->
                 <div class="formant-control">
-                    <div class="formant-header">
-                        <div class="label-row">
-                            <label for="f3-slider">fR3 <span id="f3-val">2800</span> Hz</label>
-                        </div>
+                    <div class="formant-row">
+                        <span class="formant-label">fR3</span>
+                        <span class="formant-val"><span id="f3-val">2800</span> Hz</span>
                         <button class="toggle-btn active" id="f3-toggle">ON</button>
                     </div>
                     <input type="range" id="f3-slider" min="2000" max="4000" value="2800" step="1">
-                    <div class="q-control">
-                        <label for="f3-q">Q Factor:</label>
+                    <div class="hint">舌先・歯の位置。声の明るさ・子音の鋭さに関与</div>
+                    <div class="q-row">
+                        <span class="q-label">Q</span>
                         <input type="range" id="f3-q" min="1" max="20" value="8" step="0.1">
+                        <span class="q-val" id="f3-q-val">8.0</span>
+                        <small class="q-hint">共鳴の鋭さ</small>
                     </div>
                 </div>
 
                 <!-- F4 Control -->
                 <div class="formant-control">
-                    <div class="formant-header">
-                        <div class="label-row">
-                            <label for="f4-slider">fR4 <span id="f4-val">3800</span> Hz</label>
-                        </div>
+                    <div class="formant-row">
+                        <span class="formant-label">fR4</span>
+                        <span class="formant-val"><span id="f4-val">3800</span> Hz</span>
                         <button class="toggle-btn active" id="f4-toggle">ON</button>
                     </div>
                     <input type="range" id="f4-slider" min="2500" max="4500" value="3800" step="1">
-                    <div class="q-control">
-                        <label for="f4-q">Q Factor:</label>
+                    <div class="hint">上部声道の共鳴。声の輝き（Singer's Formant Cluster の一部）</div>
+                    <div class="q-row">
+                        <span class="q-label">Q</span>
                         <input type="range" id="f4-q" min="1" max="20" value="10" step="0.1">
+                        <span class="q-val" id="f4-q-val">10.0</span>
+                        <small class="q-hint">共鳴の鋭さ</small>
                     </div>
                 </div>
 
                 <!-- F5 Control -->
                 <div class="formant-control">
-                    <div class="formant-header">
-                        <div class="label-row">
-                            <label for="f5-slider">fR5 <span id="f5-val">4800</span> Hz</label>
-                        </div>
+                    <div class="formant-row">
+                        <span class="formant-label">fR5</span>
+                        <span class="formant-val"><span id="f5-val">4800</span> Hz</span>
                         <button class="toggle-btn active" id="f5-toggle">ON</button>
                     </div>
                     <input type="range" id="f5-slider" min="3500" max="6000" value="4800" step="1">
-                    <div class="q-control">
-                        <label for="f5-q">Q Factor:</label>
+                    <div class="hint">Singer's Formant の中核。声が遠くまで通る帯域</div>
+                    <div class="q-row">
+                        <span class="q-label">Q</span>
                         <input type="range" id="f5-q" min="1" max="20" value="12" step="0.1">
+                        <span class="q-val" id="f5-q-val">12.0</span>
+                        <small class="q-hint">共鳴の鋭さ</small>
                     </div>
+                </div>
                 </div>
 
                 <div class="preset-group">
@@ -302,44 +357,66 @@
             <!-- Visualizer Panel -->
             <section class="panel visualizer-panel glass">
                 <div class="canvas-header">
-                    <h2>Power Spectrum (Source × Filter = Output)</h2>
-                    <div class="canvas-controls">
-                        <div class="canvas-control-group">
+                    <div class="canvas-header-top">
+                        <div class="canvas-title-block">
+                            <h2 title="Source × Filter = Output">Power Spectrum</h2>
+                            <div class="strategy-strip">
+                                <span class="strategy-item">
+                                    <span class="strategy-label">Timbre <span class="tooltip"
+                                            data-tooltip="倍音と第1共鳴（fR1）の位置関係によって生じる音色の状態です。複数の倍音がfR1の下にある場合は「Open Timbre（開いた音色）」となり、第2倍音（2fo）がfR1を超えて上に行くと「Close Timbre（閉じた音色 / ターンオーバー）」へ移行します。">[?]</span></span>
+                                    <span id="timbre-state" class="status-badge open">Open</span>
+                                </span>
+                                <span class="strategy-item">
+                                    <span class="strategy-label">Mode <span class="tooltip"
+                                            data-tooltip="共鳴周波数を特定の倍音に追従させる（トラッキングする）戦略です。fR1を2foに同調させ続けると発散型共鳴器による「YELL（叫び）」となり、fR1を1foに同調させると収束型共鳴器による「WHOOP（フープ）」となります。">[?]</span></span>
+                                    <span id="acoustic-mode" class="status-badge neutral">Neutral</span>
+                                </span>
+                            </div>
+                        </div>
+                        <div class="canvas-primary-actions">
+                            <button id="spectrum-fullscreen-btn" class="btn btn-icon" title="Fullscreen">⛶</button>
+                            <button id="audio-toggle" class="btn primary">▶ Play</button>
+                        </div>
+                    </div>
+                    <div class="canvas-header-bottom">
+                        <div class="canvas-control-group" title="音量">
                             <label for="master-volume">Volume</label>
                             <input type="range" id="master-volume" min="0" max="1" value="0.5" step="0.01">
                             <span class="control-val" id="volume-val">50%</span>
                         </div>
-                        <div class="canvas-control-group">
+                        <div class="canvas-control-group" title="高音側の減衰具合(声の暗さ/明るさ)">
                             <label for="spectrum-slope">Slope</label>
                             <input type="range" id="spectrum-slope" min="-24" max="0" value="-12" step="1">
                             <span class="control-val" id="slope-val">-12dB</span>
+                            <button id="slope-line-toggle" class="inline-toggle-btn slope-line-active"
+                                title="Toggle slope approximation line on spectrum">Line</button>
                         </div>
-                        <div class="canvas-control-group">
-                            <label for="mic-gain">Mic Gain</label>
-                            <input type="range" id="mic-gain" min="0" max="5" value="1.0" step="0.1">
-                            <span class="control-val" id="mic-gain-val">1.0x</span>
-                        </div>
-                        <div class="canvas-control-buttons">
-                            <button id="slope-line-toggle" class="btn btn-sm"
-                                title="Toggle slope approximation line on spectrum">Slope Line</button>
+                        <span class="control-divider"></span>
+                        <div class="canvas-control-buttons mic-group">
                             <button id="mic-toggle" class="btn btn-sm">Mic: OFF</button>
-                            <select id="mic-formant-method" class="mic-method-select">
-                                <option value="peak">Peak</option>
-                                <option value="lpc">LPC</option>
-                            </select>
-                            <button id="mic-pause" class="btn btn-sm" style="display:none;"
-                                title="Pause Mic Waveform"><svg viewBox="0 0 24 24" width="12" height="12"
-                                    fill="currentColor" style="vertical-align: -1px; margin-right: 4px;">
-                                    <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-                                </svg>Pause</button>
-                            <button id="log-scale-toggle" class="btn btn-sm" title="Toggle Log/Linear frequency scale">Log</button>
-                            <button id="spectrum-fullscreen-btn" class="btn btn-sm" title="Fullscreen">⛶</button>
-                            <button id="audio-toggle" class="btn primary">Play Audio</button>
+                            <div class="mic-controls">
+                                <div class="canvas-control-group" title="マイク入力の感度">
+                                    <label for="mic-gain">Gain</label>
+                                    <input type="range" id="mic-gain" min="0" max="5" value="1.0" step="0.1">
+                                    <span class="control-val" id="mic-gain-val">1.0x</span>
+                                </div>
+                                <select id="mic-formant-method" class="mic-method-select">
+                                    <option value="peak">Peak</option>
+                                    <option value="lpc">LPC</option>
+                                </select>
+                                <button id="mic-pause" class="btn btn-sm" style="display:none;"
+                                    title="Pause Mic Waveform"><svg viewBox="0 0 24 24" width="12" height="12"
+                                        fill="currentColor" style="vertical-align: -1px; margin-right: 4px;">
+                                        <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                                    </svg>Pause</button>
+                            </div>
                         </div>
                     </div>
                 </div>
                 <div class="canvas-container">
                     <canvas id="spectrum-canvas"></canvas>
+                    <button id="log-scale-toggle" class="axis-scale-btn"
+                        title="Toggle Log/Linear frequency scale">Log</button>
                     <div class="axis-labels x-axis">
                         <span>0Hz</span>
                         <span>1kHz</span>

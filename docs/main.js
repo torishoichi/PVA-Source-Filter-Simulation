@@ -52,7 +52,7 @@ const state = {
     micGain: 1.0,
     micFormantMethod: 'peak', // 'peak' or 'lpc'
     spectrumSlope: -12, // dB/octave attenuation
-    showSlopeLine: false, // Toggle for slope approximation line
+    showSlopeLine: true, // Toggle for slope approximation line (default ON)
     acousticMode: 'Neutral', // 'Neutral', 'Yell', 'Whoop'
     masterVolume: 0.5, // 0.0 to 1.0
     rdManual: null, // null = auto from P/R/mechanism, number = manual Rd override
@@ -66,8 +66,22 @@ const state = {
         f3: { freq: 2800, q: 8, gain: 10, enabled: true },
         f4: { freq: 3800, q: 10, gain: 8, enabled: true },
         f5: { freq: 4800, q: 12, gain: 6, enabled: true }
+    },
+    vibrato: {
+        enabled: false,
+        rate: 5.5,        // Hz
+        extent: 50,       // cents
+        onsetDelay: 300,  // ms
+        onsetRamp: 400,   // ms
+        amDepth: 10,      // %
+        waveform: 'sine'  // 'sine' | 'triangle' | 'sawtooth'
     }
 };
+
+// Vibrato audio nodes
+let vibratoLFO = null;
+let vibratoFMGain = null;
+let vibratoAMGain = null;
 
 // --- DOM Elements ---
 const els = {
@@ -104,7 +118,20 @@ const els = {
     timbreState: document.getElementById('timbre-state'),
     acousticMode: document.getElementById('acoustic-mode'),
     eventFlash: document.getElementById('event-flash'),
-    autoRoutingToggle: document.getElementById('auto-routing-toggle'),
+
+    // Vibrato
+    vibratoEnable: document.getElementById('vibrato-enable'),
+    vibratoRate: document.getElementById('vibrato-rate'),
+    vibratoRateVal: document.getElementById('vibrato-rate-val'),
+    vibratoExtent: document.getElementById('vibrato-extent'),
+    vibratoExtentVal: document.getElementById('vibrato-extent-val'),
+    vibratoDelay: document.getElementById('vibrato-delay'),
+    vibratoDelayVal: document.getElementById('vibrato-delay-val'),
+    vibratoRamp: document.getElementById('vibrato-ramp'),
+    vibratoRampVal: document.getElementById('vibrato-ramp-val'),
+    vibratoAm: document.getElementById('vibrato-am'),
+    vibratoAmVal: document.getElementById('vibrato-am-val'),
+    vibratoWave: document.getElementById('vibrato-wave'),
 
     // Glottal Waveform (dual canvases)
     glottalCanvasFlow: document.getElementById('glottal-canvas-flow'),
@@ -301,7 +328,46 @@ function initAudio() {
     analyser.connect(silentTarget);
     silentTarget.connect(audioCtx.destination);
 
+    // Vibrato LFO + modulation gains
+    vibratoLFO = audioCtx.createOscillator();
+    vibratoLFO.type = state.vibrato.waveform;
+    vibratoLFO.frequency.value = state.vibrato.rate;
+    vibratoFMGain = audioCtx.createGain();
+    vibratoFMGain.gain.value = 0;
+    vibratoAMGain = audioCtx.createGain();
+    vibratoAMGain.gain.value = 0;
+    vibratoLFO.connect(vibratoFMGain);
+    vibratoLFO.connect(vibratoAMGain);
+    vibratoAMGain.connect(masterGain.gain); // AM rides on masterGain
+    vibratoLFO.start();
+
     updateFilterParams();
+}
+
+function startVibratoOnset() {
+    if (!audioCtx || !vibratoFMGain || !vibratoAMGain) return;
+    const t0 = audioCtx.currentTime;
+    const delayS = state.vibrato.onsetDelay / 1000;
+    const rampS = Math.max(0.01, state.vibrato.onsetRamp / 1000);
+    const fmTarget = state.vibrato.enabled ? state.vibrato.extent : 0;
+    const amTarget = state.vibrato.enabled ? (state.vibrato.amDepth / 100) : 0;
+    vibratoFMGain.gain.cancelScheduledValues(t0);
+    vibratoFMGain.gain.setValueAtTime(0, t0);
+    vibratoFMGain.gain.setValueAtTime(0, t0 + delayS);
+    vibratoFMGain.gain.linearRampToValueAtTime(fmTarget, t0 + delayS + rampS);
+    vibratoAMGain.gain.cancelScheduledValues(t0);
+    vibratoAMGain.gain.setValueAtTime(0, t0);
+    vibratoAMGain.gain.setValueAtTime(0, t0 + delayS);
+    vibratoAMGain.gain.linearRampToValueAtTime(amTarget, t0 + delayS + rampS);
+}
+
+function resetVibrato() {
+    if (!audioCtx || !vibratoFMGain || !vibratoAMGain) return;
+    const t = audioCtx.currentTime;
+    vibratoFMGain.gain.cancelScheduledValues(t);
+    vibratoFMGain.gain.setTargetAtTime(0, t, 0.05);
+    vibratoAMGain.gain.cancelScheduledValues(t);
+    vibratoAMGain.gain.setTargetAtTime(0, t, 0.05);
 }
 
 function startAudio() {
@@ -316,6 +382,8 @@ function startAudio() {
     masterGain.gain.cancelScheduledValues(audioCtx.currentTime);
     masterGain.gain.setValueAtTime(0, audioCtx.currentTime);
     masterGain.gain.linearRampToValueAtTime(targetIntensity, audioCtx.currentTime + 0.1);
+
+    startVibratoOnset();
     if (visMasterGain) {
         visMasterGain.gain.cancelScheduledValues(audioCtx.currentTime);
         visMasterGain.gain.setValueAtTime(0, audioCtx.currentTime);
@@ -341,6 +409,8 @@ function stopAudio() {
         visMasterGain.gain.setValueAtTime(visMasterGain.gain.value, audioCtx.currentTime);
         visMasterGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.1);
     }
+
+    resetVibrato();
 
     setTimeout(() => {
         destroySource();
@@ -446,6 +516,11 @@ function createSource() {
         gain.connect(audioMute); // To Audio Gate
         audioMute.connect(spectralTiltNode); // To Audio Output
 
+        // Vibrato FM: connect LFO output to detune (cents)
+        if (vibratoFMGain) {
+            vibratoFMGain.connect(osc.detune);
+        }
+
         osc.start(time);
 
         harmonicsOscs.push({ osc, gain, audioMute, harmonic: i });
@@ -515,12 +590,8 @@ function analyzeAcoustics() {
         state.timbreState = 'Open';
     }
 
-    // Detect "Turning Over" Event (Open -> Close transition from pitch rising)
-    if (prevTimbre === 'Open' && state.timbreState === 'Close') {
-        triggerTurningOver();
-    }
-
     els.timbreState.textContent = state.timbreState;
+    els.timbreState.className = `status-badge ${state.timbreState.toLowerCase()}`;
 
     // 2. Acoustic Mode Logic (Yell vs Whoop)
     // Dynamic tolerances based on voice type
@@ -531,25 +602,9 @@ function analyzeAcoustics() {
         // Treble Voice: Prioritizes Whoop (fR1 tracks 1fo).
         if (Math.abs(fR1 - f0) / f0 < whoopTolerance) {
             state.acousticMode = 'Whoop';
-            if (!isPresetLoading && els.autoRoutingToggle.checked) {
-                // Auto-adjust Phonation: Flow & M2
-                els.mechM2.checked = true; state.mechanism = 'm2';
-                els.resistanceSlider.value = 1.0; state.resistance = 1.0;
-                els.pressureSlider.value = 1.0; state.pressure = 1.0;
-                els.resistanceVal.textContent = state.resistance.toFixed(1);
-                els.pressureVal.textContent = state.pressure.toFixed(1);
-            }
         } else if (f0 <= 400 && Math.abs(fR1 - f20) / f20 < yellTolerance) {
             // Trebles can only truly Yell in their lower octaves
             state.acousticMode = 'Yell';
-            if (!isPresetLoading && els.autoRoutingToggle.checked) {
-                // Auto-adjust Phonation: Pressed & M1
-                els.mechM1.checked = true; state.mechanism = 'm1';
-                els.resistanceSlider.value = 2.0; state.resistance = 2.0;
-                els.pressureSlider.value = 1.0; state.pressure = 1.0;
-                els.resistanceVal.textContent = state.resistance.toFixed(1);
-                els.pressureVal.textContent = state.pressure.toFixed(1);
-            }
         } else {
             state.acousticMode = 'Neutral';
         }
@@ -557,25 +612,9 @@ function analyzeAcoustics() {
         // Non-Treble Voice: Prioritizes Yell (Turnover handling)
         if (Math.abs(fR1 - f20) / f20 < yellTolerance) {
             state.acousticMode = 'Yell';
-            if (!isPresetLoading && els.autoRoutingToggle.checked) {
-                // Auto-adjust Phonation: Pressed & M1
-                els.mechM1.checked = true; state.mechanism = 'm1';
-                els.resistanceSlider.value = 2.0; state.resistance = 2.0;
-                els.pressureSlider.value = 1.0; state.pressure = 1.0;
-                els.resistanceVal.textContent = state.resistance.toFixed(1);
-                els.pressureVal.textContent = state.pressure.toFixed(1);
-            }
         } else if (Math.abs(fR1 - f0) / f0 < whoopTolerance) {
             // Whoop is strict (requires closer tuning) for non-treble
             state.acousticMode = 'Whoop';
-            if (!isPresetLoading && els.autoRoutingToggle.checked) {
-                // Auto-adjust Phonation: Flow & M2
-                els.mechM2.checked = true; state.mechanism = 'm2';
-                els.resistanceSlider.value = 1.0; state.resistance = 1.0;
-                els.pressureSlider.value = 1.0; state.pressure = 1.0;
-                els.resistanceVal.textContent = state.resistance.toFixed(1);
-                els.pressureVal.textContent = state.pressure.toFixed(1);
-            }
         } else {
             state.acousticMode = 'Neutral';
         }
@@ -922,22 +961,22 @@ function drawFlowCanvas(canvas, flow, params) {
     const h = canvas.clientHeight;
 
     // Background
-    ctx.fillStyle = '#0d1117';
+    ctx.fillStyle = '#FFFEF9';
     ctx.fillRect(0, 0, w, h);
 
     const teX = (Te / T0) * w;
     const tpX = (Tp / T0) * w;
 
     // Phase regions
-    ctx.fillStyle = 'rgba(46, 160, 67, 0.08)';
+    ctx.fillStyle = 'rgba(79, 150, 80, 0.12)';
     ctx.fillRect(0, 0, teX, h);
-    ctx.fillStyle = 'rgba(88, 166, 255, 0.05)';
+    ctx.fillStyle = 'rgba(33, 150, 243, 0.06)';
     ctx.fillRect(teX, 0, w - teX, h);
 
     // Te boundary line
     ctx.setLineDash([3, 3]);
     ctx.lineWidth = 1;
-    ctx.strokeStyle = 'rgba(255, 123, 114, 0.35)';
+    ctx.strokeStyle = 'rgba(210, 69, 69, 0.4)';
     ctx.beginPath();
     ctx.moveTo(teX, 0); ctx.lineTo(teX, h);
     ctx.stroke();
@@ -960,16 +999,16 @@ function drawFlowCanvas(canvas, flow, params) {
     ctx.closePath();
 
     const gradient = ctx.createLinearGradient(0, padding, 0, padding + plotH);
-    gradient.addColorStop(0, 'rgba(88, 166, 255, 0.15)');
-    gradient.addColorStop(1, 'rgba(88, 166, 255, 0.0)');
+    gradient.addColorStop(0, 'rgba(33, 150, 243, 0.18)');
+    gradient.addColorStop(1, 'rgba(33, 150, 243, 0.0)');
     ctx.fillStyle = gradient;
     ctx.fill();
 
     // Waveform line
     ctx.beginPath();
-    ctx.strokeStyle = '#58a6ff';
+    ctx.strokeStyle = '#2196F3';
     ctx.lineWidth = 2;
-    ctx.shadowColor = 'rgba(88, 166, 255, 0.4)';
+    ctx.shadowColor = 'rgba(33, 150, 243, 0.25)';
     ctx.shadowBlur = 4;
 
     let peakX = 0, peakY = h;
@@ -986,9 +1025,9 @@ function drawFlowCanvas(canvas, flow, params) {
     // Peak dot at Tp
     ctx.beginPath();
     ctx.arc(peakX, peakY, 3.5, 0, Math.PI * 2);
-    ctx.fillStyle = '#ffd700';
+    ctx.fillStyle = '#D97D1F';
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255, 215, 0, 0.5)';
+    ctx.strokeStyle = 'rgba(217, 125, 31, 0.5)';
     ctx.lineWidth = 1;
     ctx.stroke();
 
@@ -1002,24 +1041,24 @@ function drawFlowCanvas(canvas, flow, params) {
     ctx.font = `600 ${fontMd}px Inter, sans-serif`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    ctx.fillStyle = 'rgba(88, 166, 255, 0.6)';
+    ctx.fillStyle = 'rgba(33, 150, 243, 0.85)';
     ctx.fillText('Glottal Airflow Ug(t)', 6, 3);
 
     // Tp label — 流量ピーク
     ctx.font = `600 ${fontMd}px Inter, sans-serif`;
     ctx.textAlign = 'center';
-    ctx.fillStyle = 'rgba(255, 215, 0, 0.8)';
+    ctx.fillStyle = 'rgba(217, 125, 31, 0.95)';
     ctx.fillText('Tp 流量ピーク', peakX, peakY - 8);
 
     // Te label — 閉鎖点（励起点）
     const teFlowY = padding + plotH * (1.0 - flow[Math.min(numPoints - 1, Math.floor((Te / T0) * numPoints))]);
-    ctx.fillStyle = 'rgba(255, 123, 114, 0.7)';
+    ctx.fillStyle = 'rgba(210, 69, 69, 0.9)';
     ctx.fillText('Te 閉鎖点', teX + (isMobile ? 18 : 28), Math.min(teFlowY, padding + 14));
 
     // Te dot on the flow curve
     ctx.beginPath();
     ctx.arc(teX, teFlowY, 3, 0, Math.PI * 2);
-    ctx.fillStyle = '#ff7b72';
+    ctx.fillStyle = '#D24545';
     ctx.fill();
 
     // Bottom parameter badges
@@ -1029,29 +1068,29 @@ function drawFlowCanvas(canvas, flow, params) {
 
     // Rd badge
     ctx.textAlign = 'left';
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
     ctx.fillText(`Rd ${Rd.toFixed(2)}`, 6, badgeY);
 
     // OQ badge
     ctx.textAlign = 'center';
-    ctx.fillStyle = 'rgba(46, 160, 67, 0.8)';
+    ctx.fillStyle = 'rgba(79, 150, 80, 0.95)';
     ctx.fillText(`OQ ${OQ.toFixed(2)}`, teX / 2, badgeY);
 
     // SQ badge
-    ctx.fillStyle = 'rgba(255, 215, 0, 0.6)';
+    ctx.fillStyle = 'rgba(217, 125, 31, 0.75)';
     ctx.textAlign = 'right';
     ctx.fillText(`SQ ${SQ.toFixed(1)}`, w - 6, badgeY);
 
     // Phonation mode badge (top-right)
     const modeLabels = { flow: 'Flow', pressed: 'Pressed', breathy: 'Breathy' };
     const modeColors = {
-        flow: 'rgba(46, 160, 67, 0.8)',
-        pressed: 'rgba(255, 123, 114, 0.8)',
-        breathy: 'rgba(88, 166, 255, 0.8)'
+        flow: 'rgba(79, 150, 80, 0.95)',
+        pressed: 'rgba(210, 69, 69, 0.95)',
+        breathy: 'rgba(33, 150, 243, 0.9)'
     };
     ctx.textAlign = 'right';
     ctx.textBaseline = 'top';
-    ctx.fillStyle = modeColors[state.phonationMode] || 'rgba(255,255,255,0.5)';
+    ctx.fillStyle = modeColors[state.phonationMode] || 'rgba(0,0,0,0.5)';
     ctx.font = `600 ${fontMd}px Inter, sans-serif`;
     ctx.fillText(modeLabels[state.phonationMode] || state.phonationMode, w - 6, 4);
 }
@@ -1073,7 +1112,7 @@ function drawDerivativeCanvas(canvas, derivative, params) {
     const h = canvas.clientHeight;
 
     // Background
-    ctx.fillStyle = '#0d1117';
+    ctx.fillStyle = '#FFFEF9';
     ctx.fillRect(0, 0, w, h);
 
     const teX = (Te / T0) * w;
@@ -1081,17 +1120,17 @@ function drawDerivativeCanvas(canvas, derivative, params) {
     const taEndX = Math.min(w, ((Te + Ta * 3) / T0) * w);
 
     // Phase regions (matching flow canvas)
-    ctx.fillStyle = 'rgba(46, 160, 67, 0.06)';
+    ctx.fillStyle = 'rgba(79, 150, 80, 0.1)';
     ctx.fillRect(0, 0, teX, h);
-    ctx.fillStyle = 'rgba(255, 123, 114, 0.06)';
+    ctx.fillStyle = 'rgba(210, 69, 69, 0.1)';
     ctx.fillRect(teX, 0, taEndX - teX, h);
-    ctx.fillStyle = 'rgba(88, 166, 255, 0.04)';
+    ctx.fillStyle = 'rgba(33, 150, 243, 0.05)';
     ctx.fillRect(taEndX, 0, w - taEndX, h);
 
     // Te boundary line
     ctx.setLineDash([3, 3]);
     ctx.lineWidth = 1;
-    ctx.strokeStyle = 'rgba(255, 123, 114, 0.35)';
+    ctx.strokeStyle = 'rgba(210, 69, 69, 0.4)';
     ctx.beginPath();
     ctx.moveTo(teX, 0); ctx.lineTo(teX, h);
     ctx.stroke();
@@ -1118,7 +1157,7 @@ function drawDerivativeCanvas(canvas, derivative, params) {
     const zeroY = padding + plotH * (posRatio / total);
 
     // Zero baseline
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(0, zeroY); ctx.lineTo(w, zeroY);
@@ -1137,7 +1176,7 @@ function drawDerivativeCanvas(canvas, derivative, params) {
     }
     ctx.lineTo(w, zeroY);
     ctx.closePath();
-    ctx.fillStyle = 'rgba(46, 160, 67, 0.1)';
+    ctx.fillStyle = 'rgba(79, 150, 80, 0.18)';
     ctx.fill();
 
     // Negative fill (red tint)
@@ -1150,14 +1189,14 @@ function drawDerivativeCanvas(canvas, derivative, params) {
     }
     ctx.lineTo(w, zeroY);
     ctx.closePath();
-    ctx.fillStyle = 'rgba(255, 123, 114, 0.1)';
+    ctx.fillStyle = 'rgba(210, 69, 69, 0.15)';
     ctx.fill();
 
     // Waveform line
     ctx.beginPath();
-    ctx.strokeStyle = '#ff7b72';
+    ctx.strokeStyle = '#D24545';
     ctx.lineWidth = 2;
-    ctx.shadowColor = 'rgba(255, 123, 114, 0.4)';
+    ctx.shadowColor = 'rgba(210, 69, 69, 0.3)';
     ctx.shadowBlur = 3;
 
     let minY = 0, minX = 0, minYVal = Infinity;
@@ -1194,21 +1233,21 @@ function drawDerivativeCanvas(canvas, derivative, params) {
     ctx.font = `600 ${fontMd}px Inter, sans-serif`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    ctx.fillStyle = 'rgba(255, 123, 114, 0.6)';
+    ctx.fillStyle = 'rgba(210, 69, 69, 0.85)';
     ctx.fillText('dUg/dt', 6, 3);
 
     // -EE dot and label at negative peak (Te)
     ctx.beginPath();
     ctx.arc(minX, minY, 3.5, 0, Math.PI * 2);
-    ctx.fillStyle = '#ff7b72';
+    ctx.fillStyle = '#D24545';
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255, 123, 114, 0.5)';
+    ctx.strokeStyle = 'rgba(210, 69, 69, 0.5)';
     ctx.lineWidth = 1;
     ctx.stroke();
 
     ctx.font = `600 ${fontMd}px Inter, sans-serif`;
     ctx.textAlign = 'center';
-    ctx.fillStyle = 'rgba(255, 123, 114, 0.8)';
+    ctx.fillStyle = 'rgba(210, 69, 69, 0.95)';
     ctx.fillText(`Te -EE`, minX, minY + 6);
 
     // Tp zero-crossing label
@@ -1224,10 +1263,10 @@ function drawDerivativeCanvas(canvas, derivative, params) {
     const zeroCrossX = (zeroCrossIdx / numPoints) * w;
     ctx.beginPath();
     ctx.arc(zeroCrossX, zeroY, 3, 0, Math.PI * 2);
-    ctx.fillStyle = '#ffd700';
+    ctx.fillStyle = '#D97D1F';
     ctx.fill();
     ctx.font = `600 ${fontMd}px Inter, sans-serif`;
-    ctx.fillStyle = 'rgba(255, 215, 0, 0.8)';
+    ctx.fillStyle = 'rgba(217, 125, 31, 0.95)';
     ctx.textAlign = 'center';
     ctx.fillText('Tp', zeroCrossX, zeroY - 10);
 
@@ -1236,7 +1275,7 @@ function drawDerivativeCanvas(canvas, derivative, params) {
         const taStartX = teX;
         const taEndXDraw = Math.min(w - 10, ((Te + Ta) / T0) * w);
         const bracketY = h - paddingBottom - 2;
-        ctx.strokeStyle = 'rgba(88, 166, 255, 0.5)';
+        ctx.strokeStyle = 'rgba(33, 150, 243, 0.6)';
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(taStartX, bracketY - 4);
@@ -1247,7 +1286,7 @@ function drawDerivativeCanvas(canvas, derivative, params) {
 
         ctx.font = `600 ${fontSm}px Inter, sans-serif`;
         ctx.textAlign = 'center';
-        ctx.fillStyle = 'rgba(88, 166, 255, 0.7)';
+        ctx.fillStyle = 'rgba(33, 150, 243, 0.85)';
         ctx.fillText('Ta', (taStartX + taEndXDraw) / 2, bracketY - 6);
     }
 
@@ -1258,25 +1297,25 @@ function drawDerivativeCanvas(canvas, derivative, params) {
 
     // Rd badge
     ctx.textAlign = 'left';
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
     ctx.fillText(`Rd ${Rd.toFixed(2)}`, 6, badgeY);
 
     // RA badge
     ctx.textAlign = 'center';
-    ctx.fillStyle = 'rgba(88, 166, 255, 0.7)';
+    ctx.fillStyle = 'rgba(33, 150, 243, 0.85)';
     if (w > 200) {
         ctx.fillText(`RA ${RA.toFixed(3)}`, w * 0.35, badgeY);
     }
 
     // RK badge
-    ctx.fillStyle = 'rgba(255, 215, 0, 0.6)';
+    ctx.fillStyle = 'rgba(217, 125, 31, 0.75)';
     if (w > 200) {
         ctx.fillText(`RK ${RK.toFixed(2)}`, w * 0.65, badgeY);
     }
 
     // EE badge
     ctx.textAlign = 'right';
-    ctx.fillStyle = 'rgba(255, 123, 114, 0.7)';
+    ctx.fillStyle = 'rgba(210, 69, 69, 0.9)';
     ctx.fillText(`EE ${EE.toFixed(2)}`, w - 6, badgeY);
 }
 
@@ -1352,7 +1391,7 @@ function drawVisualizer() {
     const height = els.canvas.height;
 
     // Clear background
-    canvasCtx.fillStyle = '#0d1117';
+    canvasCtx.fillStyle = '#FFFEF9';
     canvasCtx.fillRect(0, 0, width, height);
 
     // Draw Selection Background Highlight (Glassmorphism-ish)
@@ -1363,13 +1402,13 @@ function drawVisualizer() {
 
         if (selWidth > 0) {
             const selGradient = canvasCtx.createLinearGradient(0, 0, 0, height);
-            selGradient.addColorStop(0, 'rgba(255, 255, 255, 0.15)');
-            selGradient.addColorStop(1, 'rgba(255, 255, 255, 0.02)');
+            selGradient.addColorStop(0, 'rgba(33, 150, 243, 0.12)');
+            selGradient.addColorStop(1, 'rgba(33, 150, 243, 0.04)');
             canvasCtx.fillStyle = selGradient;
             canvasCtx.fillRect(x1, 0, selWidth, height);
 
             canvasCtx.beginPath();
-            canvasCtx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+            canvasCtx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
             canvasCtx.setLineDash([4, 4]);
             canvasCtx.lineWidth = 1;
             canvasCtx.moveTo(x1, 0);
@@ -1397,14 +1436,14 @@ function drawVisualizer() {
             canvasCtx.save();
 
             // Large note name (like a tuner)
-            canvasCtx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+            canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.1)';
             canvasCtx.font = '700 48px Inter, sans-serif';
             canvasCtx.textAlign = 'center';
             canvasCtx.textBaseline = 'middle';
             canvasCtx.fillText(noteName, width / 2, height / 2 - 10);
 
             // Frequency below
-            canvasCtx.fillStyle = 'rgba(255, 255, 255, 0.10)';
+            canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.08)';
             canvasCtx.font = '400 18px Inter, sans-serif';
             canvasCtx.fillText(`${Math.round(detectedPitch)} Hz`, width / 2, height / 2 + 28);
 
@@ -1413,7 +1452,7 @@ function drawVisualizer() {
     }
 
     // Draw Grid lines
-    canvasCtx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+    canvasCtx.strokeStyle = 'rgba(0, 0, 0, 0.08)';
     canvasCtx.lineWidth = 1;
     canvasCtx.beginPath();
 
@@ -1430,7 +1469,7 @@ function drawVisualizer() {
 
     // Grid frequency labels (drawn on canvas so they match the actual scale)
     if (state.logScale) {
-        canvasCtx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+        canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.2)';
         canvasCtx.font = '9px Inter, sans-serif';
         canvasCtx.textAlign = 'center';
         canvasCtx.textBaseline = 'bottom';
@@ -1691,8 +1730,8 @@ function drawVisualizer() {
     // 1. Draw Simulated Spectrum (Blue, filled)
     if (isPlaying && analyser) {
         const gradient = canvasCtx.createLinearGradient(0, 0, 0, height);
-        gradient.addColorStop(0, 'rgba(88, 166, 255, 0.5)');
-        gradient.addColorStop(1, 'rgba(88, 166, 255, 0.0)');
+        gradient.addColorStop(0, 'rgba(33, 150, 243, 0.6)');
+        gradient.addColorStop(1, 'rgba(33, 150, 243, 0.0)');
 
         const bufferLength = analyser.frequencyBinCount;
         const dataArray = new Float32Array(bufferLength);
@@ -1700,7 +1739,7 @@ function drawVisualizer() {
 
         if (state.selectionActive) {
             canvasCtx.globalAlpha = 0.25; // Dim out-of-range
-            drawSpectrum(analyser, 'rgba(88, 166, 255, 0.8)', gradient, 1.5, dataArray);
+            drawSpectrum(analyser, 'rgba(33, 150, 243, 0.9)', gradient, 1.5, dataArray);
             canvasCtx.globalAlpha = 1.0;
 
             const x1 = Math.max(0, freqToX(state.selectionMinFreq, width));
@@ -1710,10 +1749,10 @@ function drawVisualizer() {
             canvasCtx.beginPath();
             canvasCtx.rect(x1, 0, x2 - x1, height);
             canvasCtx.clip();
-            drawSpectrum(analyser, 'rgba(88, 166, 255, 0.8)', gradient, 1.5, dataArray);
+            drawSpectrum(analyser, 'rgba(33, 150, 243, 0.9)', gradient, 1.5, dataArray);
             canvasCtx.restore();
         } else {
-            drawSpectrum(analyser, 'rgba(88, 166, 255, 0.8)', gradient, 1.5, dataArray);
+            drawSpectrum(analyser, 'rgba(33, 150, 243, 0.9)', gradient, 1.5, dataArray);
         }
 
         const maxDb = analyser.maxDecibels;
@@ -1754,9 +1793,9 @@ function drawVisualizer() {
                 const x = freqToX(peakFreq, width);
 
                 if (state.selectionActive && (expectedFreq < state.selectionMinFreq || expectedFreq > state.selectionMaxFreq)) {
-                    canvasCtx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+                    canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.55)';
                 } else {
-                    canvasCtx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                    canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.85)';
                 }
 
                 canvasCtx.fillText(`${h}fo`, x, y - 8);
@@ -1774,7 +1813,7 @@ function drawVisualizer() {
             micAnalyser.getFloatFrequencyData(state.cachedMicData);
         }
 
-        drawSpectrum(micAnalyser, 'rgba(46, 160, 67, 0.9)', null, 1.2, state.cachedMicData);
+        drawSpectrum(micAnalyser, 'rgba(79, 150, 80, 0.95)', null, 1.2, state.cachedMicData);
 
         // --- Real-time Formant Tracking (Mic F1 / F2) ---
         const maxDb = micAnalyser.maxDecibels;
@@ -1819,11 +1858,11 @@ function drawVisualizer() {
             canvasCtx.restore();
         };
 
-        drawMicFormantMarker(estFormants.f1, 'Mic fR1', '#ff7b72'); // Red
-        drawMicFormantMarker(estFormants.f2, 'Mic fR2', '#79c0ff'); // Blue
-        drawMicFormantMarker(estFormants.f3, 'Mic fR3', '#a371f7'); // Purple
-        drawMicFormantMarker(estFormants.f4, 'Mic fR4', '#f0883e'); // Orange
-        drawMicFormantMarker(estFormants.f5, 'Mic fR5', '#d2a8ff'); // Pink
+        drawMicFormantMarker(estFormants.f1, 'Mic fR1', '#D24545'); // Red
+        drawMicFormantMarker(estFormants.f2, 'Mic fR2', '#2196F3'); // Blue
+        drawMicFormantMarker(estFormants.f3, 'Mic fR3', '#9C3CD9'); // Purple
+        drawMicFormantMarker(estFormants.f4, 'Mic fR4', '#E68B30'); // Orange
+        drawMicFormantMarker(estFormants.f5, 'Mic fR5', '#D946EF'); // Pink
     }
 
     // 3. Draw Formant Overlay Envelopes (Only when simulating)
@@ -1864,11 +1903,11 @@ function drawVisualizer() {
             canvasCtx.fillText(label, cx - 10, 20);
         };
 
-        drawFormantEnvelope(state.formants.f1.freq, state.formants.f1.q, 'fR1', '#ff7b72', state.formants.f1.enabled); // Red
-        drawFormantEnvelope(state.formants.f2.freq, state.formants.f2.q, 'fR2', '#79c0ff', state.formants.f2.enabled); // Blue
-        drawFormantEnvelope(state.formants.f3.freq, state.formants.f3.q, 'fR3', '#a371f7', state.formants.f3.enabled); // Purple
-        drawFormantEnvelope(state.formants.f4.freq, state.formants.f4.q, 'fR4', '#f0883e', state.formants.f4.enabled); // Orange
-        drawFormantEnvelope(state.formants.f5.freq, state.formants.f5.q, 'fR5', '#d2a8ff', state.formants.f5.enabled); // Pink
+        drawFormantEnvelope(state.formants.f1.freq, state.formants.f1.q, 'fR1', '#D24545', state.formants.f1.enabled); // Red
+        drawFormantEnvelope(state.formants.f2.freq, state.formants.f2.q, 'fR2', '#2196F3', state.formants.f2.enabled); // Blue
+        drawFormantEnvelope(state.formants.f3.freq, state.formants.f3.q, 'fR3', '#9C3CD9', state.formants.f3.enabled); // Purple
+        drawFormantEnvelope(state.formants.f4.freq, state.formants.f4.q, 'fR4', '#E68B30', state.formants.f4.enabled); // Orange
+        drawFormantEnvelope(state.formants.f5.freq, state.formants.f5.q, 'fR5', '#D946EF', state.formants.f5.enabled); // Pink
     }
 
     // 4. Draw Slope Approximation Line (dashed yellow)
@@ -1888,7 +1927,7 @@ function drawVisualizer() {
         if (!isFinite(h0Db)) h0Db = slopeMinDb;
 
         canvasCtx.beginPath();
-        canvasCtx.strokeStyle = 'rgba(255, 215, 0, 0.7)'; // Gold/Yellow
+        canvasCtx.strokeStyle = 'rgba(217, 125, 31, 0.85)'; // Gold/Yellow
         canvasCtx.setLineDash([8, 6]);
         canvasCtx.lineWidth = 2;
 
@@ -1921,7 +1960,7 @@ function drawVisualizer() {
         canvasCtx.setLineDash([]);
 
         // Label
-        canvasCtx.fillStyle = 'rgba(255, 215, 0, 0.8)';
+        canvasCtx.fillStyle = 'rgba(217, 125, 31, 0.95)';
         canvasCtx.font = '11px monospace';
         canvasCtx.textAlign = 'left';
         canvasCtx.fillText(`Slope: ${slopeDbPerOctave}dB/oct`, freqToX(f0, width) + 5, 40);
@@ -1948,9 +1987,9 @@ function drawVisualizer() {
 
                     // Check if this harmonic sits near a target formant
                     let nearFormant = false;
-                    let formantColor = 'rgba(88, 166, 255, 0.25)';
+                    let formantColor = 'rgba(33, 150, 243, 0.5)';
                     const fKeys = ['f1', 'f2', 'f3', 'f4', 'f5'];
-                    const fColors = ['rgba(255, 123, 114, 0.5)', 'rgba(121, 192, 255, 0.5)', 'rgba(163, 113, 247, 0.5)', 'rgba(240, 136, 62, 0.5)', 'rgba(210, 168, 255, 0.5)'];
+                    const fColors = ['rgba(210, 69, 69, 0.5)', 'rgba(33, 150, 243, 0.5)', 'rgba(156, 60, 217, 0.5)', 'rgba(230, 139, 48, 0.5)', 'rgba(217, 70, 239, 0.5)'];
                     for (let fi = 0; fi < fKeys.length; fi++) {
                         const fVal = targetFormants[fKeys[fi]];
                         if (fVal && Math.abs(hFreq - fVal) < targetF0 * 0.4) {
@@ -1968,7 +2007,7 @@ function drawVisualizer() {
 
                     // Vertical dashed line
                     canvasCtx.beginPath();
-                    canvasCtx.strokeStyle = nearFormant ? formantColor : 'rgba(88, 166, 255, 0.3)';
+                    canvasCtx.strokeStyle = nearFormant ? formantColor : 'rgba(33, 150, 243, 0.4)';
                     canvasCtx.lineWidth = nearFormant ? 3 : 1.5;
                     if (nearFormant) {
                         canvasCtx.setLineDash([8, 6]); // Longer dashes for emphasized lines
@@ -2231,6 +2270,76 @@ els.spectrumSlopeSlider.addEventListener('input', (e) => {
     updateSpectralTilt();
 });
 
+// Vibrato controls
+function applyVibratoLive() {
+    if (!audioCtx) return;
+    if (vibratoLFO) {
+        vibratoLFO.frequency.setTargetAtTime(state.vibrato.rate, audioCtx.currentTime, 0.02);
+    }
+    if (vibratoFMGain) {
+        const fmTarget = state.vibrato.enabled ? state.vibrato.extent : 0;
+        vibratoFMGain.gain.setTargetAtTime(fmTarget, audioCtx.currentTime, 0.05);
+    }
+    if (vibratoAMGain) {
+        const amTarget = state.vibrato.enabled ? (state.vibrato.amDepth / 100) : 0;
+        vibratoAMGain.gain.setTargetAtTime(amTarget, audioCtx.currentTime, 0.05);
+    }
+}
+
+if (els.vibratoEnable) {
+    els.vibratoEnable.addEventListener('change', (e) => {
+        state.vibrato.enabled = e.target.checked;
+        const pill = e.target.parentElement.querySelector('.vibrato-enable-text');
+        if (pill) pill.textContent = state.vibrato.enabled ? 'ON' : 'OFF';
+        e.target.parentElement.classList.toggle('on', state.vibrato.enabled);
+        if (isPlaying) startVibratoOnset();
+        else applyVibratoLive();
+    });
+    els.vibratoEnable.parentElement.addEventListener('click', (e) => {
+        // Prevent collapsible summary toggle when clicking enable toggle
+        e.stopPropagation();
+    });
+}
+if (els.vibratoRate) {
+    els.vibratoRate.addEventListener('input', (e) => {
+        state.vibrato.rate = parseFloat(e.target.value);
+        els.vibratoRateVal.textContent = state.vibrato.rate.toFixed(1);
+        applyVibratoLive();
+    });
+}
+if (els.vibratoExtent) {
+    els.vibratoExtent.addEventListener('input', (e) => {
+        state.vibrato.extent = parseFloat(e.target.value);
+        els.vibratoExtentVal.textContent = state.vibrato.extent;
+        applyVibratoLive();
+    });
+}
+if (els.vibratoDelay) {
+    els.vibratoDelay.addEventListener('input', (e) => {
+        state.vibrato.onsetDelay = parseFloat(e.target.value);
+        els.vibratoDelayVal.textContent = state.vibrato.onsetDelay;
+    });
+}
+if (els.vibratoRamp) {
+    els.vibratoRamp.addEventListener('input', (e) => {
+        state.vibrato.onsetRamp = parseFloat(e.target.value);
+        els.vibratoRampVal.textContent = state.vibrato.onsetRamp;
+    });
+}
+if (els.vibratoAm) {
+    els.vibratoAm.addEventListener('input', (e) => {
+        state.vibrato.amDepth = parseFloat(e.target.value);
+        els.vibratoAmVal.textContent = state.vibrato.amDepth;
+        applyVibratoLive();
+    });
+}
+if (els.vibratoWave) {
+    els.vibratoWave.addEventListener('change', (e) => {
+        state.vibrato.waveform = e.target.value;
+        if (vibratoLFO) vibratoLFO.type = state.vibrato.waveform;
+    });
+}
+
 // Slope Line Toggle
 els.btnSlopeLine.addEventListener('click', () => {
     state.showSlopeLine = !state.showSlopeLine;
@@ -2288,11 +2397,6 @@ function updateSpectralTilt() {
     }
 }
 
-els.autoRoutingToggle.addEventListener('change', () => {
-    // Re-evaluate current state if toggled back on
-    analyzeAcoustics();
-});
-
 const handleMechChange = (e) => {
     state.mechanism = e.target.value;
     updateSourceParams();
@@ -2310,8 +2414,11 @@ const bindFormantParams = (num) => {
         analyzeAcoustics(); // Trigger acoustics analysis when formants move
     });
 
+    const qValEl = document.getElementById(`f${num}-q-val`);
     els[`f${num}Q`].addEventListener('input', (e) => {
-        state.formants[`f${num}`].q = parseFloat(e.target.value);
+        const q = parseFloat(e.target.value);
+        state.formants[`f${num}`].q = q;
+        if (qValEl) qValEl.textContent = q.toFixed(1);
         updateFilterParams();
     });
 
