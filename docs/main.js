@@ -35,6 +35,11 @@ let micSource = null;
 let micGainNode = null;
 let micAnalyser = null;
 
+// --- Environment ---
+const IS_MOBILE = location.pathname.endsWith('mobile.html');
+const HARMONIC_LABEL = (h) => IS_MOBILE ? `H${h}` : `${h}fo`;
+const MAX_HARMONICS_ON_SPECTRUM = IS_MOBILE ? 10 : Infinity;
+
 // --- State Variables ---
 const state = {
     voiceType: 'nontreble', // 'treble' or 'nontreble'
@@ -1769,7 +1774,7 @@ function drawVisualizer() {
         const f0 = state.pitch;
         const searchRangeHz = f0 * 0.1; // Search +/- 10% around expected harmonic freq for the exact FFT bin peak
 
-        for (let h = 1; (f0 * h) <= MAX_FREQ_DISPLAY; h++) {
+        for (let h = 1; (f0 * h) <= MAX_FREQ_DISPLAY && h <= MAX_HARMONICS_ON_SPECTRUM; h++) {
             const expectedFreq = f0 * h;
 
             // Find actual peak bin around expected freq
@@ -1802,7 +1807,7 @@ function drawVisualizer() {
                     canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.85)';
                 }
 
-                canvasCtx.fillText(`${h}fo`, x, y - 8);
+                canvasCtx.fillText(HARMONIC_LABEL(h), x, y - 8);
             }
         }
     }
@@ -1984,7 +1989,8 @@ function drawVisualizer() {
                 canvasCtx.lineWidth = 1.5;
 
                 const maxHarmonics = Math.floor(MAX_FREQ_DISPLAY / targetF0);
-                for (let h = 1; h <= maxHarmonics && h <= 12; h++) {
+                const harmonicCap = IS_MOBILE ? 10 : 12;
+                for (let h = 1; h <= maxHarmonics && h <= harmonicCap; h++) {
                     const hFreq = targetF0 * h;
                     if (hFreq > MAX_FREQ_DISPLAY) break;
                     const hx = freqToX(hFreq, width);
@@ -2030,7 +2036,7 @@ function drawVisualizer() {
                         canvasCtx.fillStyle = formantColor;
                         canvasCtx.font = 'bold 11px monospace';
                         canvasCtx.textAlign = 'center';
-                        canvasCtx.fillText(`${h}fo`, hx, height - 5);
+                        canvasCtx.fillText(HARMONIC_LABEL(h), hx, height - 5);
                     }
                 }
 
