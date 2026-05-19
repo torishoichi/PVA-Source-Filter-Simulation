@@ -99,17 +99,6 @@ body {
     flex: 0 0 auto;
 }
 
-/* Monochrome emoji icons inside top-bar buttons (drop the colored emoji look) */
-.bmc-link,
-#mic-toggle {
-    filter: grayscale(1);
-    transition: filter 0.15s, background 0.15s, color 0.15s, border-color 0.15s;
-}
-
-#mic-toggle.mic-active {
-    filter: none;
-}
-
 /* Mic group: 🎤 + LPC + Pause. Expands into a bordered frame when mic is active. */
 .mic-group {
     display: flex;
