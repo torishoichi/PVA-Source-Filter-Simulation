@@ -35,6 +35,122 @@ let micSource = null;
 let micGainNode = null;
 let micAnalyser = null;
 
+// LPC v2/v3: persistent buffers for the shared LPC pipeline + per-method smoothing state
+const LPC_V2_HISTORY_LEN = 3;
+const lpcCoreState = {
+    timeBuf: null,
+    preEmp: null,
+    decimated: null,
+    burgF: null,
+    burgB: null,
+    // Snapshot of the most recent successful LPC frame (used for envelope visualization)
+    lastCoefs: null,
+    lastP: 0,
+    lastDecSr: 0,
+    lastUpdate: 0,
+    // Multi-frame averaging of reflection coefficients (Praat-style stabilization)
+    kHistory: [],
+    lastVoicedTime: 0
+};
+const LPC_K_HISTORY_LEN = 3;
+const lpcV2State = {
+    history: { f1: [], f2: [], f3: [], f4: [], f5: [] },
+    smoothed: { f1: null, f2: null, f3: null, f4: null, f5: null },
+    lastVoiced: 0
+};
+// One-Euro filter state for v3 (per-formant)
+const lpcV3State = {
+    filters: { f1: null, f2: null, f3: null, f4: null, f5: null },
+    lastVoiced: 0
+};
+// --- Burg LPC ---
+// Computes reflection coefficients k[1..p] directly from time-domain forward/backward
+// prediction errors. More accurate than autocorrelation method for short windows.
+// Sign convention: A(z) = 1 - sum(a[i] * z^-i). Returns Float64Array length p+1 (k[0] unused),
+// or null if numerically failed at order 1.
+function burgLpc(x, N, p) {
+    if (!lpcCoreState.burgF || lpcCoreState.burgF.length !== N) {
+        lpcCoreState.burgF = new Float64Array(N);
+        lpcCoreState.burgB = new Float64Array(N);
+    }
+    const f = lpcCoreState.burgF;
+    const b = lpcCoreState.burgB;
+    for (let i = 0; i < N; i++) { f[i] = x[i]; b[i] = x[i]; }
+
+    const k = new Float64Array(p + 1);
+    for (let m = 1; m <= p; m++) {
+        let num = 0, denom = 0;
+        for (let n = m; n < N; n++) {
+            num += f[n] * b[n - 1];
+            denom += f[n] * f[n] + b[n - 1] * b[n - 1];
+        }
+        if (denom < 1e-18) {
+            if (m === 1) return null;
+            for (let j = m; j <= p; j++) k[j] = 0;
+            return k;
+        }
+        const km = 2 * num / denom;
+        if (Math.abs(km) >= 0.999 || !isFinite(km)) {
+            if (m === 1) return null;
+            for (let j = m; j <= p; j++) k[j] = 0;
+            return k;
+        }
+        k[m] = km;
+        // Update forward/backward errors. Both f[n] and b[n] depend on the old f[n] and b[n-1],
+        // and we overwrite b[n] (not b[n-1]) — so a forward pass is safe.
+        for (let n = N - 1; n >= m; n--) {
+            const fn = f[n], bn1 = b[n - 1];
+            f[n] = fn - km * bn1;
+            b[n] = bn1 - km * fn;
+        }
+    }
+    return k;
+}
+
+// Convert reflection coefficients k[1..p] to prediction coefficients a[0..p]
+// such that A(z) = 1 - sum(a[i] * z^-i).
+function reflectionsToPredictions(k, p) {
+    const a = new Float64Array(p + 1);
+    a[0] = 1;
+    for (let m = 1; m <= p; m++) {
+        const km = k[m];
+        if (km === 0) continue;
+        const aPrev = a.slice(0, m);
+        a[m] = km;
+        for (let i = 1; i < m; i++) {
+            a[i] = aPrev[i] - km * aPrev[m - i];
+        }
+    }
+    return a;
+}
+
+function makeOneEuro() {
+    return {
+        prevX: null,
+        prevDx: 0,
+        prevT: 0,
+        // Tunings: minCutoff (Hz) — smoothing at rest; beta — speed-coupling; dCutoff — derivative smoothing
+        minCutoff: 1.2,
+        beta: 0.06,
+        dCutoff: 1.0
+    };
+}
+function oneEuroStep(s, x, tMs) {
+    if (s.prevX == null) {
+        s.prevX = x; s.prevT = tMs; s.prevDx = 0;
+        return x;
+    }
+    const dtSec = Math.max(1e-3, (tMs - s.prevT) / 1000);
+    const dx = (x - s.prevX) / dtSec;
+    const aD = (2 * Math.PI * dtSec * s.dCutoff) / (1 + 2 * Math.PI * dtSec * s.dCutoff);
+    const dxHat = aD * dx + (1 - aD) * s.prevDx;
+    const cutoff = s.minCutoff + s.beta * Math.abs(dxHat);
+    const aX = (2 * Math.PI * dtSec * cutoff) / (1 + 2 * Math.PI * dtSec * cutoff);
+    const xHat = aX * x + (1 - aX) * s.prevX;
+    s.prevX = xHat; s.prevDx = dxHat; s.prevT = tMs;
+    return xHat;
+}
+
 // --- Environment ---
 const IS_MOBILE = location.pathname.endsWith('mobile.html');
 const HARMONIC_LABEL = (h) => `H${h}`;
@@ -54,8 +170,10 @@ const state = {
     isMicPaused: false,
     cachedMicData: null,
     cachedMicPitch: -1,
+    cachedMicFormants: null, // Per-formant snapshot (preserved during pause and brief live dropouts)
+    cachedMicFormantsTime: null, // Per-formant last-update timestamp (ms)
     micGain: 1.0,
-    micFormantMethod: 'lpc', // 'peak' or 'lpc'
+    micFormantMethod: 'lpc-v3', // 'peak' | 'lpc' | 'lpc-v2' | 'lpc-v3'
     spectrumSlope: -12, // dB/octave attenuation
     showSlopeLine: true, // Toggle for slope approximation line (default ON)
     acousticMode: 'Neutral', // 'Neutral', 'Yell', 'Whoop'
@@ -74,12 +192,12 @@ const state = {
         f5: { freq: 4800, q: 12, gain: 6, enabled: true }
     },
     vibrato: {
-        enabled: false,
-        rate: 5.5,        // Hz
-        extent: 50,       // cents
+        enabled: true,
+        rate: 6.4,        // Hz
+        extent: 2,        // cents
         onsetDelay: 300,  // ms
         onsetRamp: 400,   // ms
-        amDepth: 10,      // %
+        amDepth: 4,       // %
         waveform: 'sine'  // 'sine' | 'triangle' | 'sawtooth'
     }
 };
@@ -659,10 +777,11 @@ function analyzeAcoustics() {
 
     if (state.voiceType === 'treble') {
         // Treble Voice: Prioritizes Whoop (fR1 tracks 1fo).
+        // Yell is also possible (belt strategy: F1 raised to 2*f0) — gated only by physical
+        // reachability (F1 can practically be raised up to ~1500Hz via vowel modification).
         if (Math.abs(fR1 - f0) / f0 < whoopTolerance) {
             state.acousticMode = 'Whoop';
-        } else if (f0 <= 400 && Math.abs(fR1 - f20) / f20 < yellTolerance) {
-            // Trebles can only truly Yell in their lower octaves
+        } else if (Math.abs(fR1 - f20) / f20 < yellTolerance) {
             state.acousticMode = 'Yell';
         } else {
             state.acousticMode = 'Neutral';
@@ -1786,6 +1905,342 @@ function drawVisualizer() {
         };
     };
 
+    // Frequency bands used as bootstrap (no prior anchors) and as fallback for unassigned slots
+    const formantBands = () => state.voiceType === 'treble'
+        ? [[250, 1200], [800, 2800], [2200, 3600], [3200, 4500], [4000, 5500]]
+        : [[200, 1000], [700, 2500], [2000, 3300], [2900, 4200], [3800, 5400]];
+
+    // Continuity-based assignment: prefer last frame's positions, fall back to bands.
+    // Enforces F1 < F2 < F3 < F4 < F5 to prevent slot swaps when formants are close (e.g. /i/).
+    // anchors: { f1, f2, f3, f4, f5 } where each is the previous smoothed freq (or null).
+    const assignFormants = (candidates, anchors) => {
+        const keys = ['f1', 'f2', 'f3', 'f4', 'f5'];
+        const result = { f1: null, f2: null, f3: null, f4: null, f5: null };
+        const used = new Array(candidates.length).fill(false);
+        const maxDist = [220, 420, 520, 700, 800]; // per-slot Hz tolerance
+        const MIN_GAP = 60; // minimum Hz spacing between adjacent formants
+
+        // Ordering guard: a freq is allowed for slot i only if it sits strictly between
+        // the nearest already-assigned neighbors (with MIN_GAP margin).
+        const violatesOrdering = (slotIdx, freq) => {
+            for (let q = slotIdx - 1; q >= 0; q--) {
+                if (result[keys[q]] != null) { if (freq <= result[keys[q]] + MIN_GAP) return true; break; }
+            }
+            for (let q = slotIdx + 1; q < 5; q++) {
+                if (result[keys[q]] != null) { if (freq >= result[keys[q]] - MIN_GAP) return true; break; }
+            }
+            return false;
+        };
+
+        // Pass 1: anchor-based, greedy by best distance first (not slot order)
+        if (anchors) {
+            const pairs = [];
+            for (let i = 0; i < 5; i++) {
+                const target = anchors[keys[i]];
+                if (target == null) continue;
+                for (let j = 0; j < candidates.length; j++) {
+                    const d = Math.abs(candidates[j].freq - target);
+                    if (d <= maxDist[i]) pairs.push({ i, j, d });
+                }
+            }
+            pairs.sort((a, b) => a.d - b.d);
+            for (const p of pairs) {
+                if (result[keys[p.i]] != null || used[p.j]) continue;
+                const f = candidates[p.j].freq;
+                if (violatesOrdering(p.i, f)) continue;
+                result[keys[p.i]] = f;
+                used[p.j] = true;
+            }
+        }
+
+        // Pass 2: band-based fallback for still-empty slots (also enforces ordering)
+        const bands = formantBands();
+        for (let i = 0; i < 5; i++) {
+            const k = keys[i];
+            if (result[k] != null) continue;
+            const [lo, hi] = bands[i];
+            for (let j = 0; j < candidates.length; j++) {
+                if (used[j]) continue;
+                const f = candidates[j].freq;
+                if (f < lo || f > hi) continue;
+                if (violatesOrdering(i, f)) continue;
+                result[k] = f;
+                used[j] = true;
+                break;
+            }
+        }
+        return result;
+    };
+
+    // Shared LPC pipeline (Praat-inspired): decimate → voicing → LPC → root-find → formant assignment.
+    // anchors: previous smoothed F1-F5 for continuity tracking (null = bootstrap).
+    // Returns { voiced: true, raw: {f1..f5} } or { voiced: false }.
+    const lpcCoreExtract = (analyzer, anchors) => {
+        const sr = audioCtx.sampleRate;
+        const N = analyzer.fftSize;
+
+        if (!lpcCoreState.timeBuf || lpcCoreState.timeBuf.length !== N) {
+            lpcCoreState.timeBuf = new Float32Array(N);
+        }
+        const buf = lpcCoreState.timeBuf;
+        analyzer.getFloatTimeDomainData(buf);
+
+        // RMS gate
+        let rms = 0;
+        for (let i = 0; i < N; i++) rms += buf[i] * buf[i];
+        rms = Math.sqrt(rms / N);
+        if (rms < 0.004) return { voiced: false };
+
+        // Decimate by 4 (box-average lowpass)
+        const decimFactor = 4;
+        const decN = Math.floor(N / decimFactor);
+        const decSr = sr / decimFactor;
+        if (!lpcCoreState.decimated || lpcCoreState.decimated.length !== decN) {
+            lpcCoreState.decimated = new Float32Array(decN);
+        }
+        const dec = lpcCoreState.decimated;
+        for (let i = 0; i < decN; i++) {
+            const base = i * decimFactor;
+            let s = 0;
+            for (let k = 0; k < decimFactor; k++) s += buf[base + k];
+            dec[i] = s / decimFactor;
+        }
+
+        // Voicing strength via autocorrelation peak ratio
+        const minP = Math.max(2, Math.floor(decSr / 1100));
+        const maxP = Math.min(decN - 1, Math.floor(decSr / 70));
+        let r0 = 0;
+        for (let i = 0; i < decN; i++) r0 += dec[i] * dec[i];
+        if (r0 < 1e-9) return { voiced: false };
+        let bestRatio = 0;
+        for (let pp = minP; pp <= maxP; pp++) {
+            let s = 0;
+            for (let i = 0; i < decN - pp; i++) s += dec[i] * dec[i + pp];
+            const ratio = s / r0;
+            if (ratio > bestRatio) bestRatio = ratio;
+        }
+        if (bestRatio < 0.25) return { voiced: false };
+
+        // Pre-emphasis (cutoff = 50 Hz) + Hann window
+        const alpha = Math.exp(-2 * Math.PI * 50 / decSr);
+        if (!lpcCoreState.preEmp || lpcCoreState.preEmp.length !== decN) {
+            lpcCoreState.preEmp = new Float64Array(decN);
+        }
+        const x = lpcCoreState.preEmp;
+        for (let i = 0; i < decN; i++) {
+            const xn = dec[i];
+            const xn1 = i > 0 ? dec[i - 1] : 0;
+            const sig = xn - alpha * xn1;
+            const w = 0.5 * (1 - Math.cos(2 * Math.PI * i / (decN - 1)));
+            x[i] = sig * w;
+        }
+
+        // LPC via Burg method (Praat default — more accurate than autocorrelation for short windows)
+        const p = 12;
+        const kCurrent = burgLpc(x, decN, p);
+        if (!kCurrent) return { voiced: false };
+
+        // Multi-frame reflection coefficient averaging (temporal stabilization).
+        // Reset history if voicing resumed after a long silence so we don't blend in stale state.
+        const tNow = performance.now();
+        if (tNow - lpcCoreState.lastVoicedTime > 200) lpcCoreState.kHistory.length = 0;
+        lpcCoreState.lastVoicedTime = tNow;
+
+        lpcCoreState.kHistory.push(kCurrent);
+        if (lpcCoreState.kHistory.length > LPC_K_HISTORY_LEN) lpcCoreState.kHistory.shift();
+        const kAvg = new Float64Array(p + 1);
+        for (const hist of lpcCoreState.kHistory) {
+            for (let i = 1; i <= p; i++) kAvg[i] += hist[i];
+        }
+        const histN = lpcCoreState.kHistory.length;
+        for (let i = 1; i <= p; i++) kAvg[i] /= histN;
+
+        const a = reflectionsToPredictions(kAvg, p);
+
+        // Root finding (Durand-Kerner)
+        const polyCoeffs = new Float64Array(p + 1);
+        polyCoeffs[0] = 1;
+        for (let i = 1; i <= p; i++) polyCoeffs[i] = -a[i];
+        const roots = durandKerner(polyCoeffs, p);
+        if (!roots) return { voiced: false };
+
+        // Extract formant candidates from upper-half-plane roots
+        const candidates = [];
+        for (let i = 0; i < p; i++) {
+            const re = roots[2 * i];
+            const im = roots[2 * i + 1];
+            if (im <= 0) continue;
+            const mag = Math.sqrt(re * re + im * im);
+            if (mag <= 0 || mag >= 1.0) continue;
+            const freq = Math.atan2(im, re) * decSr / (2 * Math.PI);
+            const bw = -Math.log(mag) * decSr / Math.PI;
+            if (freq < 90 || freq > 5500) continue;
+            if (bw > 600) continue;
+            candidates.push({ freq, bw });
+        }
+        candidates.sort((u, v) => u.freq - v.freq);
+
+        // Assign F1-F5 by continuity (with band-assignment fallback)
+        const raw = assignFormants(candidates, anchors);
+        const foundCount = ['f1', 'f2', 'f3', 'f4', 'f5'].filter(k => raw[k] != null).length;
+        if (foundCount < 2) return { voiced: false };
+
+        // Snapshot LPC coefficients for the envelope overlay
+        lpcCoreState.lastCoefs = a;
+        lpcCoreState.lastP = p;
+        lpcCoreState.lastDecSr = decSr;
+        lpcCoreState.lastUpdate = performance.now();
+
+        return { voiced: true, raw };
+    };
+
+    const FORMANT_KEYS = ['f1', 'f2', 'f3', 'f4', 'f5'];
+
+    // v2: light median+EMA smoothing (median-of-3, EMA τ=0.30, hold 120ms)
+    const estimateLpcV2Formants = (analyzer, minDb, dbRange) => {
+        const dbVal = minDb + dbRange * 0.5;
+        const core = lpcCoreExtract(analyzer, lpcV2State.smoothed);
+
+        if (!core.voiced) {
+            const stale = performance.now() - lpcV2State.lastVoiced > 120;
+            if (stale) {
+                for (const k of FORMANT_KEYS) {
+                    lpcV2State.history[k] = [];
+                    lpcV2State.smoothed[k] = null;
+                }
+                return { f1: null, f2: null, f3: null, f4: null, f5: null };
+            }
+            const out = {};
+            for (const k of FORMANT_KEYS) {
+                out[k] = lpcV2State.smoothed[k] != null ? { freq: lpcV2State.smoothed[k], db: dbVal } : null;
+            }
+            return out;
+        }
+
+        lpcV2State.lastVoiced = performance.now();
+        const tau = 0.30; // EMA weight on previous value (lower = more responsive)
+        const picked = {};
+        for (const k of FORMANT_KEYS) {
+            const r = core.raw[k];
+            const hist = lpcV2State.history[k];
+            if (r != null) {
+                hist.push(r);
+                if (hist.length > LPC_V2_HISTORY_LEN) hist.shift();
+                const sorted = [...hist].sort((u, v) => u - v);
+                const median = sorted[Math.floor(sorted.length / 2)];
+                const prev = lpcV2State.smoothed[k];
+                const next = prev == null ? median : (tau * prev + (1 - tau) * median);
+                lpcV2State.smoothed[k] = next;
+                picked[k] = { freq: next, db: dbVal };
+            } else {
+                picked[k] = lpcV2State.smoothed[k] != null ? { freq: lpcV2State.smoothed[k], db: dbVal } : null;
+            }
+        }
+        return picked;
+    };
+
+    // v3: One-Euro adaptive filter (smooth at rest, responsive to fast changes)
+    const estimateLpcV3Formants = (analyzer, minDb, dbRange) => {
+        const dbVal = minDb + dbRange * 0.5;
+        const now = performance.now();
+        // Anchors for continuity: previous One-Euro output
+        const anchors = {
+            f1: lpcV3State.filters.f1?.prevX ?? null,
+            f2: lpcV3State.filters.f2?.prevX ?? null,
+            f3: lpcV3State.filters.f3?.prevX ?? null,
+            f4: lpcV3State.filters.f4?.prevX ?? null,
+            f5: lpcV3State.filters.f5?.prevX ?? null
+        };
+        const core = lpcCoreExtract(analyzer, anchors);
+
+        if (!core.voiced) {
+            const stale = now - lpcV3State.lastVoiced > 120;
+            if (stale) {
+                for (const k of FORMANT_KEYS) lpcV3State.filters[k] = null;
+                return { f1: null, f2: null, f3: null, f4: null, f5: null };
+            }
+            const out = {};
+            for (const k of FORMANT_KEYS) {
+                const f = lpcV3State.filters[k];
+                out[k] = (f && f.prevX != null) ? { freq: f.prevX, db: dbVal } : null;
+            }
+            return out;
+        }
+
+        lpcV3State.lastVoiced = now;
+        const picked = {};
+        for (const k of FORMANT_KEYS) {
+            const r = core.raw[k];
+            if (r != null) {
+                if (!lpcV3State.filters[k]) lpcV3State.filters[k] = makeOneEuro();
+                const filtered = oneEuroStep(lpcV3State.filters[k], r, now);
+                picked[k] = { freq: filtered, db: dbVal };
+            } else {
+                const f = lpcV3State.filters[k];
+                picked[k] = (f && f.prevX != null) ? { freq: f.prevX, db: dbVal } : null;
+            }
+        }
+        return picked;
+    };
+
+    // Durand-Kerner polynomial root finder.
+    // poly[0]*z^n + poly[1]*z^(n-1) + ... + poly[n] = 0
+    // Returns Float64Array of length 2n (re, im pairs), or null on failure.
+    function durandKerner(poly, n) {
+        // Normalize to monic
+        if (poly[0] === 0) return null;
+        const c = new Float64Array(n + 1);
+        for (let i = 0; i <= n; i++) c[i] = poly[i] / poly[0];
+
+        // Initial guesses: evenly spaced on a circle of radius 0.9 (slightly inside unit disc)
+        const r = new Float64Array(2 * n);
+        const radius = 0.9;
+        for (let k = 0; k < n; k++) {
+            const theta = 2 * Math.PI * k / n + 0.123; // small offset to avoid symmetry
+            r[2 * k] = radius * Math.cos(theta);
+            r[2 * k + 1] = radius * Math.sin(theta);
+        }
+
+        const MAX_ITER = 60;
+        const EPS = 1e-10;
+        for (let iter = 0; iter < MAX_ITER; iter++) {
+            let maxDelta = 0;
+            for (let k = 0; k < n; k++) {
+                const xr = r[2 * k], xi = r[2 * k + 1];
+                // Evaluate p(x) using Horner
+                let pr = 1, pi = 0;
+                for (let i = 1; i <= n; i++) {
+                    // (pr+j*pi) * (xr+j*xi) + c[i]
+                    const nr = pr * xr - pi * xi + c[i];
+                    const ni = pr * xi + pi * xr;
+                    pr = nr; pi = ni;
+                }
+                // Compute denominator = prod_{j != k} (x_k - x_j)
+                let dr = 1, di = 0;
+                for (let j = 0; j < n; j++) {
+                    if (j === k) continue;
+                    const yr = xr - r[2 * j];
+                    const yi = xi - r[2 * j + 1];
+                    const nr = dr * yr - di * yi;
+                    const ni = dr * yi + di * yr;
+                    dr = nr; di = ni;
+                }
+                const denomMag = dr * dr + di * di;
+                if (denomMag < 1e-30) continue;
+                // delta = p(x) / denom
+                const deltaR = (pr * dr + pi * di) / denomMag;
+                const deltaI = (pi * dr - pr * di) / denomMag;
+                r[2 * k] = xr - deltaR;
+                r[2 * k + 1] = xi - deltaI;
+                const dMag = Math.sqrt(deltaR * deltaR + deltaI * deltaI);
+                if (dMag > maxDelta) maxDelta = dMag;
+                if (!isFinite(r[2 * k]) || !isFinite(r[2 * k + 1])) return null;
+            }
+            if (maxDelta < EPS) break;
+        }
+        return r;
+    }
+
     // 1. Draw Simulated Spectrum (Blue, filled)
     if (isPlaying && analyser) {
         const gradient = canvasCtx.createLinearGradient(0, 0, 0, height);
@@ -2033,25 +2488,101 @@ function drawVisualizer() {
         const dbRange = maxDb - minDb;
         const nyq = audioCtx.sampleRate / 2;
 
-        const estFormants = state.micFormantMethod === 'lpc'
-            ? estimateLpcFormants(micAnalyser, minDb, dbRange, nyq)
-            : estimatePeakFormants(state.cachedMicData, minDb, dbRange, nyq, state.cachedMicPitch);
+        let estFormants;
+        const FORMANT_CACHE_HOLD_MS = 800; // how long to keep showing a dropped formant from cache
+        if (!state.cachedMicFormants) {
+            state.cachedMicFormants = { f1: null, f2: null, f3: null, f4: null, f5: null };
+            state.cachedMicFormantsTime = { f1: 0, f2: 0, f3: 0, f4: 0, f5: 0 };
+        }
+        if (state.isMicPaused) {
+            // Pause: freeze formants at the moment of pause (use cached snapshot)
+            estFormants = state.cachedMicFormants;
+        } else {
+            estFormants =
+                state.micFormantMethod === 'lpc-v3' ? estimateLpcV3Formants(micAnalyser, minDb, dbRange) :
+                state.micFormantMethod === 'lpc-v2' ? estimateLpcV2Formants(micAnalyser, minDb, dbRange) :
+                state.micFormantMethod === 'lpc'    ? estimateLpcFormants(micAnalyser, minDb, dbRange, nyq) :
+                                                      estimatePeakFormants(state.cachedMicData, minDb, dbRange, nyq, state.cachedMicPitch);
+            // Per-formant cache with timed fallback:
+            // - Update cache when a formant is detected
+            // - For undetected formants, fall back to cache value if it's recent enough
+            // This bridges momentary LPC dropouts (e.g. F4/F5 clustering in Yell mode).
+            const now = performance.now();
+            for (const k of ['f1', 'f2', 'f3', 'f4', 'f5']) {
+                if (estFormants[k] != null) {
+                    state.cachedMicFormants[k] = estFormants[k];
+                    state.cachedMicFormantsTime[k] = now;
+                } else if (state.cachedMicFormants[k] != null
+                           && now - state.cachedMicFormantsTime[k] < FORMANT_CACHE_HOLD_MS) {
+                    estFormants[k] = state.cachedMicFormants[k];
+                }
+            }
+        }
+
+        // LPC envelope overlay (v2/v3 only): translucent curve showing the modeled vocal-tract response.
+        // Freshness check is skipped while paused so the envelope stays frozen with the formants.
+        if ((state.micFormantMethod === 'lpc-v2' || state.micFormantMethod === 'lpc-v3')
+            && lpcCoreState.lastCoefs
+            && (state.isMicPaused || performance.now() - lpcCoreState.lastUpdate < 200)) {
+            const a = lpcCoreState.lastCoefs;
+            const p = lpcCoreState.lastP;
+            const decSr = lpcCoreState.lastDecSr;
+            const maxFreq = Math.min(MAX_FREQ_DISPLAY, decSr / 2);
+            const samples = 256;
+            const dbs = new Float32Array(samples);
+            const freqs = new Float32Array(samples);
+            let envMin = Infinity, envMax = -Infinity;
+            for (let s = 0; s < samples; s++) {
+                const freq = (s / (samples - 1)) * maxFreq;
+                const omega = 2 * Math.PI * freq / decSr;
+                let reA = 1, imA = 0;
+                for (let i = 1; i <= p; i++) {
+                    reA -= a[i] * Math.cos(i * omega);
+                    imA += a[i] * Math.sin(i * omega);
+                }
+                const magSq = reA * reA + imA * imA;
+                const db = -10 * Math.log10(magSq < 1e-30 ? 1e-30 : magSq);
+                dbs[s] = db;
+                freqs[s] = freq;
+                if (db < envMin) envMin = db;
+                if (db > envMax) envMax = db;
+            }
+            const span = Math.max(1e-3, envMax - envMin);
+            canvasCtx.save();
+            canvasCtx.beginPath();
+            canvasCtx.strokeStyle = 'rgba(140, 90, 200, 0.65)';
+            canvasCtx.lineWidth = 1.8;
+            canvasCtx.setLineDash([6, 3]);
+            for (let s = 0; s < samples; s++) {
+                const x = freqToX(freqs[s], width);
+                const norm = (dbs[s] - envMin) / span;
+                const y = height - norm * height * 0.78 - height * 0.10;
+                if (s === 0) canvasCtx.moveTo(x, y);
+                else canvasCtx.lineTo(x, y);
+            }
+            canvasCtx.stroke();
+            canvasCtx.setLineDash([]);
+            canvasCtx.restore();
+        }
 
         const drawMicFormantMarker = (formant, label, colorHex) => {
             if (!formant) return;
             const x = freqToX(formant.freq, width);
-            // Fixed y for all Mic fRx pills so they align horizontally regardless of peak intensity
+            // Fixed y for all Mic Fx pills so they align horizontally regardless of peak intensity
             const yPillTop = state.roughnessVisible ? 90 : 20;
             const yPillBottom = yPillTop + 16;
+            // Hz readout sits just below the label pill
+            const yHzTop = yPillBottom + 2;
+            const yHzBottom = yHzTop + 13;
 
-            // Animated vertical dashed line from below the pill down to canvas bottom
+            // Animated vertical dashed line below the Hz readout down to canvas bottom
             canvasCtx.save();
             canvasCtx.beginPath();
             canvasCtx.globalAlpha = 0.6;
             canvasCtx.strokeStyle = colorHex;
             canvasCtx.lineDashOffset = -Date.now() / 20; // Animate dash pattern falling
             canvasCtx.setLineDash([4, 4]);
-            canvasCtx.moveTo(x, yPillBottom + 2);
+            canvasCtx.moveTo(x, yHzBottom + 2);
             canvasCtx.lineTo(x, height);
             canvasCtx.stroke();
             canvasCtx.setLineDash([]);
@@ -2066,14 +2597,25 @@ function drawVisualizer() {
             canvasCtx.fillStyle = '#fff';
             canvasCtx.textAlign = 'center';
             canvasCtx.fillText(label, x, yPillTop + 12);
+
+            // Hz numeric readout (white-backed pill for legibility over spectrum)
+            const hzText = Math.round(formant.freq) + 'Hz';
+            canvasCtx.font = 'bold 9px monospace';
+            const hzWidth = canvasCtx.measureText(hzText).width;
+            canvasCtx.globalAlpha = 0.88;
+            canvasCtx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+            canvasCtx.fillRect(x - hzWidth / 2 - 3, yHzTop, hzWidth + 6, 13);
+            canvasCtx.globalAlpha = 1.0;
+            canvasCtx.fillStyle = colorHex;
+            canvasCtx.fillText(hzText, x, yHzTop + 10);
             canvasCtx.restore();
         };
 
-        drawMicFormantMarker(estFormants.f1, 'Mic fR1', '#D24545'); // Red
-        drawMicFormantMarker(estFormants.f2, 'Mic fR2', '#2196F3'); // Blue
-        drawMicFormantMarker(estFormants.f3, 'Mic fR3', '#9C3CD9'); // Purple
-        drawMicFormantMarker(estFormants.f4, 'Mic fR4', '#E68B30'); // Orange
-        drawMicFormantMarker(estFormants.f5, 'Mic fR5', '#D946EF'); // Pink
+        drawMicFormantMarker(estFormants.f1, 'F1', '#D24545'); // Red
+        drawMicFormantMarker(estFormants.f2, 'F2', '#2196F3'); // Blue
+        drawMicFormantMarker(estFormants.f3, 'F3', '#9C3CD9'); // Purple
+        drawMicFormantMarker(estFormants.f4, 'F4', '#E68B30'); // Orange
+        drawMicFormantMarker(estFormants.f5, 'F5', '#D946EF'); // Pink
     }
 
     // 3. Draw Formant Overlay Envelopes (Only when simulating)
@@ -2278,6 +2820,8 @@ els.btnMic.addEventListener('click', async () => {
         }
         state.isMicActive = false;
         state.isMicPaused = false;
+        state.cachedMicFormants = null;
+        state.cachedMicFormantsTime = null;
         els.btnMic.classList.remove('mic-active');
         if (els.btnMicPause) {
             els.btnMicPause.style.display = 'none';
@@ -2307,7 +2851,7 @@ els.btnMic.addEventListener('click', async () => {
             micGainNode.gain.value = state.micGain;
 
             micAnalyser = audioCtx.createAnalyser();
-            micAnalyser.fftSize = 2048;
+            micAnalyser.fftSize = 4096;
             micAnalyser.smoothingTimeConstant = 0.8;
 
             // Connect mic source -> gain -> analyzer entirely locally (NO route to audioCtx.destination)

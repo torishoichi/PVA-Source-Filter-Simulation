@@ -101,9 +101,9 @@
                 <details class="vibrato-panel glass-dark collapsible">
                     <summary class="collapsible-summary">
                         <h3 class="tracker-title">Vibrato</h3>
-                        <label class="vibrato-enable-toggle" title="Vibrato ON/OFF">
-                            <input type="checkbox" id="vibrato-enable">
-                            <span class="vibrato-enable-pill"><span class="vibrato-enable-text">OFF</span></span>
+                        <label class="vibrato-enable-toggle on" title="Vibrato ON/OFF">
+                            <input type="checkbox" id="vibrato-enable" checked>
+                            <span class="vibrato-enable-pill"><span class="vibrato-enable-text">ON</span></span>
                         </label>
                     </summary>
                     <div class="collapsible-body">
@@ -111,15 +111,15 @@
                             <div class="vibrato-row">
                                 <label for="vibrato-rate">Rate <span class="tooltip"
                                         data-tooltip="ビブラートの周波数（Hz）。古典声楽の正常範囲は 4.5〜6.5 Hz。5Hz未満=遅すぎる（ワブル）、7Hz超=速すぎる（トレモロ気味）。">[?]</span></label>
-                                <input type="range" id="vibrato-rate" min="0.5" max="12" value="5.5" step="0.1">
-                                <span class="vibrato-val"><span id="vibrato-rate-val">5.5</span> Hz</span>
+                                <input type="range" id="vibrato-rate" min="0.5" max="12" value="6.4" step="0.1">
+                                <span class="vibrato-val"><span id="vibrato-rate-val">6.4</span> Hz</span>
                                 <small class="vibrato-hint">揺れの速さ</small>
                             </div>
                             <div class="vibrato-row">
                                 <label for="vibrato-extent">Extent <span class="tooltip"
                                         data-tooltip="ビブラートの振幅幅（cent）。典型値: クラシック ±50〜100¢、ポピュラー ±30〜60¢。±100¢ = ±半音。">[?]</span></label>
-                                <input type="range" id="vibrato-extent" min="0" max="200" value="50" step="1">
-                                <span class="vibrato-val">±<span id="vibrato-extent-val">50</span>¢</span>
+                                <input type="range" id="vibrato-extent" min="0" max="200" value="2" step="1">
+                                <span class="vibrato-val">±<span id="vibrato-extent-val">2</span>¢</span>
                                 <small class="vibrato-hint">揺れの幅（音程の振れ）</small>
                             </div>
                             <div class="vibrato-row">
@@ -139,8 +139,8 @@
                             <div class="vibrato-row">
                                 <label for="vibrato-am">AM Depth <span class="tooltip"
                                         data-tooltip="振幅変調の深さ（%）。周波数変調(FM)に連動して音量も揺れる。クラシック歌手は実際 FM+AM が併発する。0=純粋FM、20%程度=自然な揺れ。">[?]</span></label>
-                                <input type="range" id="vibrato-am" min="0" max="50" value="10" step="1">
-                                <span class="vibrato-val"><span id="vibrato-am-val">10</span>%</span>
+                                <input type="range" id="vibrato-am" min="0" max="50" value="4" step="1">
+                                <span class="vibrato-val"><span id="vibrato-am-val">4</span>%</span>
                                 <small class="vibrato-hint">音量も一緒にゆらす量</small>
                             </div>
                             <div class="vibrato-row">
@@ -269,7 +269,7 @@
                         <span class="formant-val"><span id="f1-val">500</span> Hz</span>
                         <button class="toggle-btn active" id="f1-toggle">ON</button>
                     </div>
-                    <input type="range" id="f1-slider" min="250" max="1000" value="500" step="1">
+                    <input type="range" id="f1-slider" min="250" max="1500" value="500" step="1">
                     <div class="hint">口・顎の開き。母音の「あ／い／う」を決める一番低い共鳴</div>
                     <div class="q-row">
                         <span class="q-label">Q <span class="tooltip"
@@ -423,7 +423,9 @@
                                 </div>
                                 <select id="mic-formant-method" class="mic-method-select">
                                     <option value="peak">Peak</option>
-                                    <option value="lpc" selected>LPC</option>
+                                    <option value="lpc">LPC</option>
+                                    <option value="lpc-v2">LPC v2</option>
+                                    <option value="lpc-v3" selected>LPC v3</option>
                                 </select>
                                 <button id="mic-pause" class="btn btn-sm" style="display:none;"
                                     title="Pause Mic Waveform"><svg viewBox="0 0 24 24" width="12" height="12"

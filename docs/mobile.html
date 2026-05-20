@@ -34,7 +34,9 @@
                 </button>
                 <select id="mic-formant-method" class="mic-method-select mobile-mic-method">
                     <option value="peak">Pk</option>
-                    <option value="lpc" selected>LPC</option>
+                    <option value="lpc">LPC</option>
+                    <option value="lpc-v2">v2</option>
+                    <option value="lpc-v3" selected>v3</option>
                 </select>
                 <button id="mic-pause" class="btn-icon" style="display:none;" title="Pause Mic"><svg viewBox="0 0 24 24"
                         width="20" height="20" fill="currentColor">
@@ -144,9 +146,9 @@
         <details class="card vibrato-card">
             <summary class="vibrato-summary">
                 <span class="vibrato-title">Vibrato</span>
-                <label class="vibrato-enable-toggle" title="Vibrato ON/OFF">
-                    <input type="checkbox" id="vibrato-enable">
-                    <span class="vibrato-enable-pill"><span class="vibrato-enable-text">OFF</span></span>
+                <label class="vibrato-enable-toggle on" title="Vibrato ON/OFF">
+                    <input type="checkbox" id="vibrato-enable" checked>
+                    <span class="vibrato-enable-pill"><span class="vibrato-enable-text">ON</span></span>
                 </label>
                 <span class="vibrato-chevron" aria-hidden="true">▾</span>
             </summary>
@@ -155,9 +157,9 @@
                     <label class="slider-label" for="vibrato-rate">
                         Rate <span class="tooltip"
                             data-tooltip="ビブラートの周波数（Hz）。古典声楽の正常範囲は 4.5〜6.5 Hz。5Hz未満=遅すぎる（ワブル）、7Hz超=速すぎる（トレモロ気味）。">[?]</span>
-                        <span class="slider-val"><span id="vibrato-rate-val">5.5</span> Hz</span>
+                        <span class="slider-val"><span id="vibrato-rate-val">6.4</span> Hz</span>
                     </label>
-                    <input type="range" id="vibrato-rate" min="0.5" max="12" value="5.5" step="0.1" class="mobile-range">
+                    <input type="range" id="vibrato-rate" min="0.5" max="12" value="6.4" step="0.1" class="mobile-range">
                     <small class="vibrato-hint">揺れの速さ</small>
                 </div>
 
@@ -165,9 +167,9 @@
                     <label class="slider-label" for="vibrato-extent">
                         Extent <span class="tooltip"
                             data-tooltip="ビブラートの振幅幅（cent）。典型値: クラシック ±50〜100¢、ポピュラー ±30〜60¢。±100¢ = ±半音。">[?]</span>
-                        <span class="slider-val">±<span id="vibrato-extent-val">50</span>¢</span>
+                        <span class="slider-val">±<span id="vibrato-extent-val">2</span>¢</span>
                     </label>
-                    <input type="range" id="vibrato-extent" min="0" max="200" value="50" step="1" class="mobile-range">
+                    <input type="range" id="vibrato-extent" min="0" max="200" value="2" step="1" class="mobile-range">
                     <small class="vibrato-hint">揺れの幅（音程の振れ）</small>
                 </div>
 
@@ -195,9 +197,9 @@
                     <label class="slider-label" for="vibrato-am">
                         AM Depth <span class="tooltip"
                             data-tooltip="振幅変調の深さ（%）。周波数変調(FM)に連動して音量も揺れる。クラシック歌手は実際 FM+AM が併発する。0=純粋FM、20%程度=自然な揺れ。">[?]</span>
-                        <span class="slider-val"><span id="vibrato-am-val">10</span>%</span>
+                        <span class="slider-val"><span id="vibrato-am-val">4</span>%</span>
                     </label>
-                    <input type="range" id="vibrato-am" min="0" max="50" value="10" step="1" class="mobile-range">
+                    <input type="range" id="vibrato-am" min="0" max="50" value="4" step="1" class="mobile-range">
                     <small class="vibrato-hint">音量も一緒にゆらす量</small>
                 </div>
 
@@ -239,7 +241,7 @@
                 </label>
                 <button class="toggle-btn active" id="f1-toggle">ON</button>
             </div>
-            <input type="range" id="f1-slider" min="250" max="1000" value="500" step="1"
+            <input type="range" id="f1-slider" min="250" max="1500" value="500" step="1"
                 class="mobile-range accent-red">
             <div class="q-row">
                 <span class="q-label">Q <span class="tooltip"
