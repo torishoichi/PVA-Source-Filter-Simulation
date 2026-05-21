@@ -734,8 +734,8 @@ function calcAerodynamics() {
         state.phonationMode = 'flow';
     }
 
-    // Update UI
-    els.airflowVal.textContent = state.airflow.toFixed(2);
+    // Update UI (airflow-val only exists on PC; mobile dropped its Status tab)
+    if (els.airflowVal) els.airflowVal.textContent = state.airflow.toFixed(2);
     const phonationLabel = state.phonationMode.charAt(0).toUpperCase() + state.phonationMode.slice(1);
     document.querySelectorAll('.phonation-mode-badge').forEach(el => {
         el.textContent = phonationLabel;
