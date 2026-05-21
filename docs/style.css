@@ -1020,15 +1020,18 @@ input[type=range]::-webkit-slider-thumb:hover {
     border-color: var(--vivid-red);
 }
 
-/* Icon-only Mic toggle (PC) */
+/* Mic toggle (PC) — pill with icon + text, matches Learn / Play family */
 .btn-mic-icon {
-    padding: 0 !important;
-    width: 38px;
-    height: 38px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    gap: 6px;
     line-height: 1;
+    font-weight: 600;
+}
+.btn-mic-icon svg {
+    flex-shrink: 0;
+    opacity: 0.9;
 }
 
 .btn-mic-icon:focus {
@@ -2041,19 +2044,39 @@ canvas {
    Coexists with the existing inline #roughness-legend (brief ref)
    ================================================================= */
 
-/* Learn button — matches .btn / .btn.primary height by sharing the
-   same padding family. Inline-flex keeps icon + text aligned. */
+/* Learn button — pill matching Mic / Play family */
 .btn-learn {
     display: inline-flex;
     align-items: center;
     gap: 6px;
     font-weight: 600;
-    /* inherits .btn: padding 7px 14px, border-radius 999px (pill),
-       font-size 0.85rem, var(--glass-border), var(--bg-elev), var(--text-primary) */
 }
 .btn-learn svg {
     flex-shrink: 0;
-    opacity: 0.85;
+    opacity: 0.9;
+}
+
+/* Canvas primary actions — unify Learn / Mic / Play to the same
+   pill geometry, like .preset-btn / status YELL family. */
+.canvas-primary-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+.canvas-primary-actions .btn {
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.canvas-primary-actions .btn.primary {
+    padding: 0 18px;
+    font-weight: 700;
+    font-size: 0.85rem;
 }
 
 .learn-backdrop {
