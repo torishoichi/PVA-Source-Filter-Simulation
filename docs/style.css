@@ -2041,24 +2041,19 @@ canvas {
    Coexists with the existing inline #roughness-legend (brief ref)
    ================================================================= */
 
+/* Learn button — matches .btn / .btn.primary height by sharing the
+   same padding family. Inline-flex keeps icon + text aligned. */
 .btn-learn {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    background: var(--bg-elev);
-    border: 1px solid var(--glass-border);
-    color: var(--text-secondary);
-    padding: 6px 12px;
-    border-radius: 8px;
-    font-size: 0.85rem;
     font-weight: 600;
-    cursor: pointer;
-    transition: all 0.15s;
+    /* inherits .btn: padding 7px 14px, border-radius 999px (pill),
+       font-size 0.85rem, var(--glass-border), var(--bg-elev), var(--text-primary) */
 }
-.btn-learn:hover {
-    background: var(--accent-soft);
-    border-color: var(--accent-color);
-    color: var(--accent-color);
+.btn-learn svg {
+    flex-shrink: 0;
+    opacity: 0.85;
 }
 
 .learn-backdrop {
