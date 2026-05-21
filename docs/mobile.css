@@ -362,6 +362,10 @@ canvas {
     min-width: 0;
 }
 
+.toolbar-item-fit {
+    flex: 0 0 auto;
+}
+
 .toolbar-item span:first-child {
     font-size: 0.7rem;
     color: var(--text-secondary);
@@ -426,6 +430,12 @@ canvas {
 .inline-toggle-btn.slope-line-active {
     background: var(--accent-color);
     border-color: var(--accent-color);
+    color: #fff;
+}
+
+.inline-toggle-btn.roughness-active {
+    background: #d97d1f;
+    border-color: #d97d1f;
     color: #fff;
 }
 

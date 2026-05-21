@@ -86,6 +86,10 @@
                     title="Toggle slope approximation line">Slope</button>
                 <input type="range" id="spectrum-slope" min="-24" max="0" value="-12" step="1">
             </div>
+            <div class="toolbar-item toolbar-item-fit">
+                <button id="roughness-toggle" class="inline-toggle-btn" type="button"
+                    title="倍音のラフネス・ゾーンをスペクトルに重ねる">Rough</button>
+            </div>
         </div>
         <div class="spectrum-toolbar" id="mic-toolbar" style="display:none;">
             <div class="toolbar-item">
@@ -347,7 +351,7 @@
                 <span class="lesson-chevron" aria-hidden="true">▾</span>
             </summary>
             <div class="lesson-body">
-                <div id="roughness-legend" class="roughness-legend">
+                <div class="roughness-legend">
 
                     <!-- プロローグ -->
                     <section class="story-sec">
@@ -1174,16 +1178,14 @@
     </script>
     <script src="main.js"></script>
     <script>
-        // Learn tab — keep Roughness legend always-on (it lives in Lesson 1)
-        if (typeof state !== 'undefined') {
-            state.roughnessVisible = true;
-            if (typeof updateRoughnessReadout === 'function') updateRoughnessReadout();
-        }
-
-        // Interactive harmonic map (H1..H20 colored by zone, updates on f₀ change)
+        // Learn tab updater — independent of state.roughnessVisible
+        // (the Spectrum overlay flag is now user-controlled via #roughness-toggle
+        // and defaults to OFF per main.js init. The Learn tab content always shows.)
         (function () {
             const mapEl = document.getElementById('harmonic-map');
-            if (!mapEl) return;
+            const f0El = document.getElementById('rl-f0');
+            // mapEl is the primary signal for the Learn tab being present
+            if (!mapEl && !f0El) return;
             if (typeof classifyHarmonic !== 'function' || typeof computeResolvedLimit !== 'function') return;
 
             const ZONE_LABEL = { 'pure': 'Pure', 'rough-res': 'R&R', 'rough-unr': 'R&U', 'ceiling': 'Ceiling' };
@@ -1199,10 +1201,8 @@
                 if (c >= 110)  return '<m2';
                 return '<半音';
             }
-            function paint() {
-                if (typeof state === 'undefined') return;
-                const f0 = state.pitch;
-                const nERB = computeResolvedLimit(f0);
+            function paintMap(f0, nERB) {
+                if (!mapEl) return;
                 let html = '';
                 for (let n = 1; n <= N_HARMONICS; n++) {
                     const zone = classifyHarmonic(n, f0, nERB);
@@ -1212,18 +1212,51 @@
                           + '<span class="hm-hz">' + hz + ' Hz</span>'
                           + '<span class="hm-zone">' + ZONE_LABEL[zone] + '</span>'
                           + '</div>';
-                    // Interval (cent + degree name) BETWEEN H_n and H_{n+1}
                     if (n < N_HARMONICS) {
                         const cent = Math.round(1200 * Math.log2((n + 1) / n));
-                        const ivl = intervalName(cent);
                         html += '<div class="hm-interval">'
                               + '<span class="hm-bracket" aria-hidden="true"></span>'
                               + '<span class="hm-cent">' + cent + ' cent</span>'
-                              + '<span class="hm-degree">' + ivl + '</span>'
+                              + '<span class="hm-degree">' + intervalName(cent) + '</span>'
                               + '</div>';
                     }
                 }
                 mapEl.innerHTML = html;
+            }
+            function paintZones(f0, nERB) {
+                if (f0El) f0El.textContent = Math.round(f0) + ' Hz';
+                const ceilN = Math.ceil(5000 / f0);
+                const pureEnd = isFinite(nERB) ? nERB - 1 : ceilN - 1;
+                const roughResStart = isFinite(nERB) ? nERB : Infinity;
+                const roughResEnd = Math.min(8, ceilN - 1);
+                const roughUnrStart = Math.max(isFinite(nERB) ? nERB : Infinity, 9);
+                const roughUnrEnd = ceilN - 1;
+                const ranges = {
+                    'pure':       pureEnd >= 1 ? 'H1〜H' + pureEnd : '—',
+                    'rough-res':  roughResStart <= roughResEnd ? 'H' + roughResStart + '〜H' + roughResEnd : '—',
+                    'rough-unr':  roughUnrStart <= roughUnrEnd ? 'H' + roughUnrStart + '〜H' + roughUnrEnd : '—',
+                    'ceiling':    'H' + ceilN + ' 以上'
+                };
+                document.querySelectorAll('.rl-range[data-zone]').forEach(el => {
+                    const zone = el.getAttribute('data-zone');
+                    if (ranges[zone] !== undefined) el.textContent = ranges[zone];
+                });
+                const emptyNote = document.querySelector('.rl-empty-note[data-zone="rough-res"]');
+                if (emptyNote) {
+                    if (roughResStart > roughResEnd) {
+                        emptyNote.style.display = '';
+                        emptyNote.innerHTML = '現在の f₀ (' + Math.round(f0) + ' Hz) では ERB 幅 ≥ f₀ となるのが H9 以降のため該当なし。f₀ を <strong>≈ 120 Hz 以下</strong> に下げると H6–H8 がここに現れます。';
+                    } else {
+                        emptyNote.style.display = 'none';
+                    }
+                }
+            }
+            function paint() {
+                if (typeof state === 'undefined') return;
+                const f0 = state.pitch;
+                const nERB = computeResolvedLimit(f0);
+                paintMap(f0, nERB);
+                paintZones(f0, nERB);
             }
 
             let lastF0 = -1;
