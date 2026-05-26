@@ -2537,16 +2537,14 @@ function drawVisualizer() {
                 const y = height - (displayVal * height * 0.9);
                 const x = freqToX(peakFreq, width);
 
-                const centsDev = freqToCents(peakFreq);
-                const sign = centsDev > 0 ? '+' : (centsDev < 0 ? '' : '±');
-                const centsTxt = `${sign}${centsDev}¢`;
+                const hzTxt = `${Math.round(peakFreq)}Hz`;
 
                 // White-backed pill for legibility over green mic spectrum
-                const txtW = canvasCtx.measureText(centsTxt).width;
+                const txtW = canvasCtx.measureText(hzTxt).width;
                 canvasCtx.fillStyle = 'rgba(255, 255, 255, 0.85)';
                 canvasCtx.fillRect(x - txtW / 2 - 3, y - 22, txtW + 6, 12);
                 canvasCtx.fillStyle = 'rgba(40, 100, 40, 0.95)';
-                canvasCtx.fillText(centsTxt, x, y - 13);
+                canvasCtx.fillText(hzTxt, x, y - 13);
             }
             canvasCtx.restore();
         }
