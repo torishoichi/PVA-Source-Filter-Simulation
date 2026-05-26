@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>はじめてのリアクタンス — 管が声を助けるとき</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Ubuntu+Mono&display=swap" rel="stylesheet">
+<style>
+:root{ --accent:#00A4AF; }
+*{ box-sizing:border-box; }
+html,body{ margin:0; padding:0; }
+body{ font-family:'Noto Sans JP',sans-serif; color:#000; background:#fff; line-height:1.95; font-size:17px; }
+.v{ white-space:nowrap; }
+svg text{ font-family:'Noto Sans JP',sans-serif; fill:#000; }
+
+header.wall{ border-bottom:3px solid #000; }
+.wrap{ max-width:1120px; margin:0 auto; padding:0 28px; }
+header .kicker{ color:var(--accent); font-weight:700; font-size:13px; letter-spacing:.04em; margin:30px 0 6px; }
+header h1{ font-size:28px; font-weight:700; margin:0 0 12px; line-height:1.45; }
+header .dek{ font-size:15.5px; margin:0 0 26px; max-width:760px; }
+
+.layout{ display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:42px; align-items:start; }
+main{ min-width:0; padding:34px 0 64px; }
+aside{ position:sticky; top:0; max-height:100vh; overflow-y:auto; padding:34px 0 40px; }
+
+section{ margin:0 0 40px; }
+h2{ font-size:21px; font-weight:700; margin:0 0 4px; }
+.kick{ color:var(--accent); font-size:12px; font-weight:700; margin:0 0 14px; }
+p{ margin:0 0 15px; }
+a{ color:var(--accent); text-decoration:none; border-bottom:1px solid var(--accent); }
+strong{ font-weight:700; }
+.em{ color:var(--accent); font-weight:700; }
+hr.sep{ border:0; border-top:1px solid #000; margin:38px 0; }
+
+.lead{ font-size:18px; font-weight:500; }
+.panel{ border:1px solid #000; border-radius:12px; padding:18px 22px; margin:18px 0; }
+.fig{ border:1px solid #000; border-radius:12px; padding:16px 18px; margin:20px 0; }
+.fig svg{ display:block; width:100%; height:auto; }
+.figlabel{ font-weight:700; color:var(--accent); font-size:13px; margin-bottom:8px; }
+.figcap{ font-size:13.5px; margin-top:10px; line-height:1.8; }
+
+.widget{ border:1.5px solid var(--accent); border-radius:14px; padding:22px; margin:22px 0; }
+.wq{ font-size:13px; font-weight:700; margin-bottom:8px; }
+input[type=range]{ width:100%; max-width:420px; accent-color:var(--accent); }
+.bigverdict{ font-size:19px; font-weight:700; margin-top:14px; }
+.subverdict{ font-size:14px; margin-top:4px; }
+
+ol,ul{ margin:0 0 15px; padding-left:1.45em; }
+li{ margin:0 0 9px; }
+
+aside h2{ font-size:15px; border-bottom:2px solid #000; padding-bottom:6px; margin-bottom:0; }
+aside table{ border-collapse:collapse; width:100%; font-size:12.8px; line-height:1.65; }
+aside th{ display:none; }
+aside td{ padding:9px 4px; border-top:1px solid #000; vertical-align:top; }
+aside td.term{ font-weight:700; width:38%; }
+
+@media(max-width:1000px){
+  .layout{ grid-template-columns:1fr; gap:8px; }
+  aside{ position:static; max-height:none; overflow:visible; order:-1; padding:18px 0 8px; }
+  main{ padding-top:14px; }
+}
+</style>
+</head>
+<body>
+
+<header class="wall">
+  <div class="wrap">
+    <div class="kicker">声楽音響 — はじめの一歩</div>
+    <h1>はじめてのリアクタンス<br>「管が声を助けてくれる」ってどういうこと？</h1>
+    <p class="dek">高い声で急にしんどくなるのは、なぜ？ 数式は使わず、ブランコと重い空気のたとえだけで「のどの管が声を助けたり、じゃましたりする」しくみをつかみます。もっと詳しく知りたくなったら、別の詳細版へ。</p>
+  </div>
+</header>
+
+<div class="wrap">
+<div class="layout">
+
+<main>
+
+  <section>
+    <h2>まず — 高い声って、なんでしんどい？</h2>
+    <p class="kick">この記事のゴール</p>
+    <p class="lead">同じ声なのに、ある高さでは楽に響き、別の高さでは急に力がいる。これは「のどや胸の力み」だけの話ではありません。</p>
+    <p>じつは、<strong>あなたの口とのど（＝1本の管）が、声を助けてくれるときと、少しじゃまするときがある</strong>からです。その切り替わりは、けっこうハッキリした「しくみ」で起きています。この記事では、そのしくみを<strong>たとえ話だけ</strong>でつかみます。覚える言葉は最小限。記号や数式は出しません。</p>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>1 — 声は「ブザー」と「管」でできている</h2>
+    <p class="kick">登場人物は2つだけ</p>
+    <p>声を作っているのは、たった2つのパーツです。</p>
+    <ul>
+      <li><strong><a href="#t-folds">声帯</a></strong>＝のどの奥にある「ブザー」。すごい速さで開いたり閉じたりして、ブーッという元の音を出します。</li>
+      <li><strong>のど＋口</strong>＝そのブザーの音が通っていく「<a href="#t-tube">管</a>」。声帯から唇までの1本の通り道です。</li>
+    </ul>
+    <p>ブザーが鳴り、その音が管を通って、口から「声」として出てくる。これだけです。ポイントは、<strong>管はただの通り道ではない</strong>ということ。管は、通っていく音に対して「手応え」を返してきます。その手応えが、声を助けたりじゃましたりするのです。</p>
+
+    <div class="fig">
+      <div class="figlabel">図1 — 声＝ブザー（声帯）＋管（のど・口）</div>
+      <svg viewBox="0 0 720 220" role="img" aria-label="左に声帯のブザー、そこから右へのびる管、口から出る声">
+        <rect x="70" y="86" width="74" height="58" rx="14" fill="#fff" stroke="#000" stroke-width="2.4"/>
+        <path d="M 86 104 Q 96 99 106 104 Q 116 109 128 104" fill="none" stroke="#00A4AF" stroke-width="2.4"/>
+        <path d="M 86 122 Q 96 117 106 122 Q 116 127 128 122" fill="none" stroke="#00A4AF" stroke-width="2.4"/>
+        <text x="107" y="172" text-anchor="middle" font-size="13" font-weight="700">声帯（ブザー）</text>
+        <path d="M 144 96 L 470 96 Q 560 96 560 150 L 560 168 Q 560 178 552 178 L 470 178 Q 144 178 144 134 Z" fill="#fff" stroke="#000" stroke-width="2.4"/>
+        <path d="M 200 112 Q 210 137 200 162" fill="none" stroke="#00A4AF" stroke-width="2"/>
+        <path d="M 240 110 Q 252 137 240 164" fill="none" stroke="#00A4AF" stroke-width="2"/>
+        <path d="M 280 109 Q 293 137 280 165" fill="none" stroke="#00A4AF" stroke-width="2"/>
+        <text x="370" y="142" text-anchor="middle" font-size="13" font-weight="700">のど＋口（1本の管）</text>
+        <path d="M 596 120 Q 614 137 596 154" fill="none" stroke="#00A4AF" stroke-width="2.2"/>
+        <path d="M 618 110 Q 642 137 618 164" fill="none" stroke="#00A4AF" stroke-width="2.2"/>
+        <path d="M 642 100 Q 672 137 642 174" fill="none" stroke="#00A4AF" stroke-width="2.2"/>
+        <text x="636" y="196" text-anchor="middle" font-size="13" font-weight="700">声</text>
+      </svg>
+      <p class="figcap">ブザー（声帯）が元の音を出し、管（のど・口）を通って声になる。管は通る音に「手応え」を返す ── ここが主役。</p>
+    </div>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>2 — 管には「得意な高さ」がある</h2>
+    <p class="kick">びんを吹くと音が出る、あれ</p>
+    <p>空のびんの口を吹くと、ひとつの音がポーンと鳴ります。びんという管が、その高さを<strong>得意</strong>としているからです。のど＋口の管も同じで、特に響かせるのが上手な高さがあります。これを<strong><a href="#t-formant">フォルマント（管の得意な高さ）</a></strong>と呼びます。母音や口の形を変えると、この「得意な高さ」も動きます。</p>
+    <p>もうひとつ。声帯のブザー音は、じつは1つの澄んだ音ではなく、<strong>細かい音がいくつも重なった</strong>束です。その1本1本を<strong><a href="#t-harmonic">倍音</a></strong>と呼びます。この記事では「声に重なっている音のひとつ」くらいの理解で十分です。</p>
+    <p>つまり登場するのは2つ ── 動かせない<strong>倍音</strong>（声の高さで決まる）と、口の形で動く<strong>管の得意な高さ</strong>。次がこの記事の山場です。</p>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>3 — カギは「倍音が、得意な高さの下か・上か」</h2>
+    <p class="kick">たったこれだけ</p>
+    <p>いちばん大事なことを先に言います。<strong class="em">倍音が「管の得意な高さ」より低い側にあるか、高い側にあるかで、管の手応えが変わります。</strong></p>
+    <ul>
+      <li><strong>得意な高さより低い側</strong> → 管が声を<strong class="em">助けてくれる</strong>。少ない力で響く。</li>
+      <li><strong>ちょうど得意な高さの上</strong> → 手応えがつるっと消える。声が引っかかりやすい。</li>
+      <li><strong>得意な高さより高い側</strong> → 管が<strong>少しじゃま</strong>をする。響かせるのに余分な力がいる。</li>
+    </ul>
+    <p>下のスライダーで、倍音（丸）を動かしてみてください。「得意な高さ（山）」をまたぐと、管の手応えが切り替わります。</p>
+
+    <div class="widget">
+      <div class="wq">倍音の場所を動かす</div>
+      <svg id="hillsvg" viewBox="0 0 800 320" role="img" aria-label="管の得意な高さの山と、その上を動く倍音の丸"></svg>
+      <input id="hill" type="range" min="0" max="100" step="1" value="20" aria-label="倍音の場所">
+      <div id="bigv" class="bigverdict">—</div>
+      <div id="subv" class="subverdict">—</div>
+    </div>
+    <p>声の高さ（ピッチ）が上がると、倍音は全体に右へ動きます。だから歌い上げていくと、ある倍音はいつか「得意な高さの山」を左から右へまたぐ。<strong>その瞬間に、助けてくれていた管が、つるっとした手応え、そして少しじゃまする側へ変わる</strong> ── これが「高い声で急にしんどくなる」正体のひとつです。</p>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>4 — なぜ「下」だと助かるの？</h2>
+    <p class="kick">ブランコのたとえ</p>
+    <p>管の中では、音のエネルギーが行ったり来たり跳ね返っています。これを<strong>ブランコ</strong>だと思ってください。そして声帯のブザーが閉じる瞬間が、ブランコを<strong>押す手</strong>です。</p>
+    <p>ブランコ遊びを思い出してください。<strong>押すタイミングがブランコの戻りと合えば、ほんの軽く押すだけで大きく揺れます。</strong>ブランコ自身の勢いが、あなたの代わりに仕事をしてくれる。逆にタイミングがズレると、押しても押しても揺れは大きくならず、力ばかりいります。</p>
+    <p>声でも同じ。倍音が「管の得意な高さ」の<strong>うまく合う側（低い側）</strong>にあるとき、跳ね返ってきた管の勢いが、声帯の振動を後押ししてくれます。だから<strong>少ない力で声が響く</strong>。これが「助けてもらえる」の正体です。</p>
+
+    <div class="fig">
+      <div class="figlabel">図2 — 管の手応え＝ブランコ。タイミングが合えば軽い力で大きく揺れる</div>
+      <svg viewBox="0 0 720 230" role="img" aria-label="ブランコと、それを軽く押す手のたとえ">
+        <line x1="200" y1="46" x2="520" y2="46" stroke="#000" stroke-width="4"/>
+        <line x1="210" y1="46" x2="210" y2="30" stroke="#000" stroke-width="2.4"/>
+        <line x1="510" y1="46" x2="510" y2="30" stroke="#000" stroke-width="2.4"/>
+        <line x1="300" y1="46" x2="328" y2="158" stroke="#000" stroke-width="2.2"/>
+        <line x1="420" y1="46" x2="392" y2="158" stroke="#000" stroke-width="2.2"/>
+        <rect x="320" y="158" width="80" height="12" rx="4" fill="#fff" stroke="#000" stroke-width="2.2"/>
+        <circle cx="360" cy="120" r="13" fill="#fff" stroke="#000" stroke-width="2.2"/>
+        <line x1="360" y1="133" x2="360" y2="158" stroke="#000" stroke-width="2.2"/>
+        <path d="M 250 196 Q 360 168 470 196" fill="none" stroke="#00A4AF" stroke-width="2" stroke-dasharray="6 5"/>
+        <path d="M 215 150 L 300 150" fill="none" stroke="#00A4AF" stroke-width="2.6"/>
+        <path d="M 290 142 L 304 150 L 290 158 Z" fill="#00A4AF"/>
+        <text x="232" y="138" font-size="13" font-weight="700" fill="#00A4AF">ポン（軽く押す）</text>
+        <text x="360" y="218" text-anchor="middle" font-size="13">タイミングが合えば、ブランコの勢いが仕事をしてくれる</text>
+      </svg>
+      <p class="figcap">別の言い方も。管の中の空気には「重さ」があります。動かし始めるとき少し抵抗しますが、いったん動くと勢いで進み続け、声を<strong>引っぱって</strong>くれます。この「引っぱり」が出るのが、倍音が得意な高さより低い側にあるときです。</p>
+    </div>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>5 — 助けてもらえると、何がうれしい？</h2>
+    <p class="kick">楽さと、ビブラート</p>
+    <p>管が助けてくれると、<strong>少ない息と、ゆるい声帯の閉じ</strong>でも声が十分に響きます。力で押し込む必要がないので、のどは自由なまま。すると<strong><a href="#t-vibrato">ビブラート</a>（自然な揺れ）も出やすくなります</strong>。揺れているのは「うまくいっているサイン」です。</p>
+    <p>逆に、倍音が得意な高さの上に出て管がじゃまし始めると、足りない響きを<strong>力で埋めよう</strong>として、息を強め、声帯をギュッと締めてしまう。これが<strong><a href="#t-yell">張り上げ</a></strong>です。のどが固まり、ビブラートも消え、上がるほど苦しくなる。男声がある高さ（<a href="#t-passaggio">パッサッジョ</a>）でしんどくなるのは、たいていこれです。</p>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>6 — ストロー練習（SOVT）はなぜ楽なの？</h2>
+    <p class="kick">出口をせまくする</p>
+    <p>ストローを通して声を出す、リップトリル（くちびるをブルブル）── これらは<strong><a href="#t-sovt">SOVT（出口を半分ふさぐ練習）</a></strong>と呼ばれます。やってみると、ふしぎと楽に感じます。</p>
+    <p>理由はシンプル。出口をせまくすると、<strong>管の「助ける手応え」が強くなり</strong>、さらに軽い<strong>押し返し</strong>が生まれて、声帯を強く締めなくてよくなります。つまり SOVT は、この記事でずっと話してきた「管の助け」を、わざと強めて体に覚えさせる道具なのです。</p>
+
+    <div class="fig">
+      <div class="figlabel">図3 — ストロー＝出口をせまくして「助け」を強める</div>
+      <svg viewBox="0 0 720 150" role="img" aria-label="管の出口に細いストローをつけた図">
+        <path d="M 70 50 L 430 50 Q 470 50 470 75 Q 470 100 430 100 L 70 100 Q 60 100 60 90 L 60 60 Q 60 50 70 50 Z" fill="#fff" stroke="#000" stroke-width="2.4"/>
+        <rect x="470" y="68" width="170" height="14" rx="6" fill="#fff" stroke="#000" stroke-width="2.4"/>
+        <text x="255" y="80" text-anchor="middle" font-size="13" font-weight="700">のど＋口（管）</text>
+        <text x="555" y="56" text-anchor="middle" font-size="12.5" font-weight="700" fill="#00A4AF">ストロー（せまい出口）</text>
+        <path d="M 662 64 Q 676 75 662 86" fill="none" stroke="#00A4AF" stroke-width="2.2"/>
+      </svg>
+      <p class="figcap">出口がせまいと、管はより強く声を助け、押し返しで声帯の負担を減らす。だからストローやリップトリルは「楽に響く感覚」の練習になる。</p>
+    </div>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>まとめ — そして次の一歩</h2>
+    <p class="kick">3行でいうと</p>
+    <ul>
+      <li>のど＋口は1本の<strong>管</strong>で、通る声に「手応え」を返す。</li>
+      <li>倍音が管の<strong>得意な高さより低い</strong>と管は声を<strong>助け</strong>、<strong>高い</strong>と少し<strong>じゃま</strong>する。境目はけっこうハッキリ切り替わる。</li>
+      <li>助けてもらえれば楽でビブラートも出る。じゃまされると力で埋めようとして<strong>張り上げ</strong>になる。ストロー練習は「助け」を強める道具。</li>
+    </ul>
+    <div class="panel">
+      <p style="margin:0 0 8px;"><strong>言葉の橋渡し。</strong>この記事のやさしい言い方は、専門用語ではこう呼ばれます。</p>
+      <ul style="margin:0;">
+        <li>「管の助ける手応え」＝ <strong><a href="#t-inertive">イナーティブ・リアクタンス</a></strong></li>
+        <li>「管のじゃまする手応え」＝ <strong><a href="#t-compliant">コンプライアント・リアクタンス</a></strong></li>
+        <li>「管の得意な高さ」＝ <strong><a href="#t-formant">共鳴／フォルマント</a></strong></li>
+      </ul>
+    </div>
+    <p>「なぜ下だと助けで、上だとじゃまなのか」を、管の物理（数式や図つき）でとことん追いたくなったら ── 同じテーマの<strong>詳細版</strong>へどうぞ。この導入版でつかんだ絵が、そのまま土台になります。</p>
+  </section>
+
+</main>
+
+<aside>
+  <h2>やさしい用語</h2>
+  <table>
+    <tbody>
+      <tr id="t-folds"><td class="term">声帯</td><td>のどの奥のブザー。速く開閉して元の音を作る。</td></tr>
+      <tr id="t-tube"><td class="term">管（声道）</td><td>声帯から唇までの1本の通り道。のど＋口。通る音に手応えを返す。</td></tr>
+      <tr id="t-harmonic"><td class="term">倍音</td><td>声に重なっている細かい音の1本。声の高さで場所が決まり、自由には動かせない。</td></tr>
+      <tr id="t-formant"><td class="term">共鳴／フォルマント</td><td>管が特に響かせるのが上手な高さ。「管の得意な高さ」。口の形で動く。</td></tr>
+      <tr id="t-reactance"><td class="term">リアクタンス</td><td>管が声に返す「手応え」のこと。助ける向きと、じゃまする向きがある。</td></tr>
+      <tr id="t-inertive"><td class="term">イナーティブ（助ける手応え）</td><td>倍音が得意な高さより低い側にあるときの手応え。声を後押しし、少ない力で響かせる。</td></tr>
+      <tr id="t-compliant"><td class="term">コンプライアント（じゃまする手応え）</td><td>倍音が得意な高さより高い側にあるときの手応え。響かせるのに余分な力がいる。</td></tr>
+      <tr id="t-vibrato"><td class="term">ビブラート</td><td>声の自然なゆれ。のどが自由なときに出る。うまくいっているサイン。</td></tr>
+      <tr id="t-yell"><td class="term">張り上げ</td><td>足りない響きを息と締めで力ずくで埋める歌い方。上がるほど苦しい。</td></tr>
+      <tr id="t-passaggio"><td class="term">パッサッジョ</td><td>声の出し方が切り替わる高さの帯。男声がしんどくなりやすい音域。</td></tr>
+      <tr id="t-sovt"><td class="term">SOVT（ストロー練習など）</td><td>ストロー・リップトリルなど、出口を半分ふさぐ練習。管の助けを強め、楽な響きを覚えさせる。</td></tr>
+    </tbody>
+  </table>
+</aside>
+
+</div>
+</div>
+
+<script>
+(function(){
+  var svg=document.getElementById('hillsvg');
+  var slider=document.getElementById('hill');
+  var bigv=document.getElementById('bigv');
+  var subv=document.getElementById('subv');
+  var PEAK=400, MARG=54;
+  function face(cx,cy,zone){
+    var g='<circle cx="'+cx+'" cy="'+cy+'" r="30" fill="#fff" stroke="#000" stroke-width="2.4"/>';
+    g+='<circle cx="'+(cx-11)+'" cy="'+(cy-7)+'" r="3.2" fill="#000"/>';
+    g+='<circle cx="'+(cx+11)+'" cy="'+(cy-7)+'" r="3.2" fill="#000"/>';
+    if(zone==='help')      g+='<path d="M '+(cx-14)+' '+(cy+7)+' Q '+cx+' '+(cy+21)+' '+(cx+14)+' '+(cy+7)+'" fill="none" stroke="#00A4AF" stroke-width="2.6"/>';
+    else if(zone==='none') g+='<line x1="'+(cx-13)+'" y1="'+(cy+12)+'" x2="'+(cx+13)+'" y2="'+(cy+12)+'" stroke="#000" stroke-width="2.6"/>';
+    else                   g+='<path d="M '+(cx-14)+' '+(cy+15)+' Q '+cx+' '+(cy+3)+' '+(cx+14)+' '+(cy+15)+'" fill="none" stroke="#000" stroke-width="2.6"/>';
+    return g;
+  }
+  function render(){
+    var s=+slider.value;
+    var bx=70+s/100*660;
+    var zone = bx < PEAK-MARG ? 'help' : (bx > PEAK+MARG ? 'fight' : 'none');
+    var ns='';
+    ns+='<path d="M 220 215 C 300 215 322 72 400 72 C 478 72 500 215 580 215" fill="none" stroke="#00A4AF" stroke-width="2.6"/>';
+    ns+='<text x="400" y="56" text-anchor="middle" font-size="13" font-weight="700" fill="#00A4AF">管の得意な高さ</text>';
+    ns+='<line x1="70" y1="215" x2="730" y2="215" stroke="#000" stroke-width="2"/>';
+    ns+='<text x="70" y="243" font-size="12">低い</text>';
+    ns+='<text x="730" y="243" text-anchor="end" font-size="12">高い</text>';
+    ns+='<text x="400" y="282" text-anchor="middle" font-size="11.5">低い側＝助かる　／　てっぺん＝助けなし　／　高い側＝じゃま</text>';
+    ns+='<line x1="'+bx.toFixed(1)+'" y1="78" x2="'+bx.toFixed(1)+'" y2="226" stroke="#000" stroke-width="1" stroke-dasharray="3 4"/>';
+    var fill = zone==='help' ? '#00A4AF' : '#fff';
+    var strk = zone==='help' ? '#00A4AF' : '#000';
+    ns+='<circle cx="'+bx.toFixed(1)+'" cy="215" r="14" fill="'+fill+'" stroke="'+strk+'" stroke-width="2.4"/>';
+    ns+='<text x="'+bx.toFixed(1)+'" y="190" text-anchor="middle" font-size="12" font-weight="700">倍音</text>';
+    ns+=face(700,96,zone);
+    svg.innerHTML=ns;
+    var V={
+      help:['管が声を助けている','倍音が「得意な高さ」より低い側。管の勢いが声を後押しし、少ない力で響く ── うれしい状態。'],
+      none:['助けも、じゃまもなし','倍音がちょうど「得意な高さ」の上。手応えがつるっと消え、声が引っかかりやすい。'],
+      fight:['管が少しじゃまをしている','倍音が「得意な高さ」より高い側。響かせるのに余分な力がいる ── 張り上げになりやすい。']
+    }[zone];
+    bigv.textContent=V[0];
+    subv.textContent=V[1];
+  }
+  slider.addEventListener('input',render);
+  render();
+})();
+</script>
+
+</body>
+</html>

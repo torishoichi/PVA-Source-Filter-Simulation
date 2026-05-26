@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>なぜ管の長さで Z が変わるのか</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Ubuntu+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{ --accent:#00A4AF; }
+*{ box-sizing:border-box; }
+html,body{ margin:0; padding:0; }
+body{ font-family:'Noto Sans JP',sans-serif; color:#000; background:#fff; line-height:1.95; font-size:16.5px; }
+.mono{ font-family:'Ubuntu Mono',monospace; }
+.v{ white-space:nowrap; }
+.eq{ font-family:'Ubuntu Mono',monospace; white-space:nowrap; }
+svg text{ font-family:'Noto Sans JP',sans-serif; fill:#000; }
+
+header.wall{ border-bottom:3px solid #000; }
+.wrap{ max-width:1130px; margin:0 auto; padding:0 28px; }
+header .kicker{ color:var(--accent); font-weight:700; font-size:13px; letter-spacing:.04em; margin:30px 0 6px; }
+header h1{ font-size:27px; font-weight:700; margin:0 0 12px; line-height:1.46; }
+header .dek{ font-size:15.5px; margin:0 0 26px; max-width:780px; }
+
+.layout{ display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:42px; align-items:start; }
+main{ min-width:0; padding:34px 0 64px; }
+aside{ position:sticky; top:0; max-height:100vh; overflow-y:auto; padding:34px 0 40px; }
+
+section{ margin:0 0 40px; }
+h2{ font-size:21px; font-weight:700; margin:0 0 4px; }
+.kick{ color:var(--accent); font-size:12px; font-weight:700; margin:0 0 14px; }
+p{ margin:0 0 15px; }
+a{ color:var(--accent); text-decoration:none; border-bottom:1px solid var(--accent); }
+strong{ font-weight:700; }
+.em{ color:var(--accent); font-weight:700; }
+hr.sep{ border:0; border-top:1px solid #000; margin:38px 0; }
+
+.lead{ font-size:18px; font-weight:500; }
+.note{ border:1px solid var(--accent); border-radius:12px; padding:15px 18px; margin:18px 0; }
+.note .nh{ font-weight:700; color:var(--accent); font-size:13px; margin-bottom:5px; }
+.eqbig{ font-family:'Ubuntu Mono',monospace; font-size:18px; font-weight:700; border:1px solid #000; border-radius:10px; padding:12px 16px; margin:14px 0; text-align:center; }
+.panel{ border:1px solid #000; border-radius:12px; padding:18px 20px; margin:18px 0; }
+.fig{ border:1px solid #000; border-radius:12px; padding:16px 18px; margin:20px 0; }
+.fig svg{ display:block; width:100%; height:auto; }
+.figlabel{ font-weight:700; color:var(--accent); font-size:13px; margin-bottom:8px; }
+.figcap{ font-size:13.5px; margin-top:10px; line-height:1.8; }
+
+ol,ul{ margin:0 0 15px; padding-left:1.45em; }
+li{ margin:0 0 9px; }
+
+.widget{ border:1.5px solid var(--accent); border-radius:14px; padding:20px; margin:22px 0; }
+.clab{ font-size:12px; font-weight:700; }
+input[type=range]{ width:100%; max-width:440px; accent-color:var(--accent); }
+.readout{ font-size:13.5px; margin-top:12px; }
+.readout .row{ margin:0 0 6px; }
+.readout .lab{ font-weight:700; }
+.readout .val{ font-family:'Ubuntu Mono',monospace; }
+.verdict{ border-top:1px solid #000; margin-top:12px; padding-top:11px; font-size:14px; }
+.verdict .vt{ font-weight:700; color:var(--accent); }
+.maphint{ font-size:12px; margin-top:8px; line-height:1.7; }
+
+aside h2{ font-size:15px; border-bottom:2px solid #000; padding-bottom:6px; margin-bottom:0; }
+aside table{ border-collapse:collapse; width:100%; font-size:12.7px; line-height:1.62; }
+aside th{ display:none; }
+aside td{ padding:9px 4px; border-top:1px solid #000; vertical-align:top; }
+aside td.term{ font-weight:700; width:40%; }
+
+@media(max-width:1000px){
+  .layout{ grid-template-columns:1fr; gap:8px; }
+  aside{ position:static; max-height:none; overflow:visible; order:-1; padding:18px 0 8px; }
+  main{ padding-top:14px; }
+}
+</style>
+</head>
+<body>
+
+<header class="wall">
+  <div class="wrap">
+    <div class="kicker">声楽音響 — 式をベースに</div>
+    <h1>なぜ管の長さで Z が変わるのか<br>kL → tan → 共鳴 f = c/4L</h1>
+    <p class="dek">手応え Z は <span class="eq">Z<sub>in</sub> = j·Z<sub>0</sub>·tan(kL)</span>。このうち<strong>管の長さ L</strong> はどこに効くのか。kL を入口に、tan の正体、そして共鳴の式 <span class="eq">f = c/4L</span> までを式ベースでたどります。</p>
+  </div>
+</header>
+
+<div class="wrap">
+<div class="layout">
+
+<main>
+
+  <section>
+    <h2>問い — 長さはどこに効くのか</h2>
+    <p class="kick">式のどこを見ればいい</p>
+    <div class="eqbig">Z<sub>in</sub> = j · Z<sub>0</sub> · tan(kL)</div>
+    <p class="lead">この式に「長さ L」は1か所しか出てきません ── <span class="eq">tan(kL)</span> の中の <strong>kL</strong>。だから「長さで Z が変わる」を理解する道は1本：<strong>L → kL → tan(kL) → Z</strong>。</p>
+    <p>左の <span class="eq">j</span> は「90度ずらす印」、<span class="eq">Z<sub>0</sub></span> は手応えの土台 ── どちらにも L は入っていません。L が握っているのは <span class="eq">tan(kL)</span> ただひとつ。順に <strong>kL とは何か → tan が何をするか → 長さを変えると何が動くか</strong> と進みます。</p>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>1 — kL ＝「管の中に波がどれだけ入っているか」</h2>
+    <p class="kick">入口の記号</p>
+    <p><span class="eq">k = ω/c</span>。<span class="eq">ω</span> は声の角周波数（どれだけ速く振動するか）、<span class="eq">c</span> は音速。<span class="eq">k</span> は「波が1メートルあたり何ラジアン進むか」＝<strong>波の細かさ</strong>です。それに管の長さ <span class="eq">L</span> を掛けた <strong>kL</strong> は ──</p>
+    <div class="note">
+      <div class="nh">kL の意味</div>
+      <p style="margin:0;"><strong>kL ＝ いまその管の中に「波がどれだけ入っているか」。</strong>同じ高さの声（<span class="eq">ω</span> が同じ＝<span class="eq">k</span> が同じ）でも、管が長ければ kL は大きく、短ければ小さい。<strong>L が直接 kL を動かす</strong> ── これが長さの効く入口。</p>
+    </div>
+
+    <div class="fig">
+      <div class="figlabel">図1 — 同じ声でも、長い管ほど kL は大きい</div>
+      <svg viewBox="0 0 720 230" role="img" aria-label="同じ波長の波が、短い管には少し・長い管には多く入る">
+        <rect x="78" y="48" width="254" height="64" rx="14" fill="#fff" stroke="#000" stroke-width="2.2"/>
+        <path d="M 95.0 80.0 L 110.0 73.8 L 125.0 68.0 L 140.0 63.0 L 155.0 59.2 L 170.0 56.8 L 185.0 56.0 L 200.0 56.8 L 215.0 59.2 L 230.0 63.0 L 245.0 68.0 L 260.0 73.8 L 275.0 80.0 L 290.0 86.2 L 305.0 92.0 L 314.0 95.1" fill="none" stroke="#00A4AF" stroke-width="2.4"/>
+        <text x="350" y="74" font-size="13" font-weight="700">短い管</text>
+        <text x="350" y="94" font-size="13" font-weight="700" fill="#00A4AF">kL 小（波が少ししか入らない）</text>
+        <rect x="78" y="136" width="544" height="64" rx="14" fill="#fff" stroke="#000" stroke-width="2.2"/>
+        <path d="M 95.0 170.0 L 125.0 158.0 L 155.0 149.2 L 185.0 146.0 L 215.0 149.2 L 245.0 158.0 L 275.0 170.0 L 305.0 182.0 L 335.0 190.8 L 365.0 194.0 L 395.0 190.8 L 425.0 182.0 L 455.0 170.0 L 485.0 158.0 L 515.0 149.2 L 545.0 146.0 L 575.0 149.2 L 605.0 158.0" fill="none" stroke="#00A4AF" stroke-width="2.4"/>
+        <text x="350" y="222" text-anchor="middle" font-size="13" font-weight="700">長い管：<tspan fill="#00A4AF">kL 大（波がたくさん入る）</tspan></text>
+      </svg>
+      <p class="figcap">波の細かさ（k）は同じ＝同じ高さの声。それでも管が長いほど、中に入る波の量＝<strong>kL</strong> は大きくなる。これが <span class="eq">tan(kL)</span> を動かす。</p>
+    </div>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>2 — tan(kL) ＝ kL しだいで表情を変える関数</h2>
+    <p class="kick">Z の値を決める部分</p>
+    <p>kL が決まると、<span class="eq">tan(kL)</span> が Z の値そのものを決めます。<span class="eq">tan</span> は kL の大きさで表情を3段階に変えます。</p>
+    <ul>
+      <li><strong>kL が小さい</strong>（＝波の細かさ k と長さ L の積が小さいとき）→ <span class="eq">tan(kL) ≈ kL</span>、<strong>小さなプラス</strong> → Z は小さく<strong>イナーティブ</strong>。</li>
+      <li><strong>kL が π/2 に近づく</strong> → <span class="eq">tan(kL) → ∞</span>、<strong>爆発</strong> → ここが<strong>共鳴（フォルマント）</strong>。管にちょうど 1/4 波長が入った瞬間。</li>
+      <li><strong>kL が π/2 を超える</strong> → <span class="eq">tan</span> は<strong>マイナスに反転</strong> → Z は<strong>コンプライアント</strong>。</li>
+    </ul>
+
+    <div class="note">
+      <div class="nh">注意 — kL は「声の高さ」ではない</div>
+      <p style="margin:0;">声の高さを決めるのは <span class="eq">k</span> だけ（k が大きい＝高い声）。<span class="eq">kL</span> は <span class="eq">k × L</span> ── 長さ L が掛かっているので「高さそのもの」ではなく「管に入る波の量」です。だから「kL が小さい＝低い声」とは言えません（短い管なら、高い声でも kL は小さい）。<span class="eq">tan</span> と Z を決めるのは、声の高さではなく <span class="eq">kL</span>。</p>
+    </div>
+
+    <div class="fig">
+      <div class="figlabel">図2 — tan(kL) の3つの表情</div>
+      <svg viewBox="0 0 720 285" role="img" aria-label="kLに対するtanの曲線。小さい時プラス、π/2で爆発、その上でマイナス">
+        <line x1="70" y1="150" x2="660" y2="150" stroke="#000" stroke-width="1.4"/>
+        <text x="668" y="146" text-anchor="end" font-size="11">kL（管に入る波の量）→</text>
+        <text x="62" y="78" text-anchor="end" font-size="10.5">＋</text>
+        <text x="62" y="232" text-anchor="end" font-size="10.5">−</text>
+        <text x="62" y="154" text-anchor="end" font-size="10.5">0</text>
+        <line x1="360" y1="40" x2="360" y2="262" stroke="#000" stroke-width="1" stroke-dasharray="3 3"/>
+        <text x="360" y="32" text-anchor="middle" font-size="11.5" font-weight="700">kL = π/2</text>
+        <text x="70" y="278" font-size="10.5">kL=0</text>
+        <text x="650" y="278" text-anchor="end" font-size="10.5">kL=π</text>
+        <path d="M 73.7 149.3 L 95.8 144.9 L 118.0 140.4 L 140.2 135.7 L 162.3 130.7 L 184.5 125.2 L 206.6 119.2 L 228.8 112.4 L 250.9 104.5 L 273.1 95.4 L 295.2 84.9 L 317.4 72.7 L 339.5 59.2 L 346.9 54.5" fill="none" stroke="#00A4AF" stroke-width="2.7"/>
+        <path d="M 371.1 246.8 L 393.2 232.8 L 415.4 220.1 L 437.5 208.8 L 459.7 199.2 L 481.8 190.8 L 504.0 183.6 L 526.2 177.2 L 548.3 171.6 L 570.5 166.4 L 592.6 161.6 L 614.8 157.0 L 636.9 152.6 L 644.3 151.1" fill="none" stroke="#00A4AF" stroke-width="2.7"/>
+        <text x="200" y="250" text-anchor="middle" font-size="11" font-weight="700">小さなプラス</text>
+        <text x="200" y="266" text-anchor="middle" font-size="11">＝イナーティブ</text>
+        <text x="360" y="92" text-anchor="middle" font-size="11" font-weight="700" fill="#00A4AF">tan→∞</text>
+        <text x="360" y="108" text-anchor="middle" font-size="11" fill="#00A4AF">＝共鳴（爆発）</text>
+        <text x="520" y="120" text-anchor="middle" font-size="11" font-weight="700">マイナス</text>
+        <text x="520" y="136" text-anchor="middle" font-size="11">＝コンプライアント</text>
+      </svg>
+      <p class="figcap">この曲線が Z の正体。<strong>kL が右へ進むほど、tan は『小さなプラス → 爆発 → マイナス』と表情を変える</strong>。詳細編で見た「下＝イナーティブ／上＝コンプライアント」は、この tan 一文字に書き込まれている。</p>
+    </div>
+    <p>ここで気づくはずです。<strong>「長さ L を変える」とは、kL を変えること</strong>。そして kL を変えるとは、<strong>この tan の曲線の上を、左右に移動すること</strong>。次はそれを動かしてみます。</p>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>3 — 長さを変える＝tan の上を動く</h2>
+    <p class="kick">まず図の読み方</p>
+    <p>ここからは「周波数の地図」で見ます。下の図は3つの部品でできています ── 先に読み方を説明します。</p>
+    <ul>
+      <li><strong>上＝声道の管。</strong>長さ L。この管の第一共鳴は <span class="eq">F1 = c/4L</span>。L を変えると、この F1 が動きます。</li>
+      <li><strong>下＝手応え Z の曲線。</strong>横軸は周波数、縦軸は手応え（上＝助ける／イナーティブ、下＝じゃま／コンプライアント）。図2の <span class="eq">tan</span> を周波数の軸に並べたものです。<strong>F1 のすぐ下は「助ける」、すぐ上は「じゃま」</strong>。さらに管は F1 の奇数倍（F2≒3F1、F3≒5F1…）でも共鳴するので、<strong>同じ模様がくり返します</strong>。</li>
+      <li><strong>黒い縦線＝声の倍音。</strong>ここでは倍音を1本だけ <strong>700 Hz に固定</strong>します ── 声は変えず、管の長さだけ動かす実験です。この倍音が曲線のどの帯に乗っているか（黒丸の位置）が「いまこの声は助けられているか／じゃまされているか」。</li>
+    </ul>
+    <p>曲線が F1 などで切れて上から下へ飛ぶのは、<span class="eq">tan</span> が爆発（<span class="eq">∞</span>）して反対側（<span class="eq">−∞</span>）から戻るからです。切れ目＝共鳴の位置。</p>
+    <p><strong>スライダーで管を長くしてみてください。</strong><span class="eq">F1 = c/4L</span> なので F1 が下がり、曲線全体が左（低い周波数）へずれます。声の倍音（黒い縦線）は動かないのに、<strong>曲線のほうがずれて、黒丸が「助ける」帯と「じゃま」帯のあいだを移っていく</strong> ── これが「同じ声でも、管の長さで手応え Z が変わる」ということです。</p>
+
+    <div class="widget">
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <span class="clab">管の長さ L を変える（声の倍音は 700 Hz に固定）</span>
+        <input id="tl-L" type="range" min="13" max="26" step="0.5" value="17.5" aria-label="管の長さ">
+      </div>
+      <svg id="tl-svg" viewBox="0 0 760 450" role="img" aria-label="管の長さを変えると曲線がずれ、固定した声の倍音の手応えが変わる様子"></svg>
+      <div class="readout">
+        <div class="row"><span class="lab">管の長さ L：</span><span id="tl-len" class="val">—</span></div>
+        <div class="row"><span class="lab">第一共鳴 F1 ＝ c / 4L：</span><span id="tl-f1" class="val">—</span></div>
+        <div class="row"><span class="lab">声の倍音（700 Hz・固定）の手応え：</span><span id="tl-zone" class="val">—</span></div>
+      </div>
+      <div class="verdict"><span class="vt">いま起きていること：</span><span id="tl-ver">—</span></div>
+      <p class="maphint">声（黒い縦線）は固定。動かすのは管の長さだけ。<strong>管を長くする → F1 = c/4L が下がる → 曲線が左へずれる → 黒丸（声の倍音）の乗る帯が変わる。</strong></p>
+    </div>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>4 — 共鳴の式 f = c / 4L を導く</h2>
+    <p class="kick">「爆発」を周波数で書く</p>
+    <p>曲線がずれる量を、式で正確に出せます。<span class="eq">tan</span> が爆発する条件は <span class="eq">kL = π/2</span>。これを<strong>周波数 f について</strong>解くだけです。</p>
+    <div class="eqbig">kL = π/2　→　(2πf/c)·L = π/2　→　f = c / 4L</div>
+    <p>途中で使ったのは <span class="eq">k = ω/c = 2πf/c</span> だけ。出てきた <strong><span class="eq">f = c/4L</span></strong> が共鳴（第一フォルマント）の周波数です。読み取れることは2つ。</p>
+    <ul>
+      <li><strong>管が長い（L 大）ほど、共鳴の周波数 f は低い。</strong>分母に L があるから。</li>
+      <li>共鳴は <span class="eq">c/4L</span> の<strong>奇数倍</strong>にも並ぶ（<span class="eq">3c/4L, 5c/4L…</span>＝F2, F3）。L を変えれば、それらが<strong>いっせいに</strong>動く。</li>
+    </ul>
+    <p>数値で：音速 <span class="eq">c ≈ 343 m/s</span>、声道の長さ <span class="eq">L ≈ 17.5 cm</span> なら <span class="eq">f = 343 / (4×0.175) ≈ 490 Hz</span>。これが「Z の曲線が L を変えると左右にずれる」の正体 ── <strong>ずれ幅は <span class="eq">f = c/4L</span> がきっちり決めている</strong>。</p>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>5 — 長さ L と 太さ A の役割分担</h2>
+    <p class="kick">式の中の住み分け</p>
+    <p>式 <span class="eq">Z<sub>in</sub> = j·Z<sub>0</sub>·tan(kL)</span> をもう一度見ると、管の形は<strong>2か所</strong>に入っています ── 長さ <span class="eq">L</span> は <span class="eq">tan(kL)</span> に、太さ <span class="eq">A</span> は <span class="eq">Z<sub>0</sub> = ρc/A</span> に。役割はきれいに分かれます。</p>
+    <div class="panel">
+      <p style="margin:0 0 8px;"><strong>長さ L</strong> → <span class="eq">tan(kL)</span> を通じて、<strong>共鳴がどの周波数に来るか</strong>を決める（<span class="eq">f = c/4L</span>）。曲線の<strong>左右の位置</strong>。</p>
+      <p style="margin:0;"><strong>太さ A</strong> → <span class="eq">Z<sub>0</sub></span> を通じて、<strong>手応えの大きさの土台</strong>を決める（太いほど Z₀ 小＝弱い）。曲線の<strong>縦の高さ</strong>。A は共鳴の位置を動かさない。</p>
+    </div>
+    <p>つまり「長さで Z が変わる」と「太さで Z が変わる」は、<strong>別々の効き方</strong>。長さは曲線を横にずらし、太さは曲線を縦に伸び縮みさせる。今回の主題は前者 ── 横のずれです。</p>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>6 — だから SOVT は共鳴を下げる</h2>
+    <p class="kick">式どおりのこと</p>
+    <p>最後に、これまでの章とつながる話。ストロー発声やリップトリル（SOVT）は、唇の先に管を継ぎ足すようなもの ── <strong>実効的に L が長くなります</strong>。</p>
+    <p>あとは <span class="eq">f = c/4L</span> の通り。<strong>L が増える → f が下がる → Z の曲線が丸ごと左へずれる</strong>。SOVT で第一共鳴 F1 が下がるのは、感覚的な話ではなく、この式がそう言っているからです。ストローを長くするほど効果が強いのも、L が効くから。</p>
+    <p>「管の長さで Z が変わる」を一文で ── <strong class="em">L が変わる → kL が変わる → tan(kL) の上を動く → 共鳴が c/4L に従って移り、Z の曲線ごと左右にずれる。</strong></p>
+  </section>
+
+  <section>
+    <h2>まとめ</h2>
+    <p class="kick">一本道だった</p>
+    <p>「管の長さで Z が変わる」の道は、式 <span class="eq">Z<sub>in</sub> = j·Z<sub>0</sub>·tan(kL)</span> の中で1本だけ ──</p>
+    <div class="eqbig">L 変わる → kL 変わる → tan(kL) の上を動く → 共鳴 f = c/4L が移り、Z 曲線ごとずれる</div>
+    <p><span class="eq">j</span> も <span class="eq">Z<sub>0</sub></span> も長さを含まない。長さが触れるのは <span class="eq">tan(kL)</span> ただひとつで、その効きめは <span class="eq">f = c/4L</span> がきっちり決める。太さ <span class="eq">A</span> は別担当（手応えの大きさ）。SOVT が共鳴を下げるのも、実効的に L を伸ばしているから ── ぜんぶ同じ一本道の話でした。</p>
+  </section>
+
+</main>
+
+<aside>
+  <h2>用語</h2>
+  <table>
+    <tbody>
+      <tr><td class="term">Z<sub>in</sub></td><td>管が声に返す手応え（入力インピーダンス）。Z<sub>in</sub>=j·Z<sub>0</sub>·tan(kL)。</td></tr>
+      <tr><td class="term">j</td><td>「90度ずらす」印。リアクタンス（損なく貯めて返す手応え）のしるし。長さは含まない。</td></tr>
+      <tr><td class="term">Z<sub>0</sub> = ρc/A</td><td>手応えの土台の大きさ。太さ A で決まる。長さ L は含まない。</td></tr>
+      <tr><td class="term">k（波数）</td><td>k=ω/c。波が1メートルあたり何ラジアン進むか＝波の細かさ。</td></tr>
+      <tr><td class="term">ω（角周波数）</td><td>声がどれだけ速く振動するか。声の高さで決まる。</td></tr>
+      <tr><td class="term">c（音速）</td><td>空気中を音が進む速さ。およそ 343 m/s。</td></tr>
+      <tr><td class="term">L（管長）</td><td>声道の長さ。kL を通じて共鳴の位置を決める。</td></tr>
+      <tr><td class="term">A（断面積）</td><td>管の太さ。Z<sub>0</sub> を通じて手応えの大きさを決める。共鳴の位置は動かさない。</td></tr>
+      <tr><td class="term">kL</td><td>「管の中に波がどれだけ入っているか」。L が大きいほど kL も大きい。</td></tr>
+      <tr><td class="term">tan(kL)</td><td>kL しだいで Z の値を決める部分。小さい時プラス、π/2 で爆発、その上でマイナス。</td></tr>
+      <tr><td class="term">共鳴／フォルマント</td><td>tan が爆発する高さ（kL=π/2）。管が特に響かせる周波数。</td></tr>
+      <tr><td class="term">f = c/4L</td><td>第一共鳴の周波数。管が長いほど低い。Z 曲線のずれ幅を決める式。</td></tr>
+      <tr><td class="term">イナーティブ／コンプライアント</td><td>共鳴より下＝イナーティブ（助ける）、上＝コンプライアント（じゃま）。tan の符号で決まる。</td></tr>
+      <tr><td class="term">SOVT</td><td>ストロー等で出口を狭める練習。実効的に L を伸ばし、f=c/4L どおり共鳴を下げる。</td></tr>
+    </tbody>
+  </table>
+</aside>
+
+</div>
+</div>
+
+<script>
+(function(){
+  var svg=document.getElementById('tl-svg');
+  var sl=document.getElementById('tl-L');
+  var eLen=document.getElementById('tl-len'), eF1=document.getElementById('tl-f1');
+  var eZone=document.getElementById('tl-zone'), eVer=document.getElementById('tl-ver');
+  var C=343, FH=700;
+  var X0=70, X1=720, FMAX=2800, YMID=333, YSPAN=80, YT=252, YB=414;
+  function xOf(f){ return X0+f/FMAX*(X1-X0); }
+  function cy(f,F1){
+    return YMID-YSPAN*(2/Math.PI)*Math.atan(0.6*Math.tan(Math.PI*f/(2*F1)));
+  }
+  function render(){
+    var L=+sl.value;
+    var F1=C/(4*(L/100));
+    var barLen=160+(L-13)/13*270;
+    var ns='';
+    // ---- tube ----
+    ns+='<text x="'+X0+'" y="26" font-size="12" font-weight="700">声道の管（長さ L）</text>';
+    ns+='<line x1="'+X0+'" y1="42" x2="'+(X0+barLen).toFixed(1)+'" y2="42" stroke="#000" stroke-width="1"/>';
+    ns+='<line x1="'+X0+'" y1="38" x2="'+X0+'" y2="46" stroke="#000" stroke-width="1"/>';
+    ns+='<line x1="'+(X0+barLen).toFixed(1)+'" y1="38" x2="'+(X0+barLen).toFixed(1)+'" y2="46" stroke="#000" stroke-width="1"/>';
+    ns+='<text x="'+(X0+barLen/2).toFixed(1)+'" y="36" text-anchor="middle" font-size="11" font-weight="700">L</text>';
+    ns+='<rect x="'+X0+'" y="54" width="'+barLen.toFixed(1)+'" height="42" rx="12" fill="#fff" stroke="#00A4AF" stroke-width="2.6"/>';
+    ns+='<text x="'+X0+'" y="112" font-size="10.5">声門</text>';
+    ns+='<text x="'+(X0+barLen).toFixed(1)+'" y="112" text-anchor="end" font-size="10.5">唇</text>';
+    ns+='<text x="'+X0+'" y="138" font-size="11.5" font-weight="700">\u2192 この管の第一共鳴　F1 = c / 4L = '+Math.round(F1)+' Hz</text>';
+    // connector
+    ns+='<line x1="300" y1="150" x2="300" y2="180" stroke="#000" stroke-width="1.6"/>';
+    ns+='<path d="M 294 174 L 300 186 L 306 174 Z" fill="#000"/>';
+    ns+='<text x="316" y="172" font-size="10.5">F1 が、下の曲線の形と位置を決める</text>';
+    // ---- divider + curve title ----
+    ns+='<line x1="'+X0+'" y1="198" x2="'+X1+'" y2="198" stroke="#000" stroke-width="1"/>';
+    ns+='<text x="'+X0+'" y="220" font-size="12" font-weight="700">声に対する手応え Z の曲線</text>';
+    // ---- curve baseline + axis labels ----
+    ns+='<line x1="'+X0+'" y1="'+YMID+'" x2="'+X1+'" y2="'+YMID+'" stroke="#000" stroke-width="1.3"/>';
+    ns+='<text x="'+(X0-9)+'" y="'+(YMID+4)+'" text-anchor="end" font-size="10.5">0</text>';
+    ns+='<text x="'+(X0-9)+'" y="'+(YT+12)+'" text-anchor="end" font-size="10" fill="#00A4AF" font-weight="700">助ける</text>';
+    ns+='<text x="'+(X0-9)+'" y="'+(YB-1)+'" text-anchor="end" font-size="10" fill="#00A4AF" font-weight="700">じゃま</text>';
+    ns+='<text x="'+X1+'" y="'+(YB+26)+'" text-anchor="end" font-size="10.5">周波数 (Hz)</text>';
+    // ---- formant poles ----
+    var n=1;
+    while(n*F1<FMAX){
+      var px=xOf(n*F1);
+      if(n%2===1){
+        ns+='<line x1="'+px.toFixed(1)+'" y1="'+YT+'" x2="'+px.toFixed(1)+'" y2="'+YB+'" stroke="#00A4AF" stroke-width="1" stroke-dasharray="4 4"/>';
+        ns+='<text x="'+px.toFixed(1)+'" y="'+(YT-6)+'" text-anchor="middle" font-size="10.5" font-weight="700" fill="#00A4AF">F'+((n+1)/2)+'</text>';
+      }
+      n++;
+    }
+    // ---- curve ----
+    var d='', pen=false, f, c, x, y;
+    for(f=10;f<=FMAX;f+=6){
+      c=Math.cos(Math.PI*f/(2*F1));
+      if(Math.abs(c)<0.055){ pen=false; continue; }
+      x=xOf(f); y=cy(f,F1);
+      if(!pen){ d+=' M '+x.toFixed(1)+' '+y.toFixed(1); pen=true; }
+      else d+=' L '+x.toFixed(1)+' '+y.toFixed(1);
+    }
+    ns+='<path d="'+d+'" fill="none" stroke="#00A4AF" stroke-width="2.6"/>';
+    // ---- fixed harmonic marker ----
+    var hx=xOf(FH);
+    var g=FH/F1, near=Math.round(g);
+    var zone=(Math.abs(g-near)<0.07 && near%2===1)?'res':((Math.floor(g)%2===0)?'in':'co');
+    var hy=(Math.abs(Math.cos(Math.PI*FH/(2*F1)))<0.055)?YMID:cy(FH,F1);
+    ns+='<line x1="'+hx.toFixed(1)+'" y1="'+(YT-10)+'" x2="'+hx.toFixed(1)+'" y2="'+(YB+4)+'" stroke="#000" stroke-width="2"/>';
+    ns+='<circle cx="'+hx.toFixed(1)+'" cy="'+hy.toFixed(1)+'" r="6.5" fill="'+(zone==='in'?'#00A4AF':'#fff')+'" stroke="#000" stroke-width="2"/>';
+    ns+='<text x="'+hx.toFixed(1)+'" y="'+(YT-16)+'" text-anchor="middle" font-size="10.5" font-weight="700">声の倍音（固定）</text>';
+    svg.innerHTML=ns;
+    // ---- readouts ----
+    eLen.textContent=L.toFixed(1)+' cm';
+    eF1.textContent=Math.round(F1)+' Hz';
+    eZone.textContent={in:'助ける（イナーティブ）',co:'じゃま（コンプライアント）',res:'共鳴のちょうど上'}[zone];
+    eVer.textContent={
+      in:'声の倍音は「助ける」帯にある。管がこの声を後押ししている（イナーティブ）。',
+      co:'声の倍音は共鳴を越えた「じゃま」帯にある。管がこの声に逆らっている（コンプライアント）。',
+      res:'声の倍音がちょうど共鳴の上 ── 手応えが最大になる境目。'
+    }[zone];
+  }
+  sl.addEventListener('input',render);
+  render();
+})();
+</script>
+
+</body>
+</html>

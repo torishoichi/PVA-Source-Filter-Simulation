@@ -610,6 +610,12 @@
     <div id="learn-backdrop" class="learn-backdrop" aria-hidden="true"></div>
     <aside id="learn-drawer" class="learn-drawer" role="dialog" aria-labelledby="learn-title" aria-hidden="true">
         <header class="learn-drawer-header">
+            <button id="learn-back" class="learn-drawer-back" type="button" aria-label="Back to lessons" style="display:none;">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M15 18l-6-6 6-6"/>
+                </svg>
+                <span>Back</span>
+            </button>
             <h2 id="learn-title" class="learn-drawer-title">Learn — Practical Vocal Acoustics</h2>
             <button id="learn-close" class="learn-drawer-close" type="button" aria-label="Close">
                 <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
@@ -618,7 +624,23 @@
             </button>
         </header>
 
+        <!-- External lesson iframe view (hidden by default, shown when a series lesson is opened) -->
+        <div id="learn-iframe-view" class="learn-iframe-view" style="display:none;">
+            <iframe id="learn-iframe" class="learn-iframe" src="about:blank" title="Lesson content" loading="lazy"></iframe>
+        </div>
+
         <div class="learn-drawer-body">
+
+            <!-- ===== Series section (manifest-driven external lessons) ===== -->
+            <section id="learn-series-section" class="learn-series-section">
+                <div class="learn-series-header">
+                    <span class="learn-series-kicker">📚 シリーズ</span>
+                    <span class="learn-series-hint">クリックで全画面表示</span>
+                </div>
+                <div id="learn-series-list" class="learn-series-list">
+                    <div class="learn-series-loading">読み込み中…</div>
+                </div>
+            </section>
 
             <!-- ===== Lesson 1: Roughness と Resolution の違い ===== -->
             <details class="lesson" open>
@@ -1169,19 +1191,113 @@
             const mapEl = document.getElementById('learn-harmonic-map');
             if (!drawer || !btnOpen) return;
 
+            const drawerBody = drawer.querySelector('.learn-drawer-body');
+            const iframeView = document.getElementById('learn-iframe-view');
+            const iframeEl = document.getElementById('learn-iframe');
+            const backBtn = document.getElementById('learn-back');
+            const titleEl = document.getElementById('learn-title');
+            const defaultTitle = titleEl ? titleEl.textContent : 'Learn';
+
+            function showIframe(src, title) {
+                if (!iframeView || !iframeEl) return;
+                iframeEl.src = src;
+                iframeView.style.display = 'block';
+                if (drawerBody) drawerBody.style.display = 'none';
+                if (backBtn) backBtn.style.display = 'inline-flex';
+                if (titleEl && title) titleEl.textContent = title;
+            }
+            function hideIframe() {
+                if (!iframeView || !iframeEl) return;
+                iframeView.style.display = 'none';
+                iframeEl.src = 'about:blank';
+                if (drawerBody) drawerBody.style.display = '';
+                if (backBtn) backBtn.style.display = 'none';
+                if (titleEl) titleEl.textContent = defaultTitle;
+            }
+            if (backBtn) backBtn.addEventListener('click', hideIframe);
+
             function setOpen(open) {
                 drawer.classList.toggle('open', open);
                 backdrop.classList.toggle('open', open);
                 drawer.setAttribute('aria-hidden', open ? 'false' : 'true');
                 backdrop.setAttribute('aria-hidden', open ? 'false' : 'true');
                 document.body.classList.toggle('learn-drawer-open', open);
+                if (open) loadSeriesIndex();
+                else hideIframe();
             }
             btnOpen.addEventListener('click', () => setOpen(true));
             btnClose && btnClose.addEventListener('click', () => setOpen(false));
             backdrop && backdrop.addEventListener('click', () => setOpen(false));
             document.addEventListener('keydown', (e) => {
-                if (e.key === 'Escape' && drawer.classList.contains('open')) setOpen(false);
+                if (e.key === 'Escape' && drawer.classList.contains('open')) {
+                    if (iframeView && iframeView.style.display === 'block') hideIframe();
+                    else setOpen(false);
+                }
             });
+
+            // ===== Manifest-driven series list =====
+            let seriesLoaded = false;
+            async function loadSeriesIndex() {
+                if (seriesLoaded) return;
+                seriesLoaded = true;
+                const listEl = document.getElementById('learn-series-list');
+                if (!listEl) return;
+                try {
+                    const mfRes = await fetch('learn/manifest.json', { cache: 'no-cache' });
+                    const mf = await mfRes.json();
+                    listEl.innerHTML = '';
+                    for (const s of (mf.series || [])) {
+                        const seriesEl = document.createElement('details');
+                        seriesEl.className = 'learn-series-item';
+                        const sum = document.createElement('summary');
+                        sum.className = 'learn-series-summary';
+                        sum.innerHTML = `<span class="learn-series-chevron" aria-hidden="true">▸</span><span class="learn-series-title">${escapeHtml(s.title)}</span>`;
+                        seriesEl.appendChild(sum);
+                        if (s.description) {
+                            const desc = document.createElement('p');
+                            desc.className = 'learn-series-desc';
+                            desc.textContent = s.description;
+                            seriesEl.appendChild(desc);
+                        }
+                        const lessonsList = document.createElement('ul');
+                        lessonsList.className = 'learn-lessons-list';
+                        lessonsList.innerHTML = '<li class="learn-lesson-loading">読み込み中…</li>';
+                        seriesEl.appendChild(lessonsList);
+                        // Lazy-load lesson list on first expand
+                        let loaded = false;
+                        seriesEl.addEventListener('toggle', async () => {
+                            if (!seriesEl.open || loaded) return;
+                            loaded = true;
+                            try {
+                                const seriesUrl = `learn/${s.manifest}`;
+                                const sRes = await fetch(seriesUrl, { cache: 'no-cache' });
+                                const sData = await sRes.json();
+                                const seriesBase = `learn/${s.slug}/`;
+                                lessonsList.innerHTML = '';
+                                for (const lesson of (sData.lessons || [])) {
+                                    const li = document.createElement('li');
+                                    const a = document.createElement('button');
+                                    a.type = 'button';
+                                    a.className = 'learn-lesson-link';
+                                    a.innerHTML = `${lesson.level ? `<span class="learn-lesson-level">${escapeHtml(lesson.level)}</span>` : ''}<span class="learn-lesson-title">${escapeHtml(lesson.title)}</span>`;
+                                    a.addEventListener('click', () => showIframe(seriesBase + lesson.file, `${s.title} — ${lesson.title}`));
+                                    li.appendChild(a);
+                                    lessonsList.appendChild(li);
+                                }
+                            } catch (err) {
+                                lessonsList.innerHTML = `<li class="learn-lesson-error">読み込みに失敗: ${escapeHtml(err.message)}</li>`;
+                            }
+                        });
+                        listEl.appendChild(seriesEl);
+                    }
+                } catch (err) {
+                    listEl.innerHTML = `<div class="learn-series-error">manifest 読み込み失敗: ${escapeHtml(err.message)}</div>`;
+                    seriesLoaded = false;
+                }
+            }
+            function escapeHtml(s) {
+                return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+            }
 
             // Mirror slider → state.pitch (drives the main app)
             if (mirror && typeof state !== 'undefined') {

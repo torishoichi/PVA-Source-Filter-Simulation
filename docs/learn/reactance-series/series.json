@@ -1,0 +1,14 @@
+{
+  "title": "リアクタンス解説シリーズ",
+  "description": "声帯から見たフォルマントの「手応え」（リアクタンス）を曲線で理解する全8章。",
+  "lessons": [
+    { "file": "00_index.html",                "title": "目次・読む順番",                       "level": "INDEX" },
+    { "file": "01_intro.html",                "title": "導入編：はじめてのリアクタンス",         "level": "入門" },
+    { "file": "02_curves.html",               "title": "中級編：手応えを曲線で見る",             "level": "中級" },
+    { "file": "03_sign_flip.html",            "title": "詳細編：なぜ符号が反転するのか",         "level": "詳細" },
+    { "file": "04_nonlinear_coupling.html",   "title": "上級編：非線形ソース・フィルター結合",   "level": "上級" },
+    { "file": "05_math_friendly.html",        "title": "上級やさしい版：数式を友だちにする",     "level": "上級★" },
+    { "file": "06_math_friendly_vol2.html",   "title": "上級やさしい版 vol.2：2つの式をつなぐ", "level": "上級★" },
+    { "file": "07_tube_length.html",          "title": "補足：なぜ管の長さで Z が変わるのか",    "level": "補足" }
+  ]
+}

@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>上級編やさしい版 vol2 — 2つの式をつなぐ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Ubuntu+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{ --accent:#00A4AF; }
+*{ box-sizing:border-box; }
+html,body{ margin:0; padding:0; }
+body{ font-family:'Noto Sans JP',sans-serif; color:#000; background:#fff; line-height:1.95; font-size:16.5px; }
+.mono{ font-family:'Ubuntu Mono',monospace; }
+.v{ white-space:nowrap; }
+.eq{ font-family:'Ubuntu Mono',monospace; white-space:nowrap; }
+svg text{ font-family:'Noto Sans JP',sans-serif; fill:#000; }
+
+header.wall{ border-bottom:3px solid #000; }
+.wrap{ max-width:1130px; margin:0 auto; padding:0 28px; }
+header .kicker{ color:var(--accent); font-weight:700; font-size:13px; letter-spacing:.04em; margin:30px 0 6px; }
+header h1{ font-size:27px; font-weight:700; margin:0 0 12px; line-height:1.46; }
+header .dek{ font-size:15.5px; margin:0 0 26px; max-width:780px; }
+
+.layout{ display:grid; grid-template-columns:minmax(0,1fr) 304px; gap:42px; align-items:start; }
+main{ min-width:0; padding:34px 0 64px; }
+aside{ position:sticky; top:0; max-height:100vh; overflow-y:auto; padding:34px 0 40px; }
+
+section{ margin:0 0 40px; }
+h2{ font-size:21px; font-weight:700; margin:0 0 4px; }
+.kick{ color:var(--accent); font-size:12px; font-weight:700; margin:0 0 14px; }
+p{ margin:0 0 15px; }
+a{ color:var(--accent); text-decoration:none; border-bottom:1px solid var(--accent); }
+strong{ font-weight:700; }
+.em{ color:var(--accent); font-weight:700; }
+hr.sep{ border:0; border-top:1px solid #000; margin:38px 0; }
+
+.lead{ font-size:18px; font-weight:500; }
+.note{ border:1px solid var(--accent); border-radius:12px; padding:15px 18px; margin:18px 0; }
+.note .nh{ font-weight:700; color:var(--accent); font-size:13px; margin-bottom:5px; }
+.eqbig{ font-family:'Ubuntu Mono',monospace; font-size:18px; font-weight:700; border:1px solid #000; border-radius:10px; padding:12px 16px; margin:14px 0; text-align:center; }
+.panel{ border:1px solid #000; border-radius:12px; padding:18px 20px; margin:18px 0; }
+.fig{ border:1px solid #000; border-radius:12px; padding:16px 18px; margin:20px 0; }
+.fig svg{ display:block; width:100%; height:auto; }
+.figlabel{ font-weight:700; color:var(--accent); font-size:13px; margin-bottom:8px; }
+.figcap{ font-size:13.5px; margin-top:10px; line-height:1.8; }
+
+ol,ul{ margin:0 0 15px; padding-left:1.45em; }
+li{ margin:0 0 9px; }
+
+.widget{ border:1.5px solid var(--accent); border-radius:14px; padding:20px; margin:22px 0; }
+.clab{ font-size:12px; font-weight:700; }
+input[type=range]{ width:100%; max-width:440px; accent-color:var(--accent); }
+.readout{ font-size:13.5px; margin-top:12px; }
+.readout .row{ margin:0 0 6px; }
+.readout .lab{ font-weight:700; }
+.readout .val{ font-family:'Ubuntu Mono',monospace; }
+.verdict{ border-top:1px solid #000; margin-top:12px; padding-top:11px; font-size:14px; }
+.verdict .vt{ font-weight:700; color:var(--accent); }
+.maphint{ font-size:12px; margin-top:8px; line-height:1.7; }
+
+aside h2{ font-size:15px; border-bottom:2px solid #000; padding-bottom:6px; margin-bottom:0; }
+aside table{ border-collapse:collapse; width:100%; font-size:12.7px; line-height:1.62; }
+aside th{ display:none; }
+aside td{ padding:9px 4px; border-top:1px solid #000; vertical-align:top; }
+aside td.term{ font-weight:700; width:40%; }
+
+@media(max-width:1000px){
+  .layout{ grid-template-columns:1fr; gap:8px; }
+  aside{ position:static; max-height:none; overflow:visible; order:-1; padding:18px 0 8px; }
+  main{ padding-top:14px; }
+}
+</style>
+</head>
+<body>
+
+<header class="wall">
+  <div class="wrap">
+    <div class="kicker">声楽音響 — 上級編やさしい版 vol2</div>
+    <h1>2つの式をつなぐ橋<br>インピーダンスと、エネルギー W</h1>
+    <p class="dek">「Z<sub>in</sub> の式と W の式がつながっていない」── その通りでした。前の版は2つの式を別々に説明し、その間の“つなぎ”を飛ばしていた。vol2 はその橋だけを太く描きます。さらに、橋を渡りきるために理解すべき3つのことも追加します。</p>
+  </div>
+</header>
+
+<div class="wrap">
+<div class="layout">
+
+<main>
+
+  <section>
+    <h2>はじめに — 飛ばしていた「つなぎ」</h2>
+    <p class="kick">あなたの指摘は正しい</p>
+    <p class="lead">前の版では2つの式を、それぞれ記号ごとに友だちにしました。でも「で、その2つはどうつながるの？」には、ちゃんと答えていませんでした。</p>
+    <p>「リアクタンスが位相 φ を決める」「j と 90度は同じ家族」── そう書いたものの、<strong>どうやって</strong>つながるかは手品のままだった。vol2 はその一点 ── <strong>2つの式の間にある“見えない3つめの式”</strong> ── を主役にします。これが分かると、2つの式は最初から1本の鎖だったと分かります。</p>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>1 — 2つの式は、何の話だったか</h2>
+    <p class="kick">いま橋の両岸に立つ</p>
+    <p>橋をかける前に、両岸を確認します。</p>
+    <div class="eqbig">式その1：　Z<sub>in</sub> = j · Z<sub>0</sub> · tan(kL)</div>
+    <p>これは<strong>管の岸</strong>の話。「管が、ある周波数の声にどれだけ手応え（インピーダンス）を返すか」。周波数しだいでイナーティブにもコンプライアントにもなる、あの曲線です。</p>
+    <div class="eqbig">式その2：　W = ∮ p dA</div>
+    <p>これは<strong>声帯の岸</strong>の話。「1回の開閉で、声帯がどれだけエネルギー W をもらうか」。圧 p とすきま A がつくるループの面積でしたね。</p>
+    <p>片方は<strong>管</strong>、もう片方は<strong>声帯</strong>。一見、別々のものの話に見えます。<strong class="em">この2つをつなぐのは、たった1つの小さな式</strong> ── それを次に出します。</p>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>2 — 橋になる「3つめの式」</h2>
+    <p class="kick">p = Z<sub>in</sub> · U</p>
+    <p>2つの式をつなぐのは、これです。</p>
+    <div class="eqbig">橋の式：　p = Z<sub>in</sub> · U</div>
+    <p>読み下すと「<strong>圧 ＝ 管の手応え × 流れ</strong>」。じつはこれ、新しい難しい式ではなく、<strong>インピーダンスの定義そのもの</strong>です。インピーダンスとは「圧 ÷ 流れ」── つまり手応えのこと。割り算を掛け算に直せば「圧 ＝ 手応え × 流れ」。それだけ。</p>
+
+    <div class="fig">
+      <div class="figlabel">図1 — 橋の式を、記号ごとにほどく</div>
+      <svg viewBox="0 0 720 260" role="img" aria-label="p = Z_in × U の各記号の意味">
+        <text x="258" y="56" font-size="25" font-weight="700" font-family="'Ubuntu Mono',monospace" fill="#00A4AF">p</text>
+        <text x="296" y="56" font-size="25" font-weight="700" font-family="'Ubuntu Mono',monospace">=</text>
+        <text x="330" y="56" font-size="25" font-weight="700" font-family="'Ubuntu Mono',monospace">Z</text>
+        <text x="347" y="62" font-size="14" font-family="'Ubuntu Mono',monospace">in</text>
+        <text x="382" y="56" font-size="25" font-weight="700" font-family="'Ubuntu Mono',monospace">·</text>
+        <text x="408" y="56" font-size="25" font-weight="700" font-family="'Ubuntu Mono',monospace">U</text>
+        <line x1="260" y1="68" x2="130" y2="140" stroke="#000" stroke-width="1"/>
+        <line x1="338" y1="68" x2="360" y2="140" stroke="#000" stroke-width="1"/>
+        <line x1="408" y1="68" x2="590" y2="140" stroke="#000" stroke-width="1"/>
+        <g font-size="11.5">
+          <rect x="36" y="140" width="188" height="100" rx="9" fill="#fff" stroke="#00A4AF" stroke-width="1.8"/>
+          <text x="50" y="162" font-size="13" font-weight="700" fill="#00A4AF">p ＝ 圧</text>
+          <text x="50" y="186">声門のすぐ上に生まれる圧。</text>
+          <text x="50" y="206">これが声帯を押す力のもと</text>
+          <text x="50" y="226">＝式その2に出てくる p。</text>
+          <rect x="266" y="140" width="188" height="100" rx="9" fill="#fff" stroke="#000" stroke-width="1.6"/>
+          <text x="280" y="162" font-size="13" font-weight="700">Z_in ＝ 管の手応え</text>
+          <text x="280" y="186">式その1で求めたもの。</text>
+          <text x="280" y="206">これを「掛ける」のが、</text>
+          <text x="280" y="226">この橋の式の仕事。</text>
+          <rect x="496" y="140" width="188" height="100" rx="9" fill="#fff" stroke="#000" stroke-width="1.6"/>
+          <text x="510" y="162" font-size="13" font-weight="700">U ＝ 流れ</text>
+          <text x="510" y="186">声門を通り抜ける空気の</text>
+          <text x="510" y="206">流れ。声門のすきま A と</text>
+          <text x="510" y="226">ほぼ一緒に動く。</text>
+        </g>
+      </svg>
+      <p class="figcap">この小さな式が橋。式その1が作った <strong>Z<sub>in</sub></strong> を受け取り、流れ <strong>U</strong> に掛けて、圧 <strong>p</strong> を生む。その p こそ、式その2 <span class="eq">W = ∮p dA</span> が積分する相手。<strong>式1 → 橋の式 → 式2</strong> ── これで3つが一直線につながった。</p>
+    </div>
+    <p>でも「つながった」だけではまだ手品です。<strong>なぜ Z<sub>in</sub> を掛けると、ループが開いたり閉じたりするのか</strong>。鍵は、Z<sub>in</sub> がただの数ではなく <span class="eq">j</span> を含むこと ── 次の章です。</p>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>3 — なぜ「掛ける」と、タイミングがずれるのか</h2>
+    <p class="kick">j の正体が、ここで効く</p>
+    <p>ふつうの数を掛けると、大きさが変わるだけです。<span class="v">3</span> を掛ければ3倍、それだけ。ところが <strong>Z<sub>in</sub> には <span class="eq">j</span> が入っています</strong>（式その1の頭の <span class="eq">j</span>）。そして前の版で見たとおり、<strong><span class="eq">j</span> を掛けることは「90度くるっと回す」こと</strong>。</p>
+    <p>だから <span class="eq">p = Z<sub>in</sub> · U</span> で起きるのは、ただの拡大ではありません。<strong>流れ U を、大きさも変えつつ、タイミングを回す</strong>。管がイナーティブ（<span class="eq">j</span> × プラス）なら、圧 p は流れ U に対して<strong>タイミングが約90度ずれる</strong>。コンプライアントなら逆向きにずれる。抵抗（手応えのうち損をするぶん）だけならズレなし＝同じタイミング。</p>
+    <div class="note">
+      <div class="nh">これが「手品」の種明かし</div>
+      <p style="margin:0;">「リアクタンスが位相 φ を決める」とはこういうこと ── <strong>Z<sub>in</sub> に <span class="eq">j</span>（リアクタンス）が入っているから、掛け算が回転になり、圧と流れのタイミングがずれる</strong>。式その1の <span class="eq">j</span> と、式その2のループを開く「90度のズレ φ」は、別物ではなく<strong>同じ1つの90度</strong>。橋の式が、その90度を式1から式2へ運んでいたのです。</p>
+    </div>
+    <p>まとめると ── イナーティブ（<span class="eq">X &gt; 0</span>）なら圧は流れより<strong>進む</strong>（φ プラス）、コンプライアント（<span class="eq">X &lt; 0</span>）なら<strong>遅れる</strong>（φ マイナス）。次は、この φ のズレが、どうやってループの面積＝エネルギー W になるかを見ます。</p>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>4 — タイミングのズレが、ループの面積になる</h2>
+    <p class="kick">φ から W へ</p>
+    <p>これで橋の半分が架かりました。式その1 → 橋の式 → 圧 p と流れ U の<strong>タイミングのズレ φ</strong>。残りは「その φ が、どうやって式その2のループ面積＝エネルギー W になるか」です。</p>
+    <p>式その2は <span class="eq">W = ∮ p dA</span>。声門のすきま <span class="eq">A</span> は、1周期のあいだ<strong>流れ U とほぼ一緒に動く</strong>（開けば流れる）。だからループは「圧 p 対 すきま A」、そして p は A から φ だけずれている。ここで大事な、少し意外なことが起きます。</p>
+    <ul>
+      <li><strong>ズレなし（φ＝0）</strong>：p と A が同時に上下する。すると <span class="eq">∮p dA</span> は、行きで足したぶんを帰りでそっくり引いてしまい、<strong>差し引きゼロ</strong>。ループはぺちゃんこの線で、面積なし。</li>
+      <li><strong>90度ズレ（φ＝90°）</strong>：p が A より4分の1周期ぶん進む。すると行きと帰りが打ち消し合わず、<strong>ループが大きく開く</strong>。面積＝エネルギーが最大。</li>
+    </ul>
+    <p>計算すると、ループの面積はちょうど <strong><span class="eq">W ∝ sin φ</span></strong> になります。<span class="eq">sin 0° = 0</span>（ズレなし＝仕事ゼロ）、<span class="eq">sin 90° = 1</span>（最大）、<span class="eq">sin(−90°) = −1</span>（逆向き＝エネルギー流出）。<strong class="em">だから「大きく押すこと」より「正しくずれていること」が効く</strong> ── そしてそのズレを決めていたのが、式その1のリアクタンスでした。下で、波のズレとループが同時に動くのを見てください。</p>
+
+    <div class="widget">
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <span class="clab">声道リアクタンス（コンプライアント ← ちょうど0 → イナーティブ）＝ ズレ φ を決める</span>
+        <input id="cx-r" type="range" min="0" max="100" step="1" value="79" aria-label="声道リアクタンス／位相のズレ">
+      </div>
+      <svg id="cx-svg" viewBox="0 0 640 470" role="img" aria-label="圧と流れの波のズレと、それがつくる仕事ループ"></svg>
+      <div class="readout">
+        <div class="row"><span class="lab">タイミングのズレ φ：</span><span id="cx-phi" class="val">—</span></div>
+        <div class="row"><span class="lab">ループ面積 ＝ W（∝ sin φ）：</span><span id="cx-w" class="val">—</span></div>
+      </div>
+      <div class="verdict"><span class="vt">起きていること：</span><span id="cx-ver">—</span></div>
+      <p class="maphint">上＝圧 p と流れ U の2つの波。φ だけずれる。下＝その2つがつくるループ。スライダーを動かすと、<strong>波のズレ（式1の側）とループの面積（式2の側）が一緒に動く</strong> ── これが2つの式が1本の鎖である証拠。</p>
+    </div>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>5 — 鎖の全体を、ひと目で</h2>
+    <p class="kick">2つの式は、最初から1本だった</p>
+    <p>ここまでを1枚にまとめます。左端が式その1、右端が式その2。間にあるのが、これまで飛ばしていた「つなぎ」です。</p>
+
+    <div class="fig">
+      <div class="figlabel">図2 — 式その1から式その2までの、5つの箱の鎖</div>
+      <svg viewBox="0 0 720 190" role="img" aria-label="Z_inからWまでをつなぐ5段階の鎖">
+        <g font-size="11">
+          <rect x="14" y="52" width="116" height="86" rx="9" fill="#fff" stroke="#000" stroke-width="1.6"/>
+          <text x="72" y="74" text-anchor="middle" font-size="10" font-weight="700" fill="#00A4AF">式その1</text>
+          <text x="72" y="95" text-anchor="middle" font-size="13" font-weight="700" font-family="'Ubuntu Mono',monospace">Z_in</text>
+          <text x="72" y="116" text-anchor="middle">管の手応え</text>
+          <rect x="154" y="52" width="116" height="86" rx="9" fill="#fff" stroke="#000" stroke-width="1.6"/>
+          <text x="212" y="78" text-anchor="middle">その中身の</text>
+          <text x="212" y="98" text-anchor="middle" font-size="13" font-weight="700" font-family="'Ubuntu Mono',monospace" fill="#00A4AF">j</text>
+          <text x="212" y="118" text-anchor="middle">＝リアクタンス</text>
+          <rect x="294" y="52" width="116" height="86" rx="9" fill="#fff" stroke="#00A4AF" stroke-width="1.9"/>
+          <text x="352" y="74" text-anchor="middle" font-size="10" font-weight="700" fill="#00A4AF">橋の式</text>
+          <text x="352" y="96" text-anchor="middle" font-size="12" font-weight="700" font-family="'Ubuntu Mono',monospace">p=Z_in·U</text>
+          <text x="352" y="117" text-anchor="middle">流れ→圧</text>
+          <rect x="434" y="52" width="116" height="86" rx="9" fill="#fff" stroke="#000" stroke-width="1.6"/>
+          <text x="492" y="78" text-anchor="middle">圧と流れの</text>
+          <text x="492" y="99" text-anchor="middle" font-size="14" font-weight="700" font-family="'Ubuntu Mono',monospace" fill="#00A4AF">φ</text>
+          <text x="492" y="119" text-anchor="middle">タイミング差</text>
+          <rect x="574" y="52" width="116" height="86" rx="9" fill="#fff" stroke="#000" stroke-width="1.6"/>
+          <text x="632" y="74" text-anchor="middle" font-size="10" font-weight="700" fill="#00A4AF">式その2</text>
+          <text x="632" y="96" text-anchor="middle" font-size="12" font-weight="700" font-family="'Ubuntu Mono',monospace">W=∮p dA</text>
+          <text x="632" y="117" text-anchor="middle">ループの面積</text>
+        </g>
+        <g stroke="#000" stroke-width="2" fill="#000">
+          <line x1="130" y1="95" x2="152" y2="95"/><path d="M 146 91 L 156 95 L 146 99 Z"/>
+          <line x1="270" y1="95" x2="292" y2="95"/><path d="M 286 91 L 296 95 L 286 99 Z"/>
+          <line x1="410" y1="95" x2="432" y2="95"/><path d="M 426 91 L 436 95 L 426 99 Z"/>
+          <line x1="550" y1="95" x2="572" y2="95"/><path d="M 566 91 L 576 95 L 566 99 Z"/>
+        </g>
+      </svg>
+      <p class="figcap">左端＝式その1、右端＝式その2。間の「橋の式」と「ズレ φ」が2つを1本の鎖にしている。<strong>2つの式は、別物だったのではなく、鎖の両端だった</strong>。</p>
+    </div>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>6 — ほかに理解すべき3つのこと</h2>
+    <p class="kick">橋を渡りきるための補強</p>
+
+    <p><strong>① 手応えには「2つの顔」がある ── R と jX。</strong>これまで手応え＝リアクタンス（<span class="eq">jX</span>）として話してきましたが、正確には <span class="eq">Z<sub>in</sub> = R + jX</span>。<span class="eq">jX</span>（リアクタンス）は、エネルギーを失わず<strong>声帯へループして戻し、振動を助ける</strong>ぶん。もう一方の <span class="eq">R</span>（抵抗）は<strong>本当に出ていく</strong>ぶん ── そしてその「出ていく」とは、口から放射される<strong>あなたが聞く声そのもの</strong>（と、壁にすこし吸われるぶん）。つまり<strong class="em">リアクタンスは歌い手を助け、抵抗は聴衆の耳に届く声になる</strong>。両方いるのです。</p>
+
+    <div class="fig">
+      <div class="figlabel">図3 — 手応え Z<sub>in</sub> の2つの顔</div>
+      <svg viewBox="0 0 680 180" role="img" aria-label="Z_inが抵抗RとリアクタンスjXに分かれ、それぞれ別の役割を持つ">
+        <rect x="50" y="68" width="150" height="58" rx="10" fill="#fff" stroke="#000" stroke-width="2.2"/>
+        <text x="125" y="93" text-anchor="middle" font-size="13" font-weight="700" font-family="'Ubuntu Mono',monospace">Z_in</text>
+        <text x="125" y="112" text-anchor="middle" font-size="11">管の手応え</text>
+        <path d="M 200 84 C 280 60 320 46 392 46" fill="none" stroke="#000" stroke-width="2"/>
+        <path d="M 384 42 L 396 46 L 384 50 Z" fill="#000"/>
+        <text x="404" y="42" font-size="11.5" font-weight="700">R（抵抗）：</text>
+        <text x="404" y="60" font-size="11">口から放射＝あなたが聞く声になる</text>
+        <path d="M 200 110 C 280 134 320 148 392 148" fill="none" stroke="#00A4AF" stroke-width="2.2"/>
+        <path d="M 384 144 L 396 148 L 384 152 Z" fill="#00A4AF"/>
+        <text x="404" y="134" font-size="11.5" font-weight="700" fill="#00A4AF">jX（リアクタンス）：</text>
+        <text x="404" y="152" font-size="11">声帯へループして戻り、振動を助ける</text>
+      </svg>
+      <p class="figcap">これまでの「橋」の話は、ぜんぶ <span class="eq">jX</span> の側。<span class="eq">R</span> の側は、別の仕事（音を放射する）をしている。</p>
+    </div>
+
+    <p><strong>② φ は固定ではない ── ピッチで動く。</strong>式その1 <span class="eq">Z<sub>in</sub> = jZ<sub>0</sub>tan(kL)</span> は周波数しだいで値が変わる（<span class="eq">tan(kL)</span> のせい）。だから手応えも、そこから生まれる<strong>ズレ φ も、歌い上げるにつれて連続的に動きます</strong>。同じ歌い手でも、音ごとに「もらえるエネルギー W」が変わる。<strong class="em">パッサッジョが「場所」として存在するのは、まさにこの φ が、倍音がフォルマントをまたぐところで、助ける向きから逆らう向きへ振れるから</strong>。橋は静止画ではなく、ピッチとともに形を変えます。</p>
+
+    <p><strong>③ 橋の式は、じつは「輪」の一部。</strong><span class="eq">p = Z<sub>in</sub>·U</span> は「流れ U が圧 p を生む」と一方向に読めます。でも実際は、その圧 p が声門をはさむ圧の差を変え、<strong>圧の差が流れ U を変える</strong>。さらに圧は声帯の動きにも影響する。つまり <span class="v">p → U → p →</span> … と<strong>ぐるぐる回る輪</strong>。橋の式は、その輪の<strong>1本の矢印</strong>にすぎません。この「双方向にぐるぐる」こそが、前の版で出た<strong>「非線形結合」「Level 2」</strong>の正体 ── 線形な一方通行では閉じない、輪になっているということです。</p>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>おわりに — 橋は架かった</h2>
+    <p class="kick">vol2 のまとめ</p>
+    <p>「2つの式がつながっていない」── その違和感は正しく、つなぎは確かに省かれていました。架け直した橋はこうです ──</p>
+    <p>式その1が<strong>手応え Z<sub>in</sub></strong> を与える。手応えには <span class="eq">j</span>（リアクタンス）が入っているので、<strong>橋の式 <span class="eq">p = Z<sub>in</sub>·U</span></strong> で流れに掛けると、ただ拡大せず<strong>タイミングを回す</strong>。そのズレ <strong>φ</strong> が、式その2のループを開き、面積＝<strong>エネルギー W</strong> になる。<span class="eq">j</span> と φ は同じ90度。2つの式は、鎖の両端でした。</p>
+    <p>そして補強の3点 ── 手応えは <span class="eq">R</span>（聞こえる声）と <span class="eq">jX</span>（助ける力）の2つの顔を持つ／φ はピッチで動くからパッサッジョが「場所」になる／橋の式は双方向の輪の一部で、それが非線形結合の正体。</p>
+    <p>まだ細くしたい結び目があれば、その一点を取り出してさらに掘ります。</p>
+  </section>
+
+</main>
+
+<aside>
+  <h2>用語</h2>
+  <table>
+    <tbody>
+      <tr><td class="term">Z<sub>in</sub>（入力インピーダンス）</td><td>管が声に返す「手応え」。式その1で求めるもの。Z<sub>in</sub>=R+jX。</td></tr>
+      <tr><td class="term">R（抵抗）</td><td>手応えのうち、本当に出ていくぶん。口から放射され、聞こえる声になる。</td></tr>
+      <tr><td class="term">jX（リアクタンス）</td><td>手応えのうち、損なく声帯へループして戻すぶん。振動を助ける。X が向き（符号）を持つ。</td></tr>
+      <tr><td class="term">j（虚数単位）</td><td>「90度回す」印。掛けると大きさだけでなくタイミングが回る。リアクタンスのしるし。</td></tr>
+      <tr><td class="term">橋の式 p = Z<sub>in</sub>·U</td><td>インピーダンスの定義を並べ替えたもの。「圧＝手応え×流れ」。式その1と式その2をつなぐ。</td></tr>
+      <tr><td class="term">U（流れ）</td><td>声門を通る空気の流れ。1周期のあいだ、すきま A とほぼ一緒に動く。</td></tr>
+      <tr><td class="term">p（圧）</td><td>声門のすぐ上に生まれる圧。声帯を押す力のもと。式その2が積分する相手。</td></tr>
+      <tr><td class="term">A（すきま）</td><td>声門の開き具合（面積）。流れ U とほぼ連動する。</td></tr>
+      <tr><td class="term">φ（位相のズレ）</td><td>圧 p と流れ U のタイミングのズレ。リアクタンスが決める。式その1の j と同じ90度の家族。</td></tr>
+      <tr><td class="term">W = ∮p dA（仕事ループ）</td><td>1周期で声帯がもらう正味エネルギー。圧×すきまのループが囲む面積。W ∝ sin φ。</td></tr>
+      <tr><td class="term">イナーティブ</td><td>質量性のリアクタンス（X&gt;0）。圧が流れより進み、φ&gt;0、W&gt;0＝声帯を助ける。</td></tr>
+      <tr><td class="term">コンプライアント</td><td>ばね性のリアクタンス（X&lt;0）。圧が流れより遅れ、φ&lt;0、W&lt;0＝振動に逆らう。</td></tr>
+      <tr><td class="term">tan(kL)</td><td>式その1で周波数依存をになう部分。これがあるから φ はピッチで動く。</td></tr>
+      <tr><td class="term">非線形結合</td><td>p→U→p…と双方向にめぐる輪。橋の式はその輪の1本の矢印。Level 2 結合の正体。</td></tr>
+    </tbody>
+  </table>
+</aside>
+
+</div>
+</div>
+
+<script>
+(function(){
+  var svg=document.getElementById('cx-svg');
+  var sl=document.getElementById('cx-r');
+  var ePhi=document.getElementById('cx-phi'), eW=document.getElementById('cx-w'), eVer=document.getElementById('cx-ver');
+  var X0=60, X1=600, YW=110, AMP=58, CYC=1.3;
+  var LCX=320, LCY=352, LR=92, DIV=212;
+  function thetaAt(x){ return (x-X0)/(X1-X0)*2*Math.PI*CYC; }
+  function render(){
+    var s=+sl.value;
+    var phiDeg=-85+(s/100)*170;
+    var phi=phiDeg*Math.PI/180;
+    var ns='';
+    // ---- top: two waves ----
+    ns+='<text x="'+X0+'" y="34" font-size="12" font-weight="700">上：圧 p と流れ U の波</text>';
+    ns+='<line x1="'+X0+'" y1="'+YW+'" x2="'+X1+'" y2="'+YW+'" stroke="#000" stroke-width="0.7" stroke-dasharray="3 4"/>';
+    var du='', dp='', x, th;
+    for(x=X0;x<=X1;x+=4){
+      th=thetaAt(x);
+      du+=(x===X0?'M ':'L ')+x+' '+(YW-AMP*Math.sin(th)).toFixed(1)+' ';
+      dp+=(x===X0?'M ':'L ')+x+' '+(YW-AMP*Math.sin(th+phi)).toFixed(1)+' ';
+    }
+    ns+='<path d="'+du+'" fill="none" stroke="#000" stroke-width="2"/>';
+    ns+='<path d="'+dp+'" fill="none" stroke="#00A4AF" stroke-width="2.4"/>';
+    ns+='<text x="'+(X1-2)+'" y="'+(YW-AMP-8)+'" text-anchor="end" font-size="11" font-weight="700">流れ U</text>';
+    ns+='<text x="'+(X1-2)+'" y="'+(YW+AMP+16)+'" text-anchor="end" font-size="11" font-weight="700" fill="#00A4AF">圧 p</text>';
+    // phase-gap marker between first peaks
+    var xUp=X0+(Math.PI/2)/(2*Math.PI*CYC)*(X1-X0);
+    var xPp=X0+((Math.PI/2)-phi)/(2*Math.PI*CYC)*(X1-X0);
+    if(xPp<X0+8){ xPp+=(X1-X0)/CYC; }
+    if(xPp>X0&&xPp<X1){
+      ns+='<line x1="'+xUp.toFixed(1)+'" y1="'+(YW-AMP)+'" x2="'+xUp.toFixed(1)+'" y2="44" stroke="#000" stroke-width="0.7" stroke-dasharray="2 3"/>';
+      ns+='<line x1="'+xPp.toFixed(1)+'" y1="'+(YW-AMP)+'" x2="'+xPp.toFixed(1)+'" y2="44" stroke="#00A4AF" stroke-width="0.7" stroke-dasharray="2 3"/>';
+      var mx=(xUp+xPp)/2;
+      ns+='<line x1="'+xUp.toFixed(1)+'" y1="48" x2="'+xPp.toFixed(1)+'" y2="48" stroke="#00A4AF" stroke-width="1.6"/>';
+      ns+='<text x="'+mx.toFixed(1)+'" y="42" text-anchor="middle" font-size="11" font-weight="700" fill="#00A4AF">ズレ φ</text>';
+    }
+    // ---- divider ----
+    ns+='<line x1="'+X0+'" y1="'+DIV+'" x2="'+X1+'" y2="'+DIV+'" stroke="#000" stroke-width="1"/>';
+    // ---- bottom: work loop ----
+    ns+='<text x="'+X0+'" y="'+(DIV+26)+'" font-size="12" font-weight="700">下：その2つがつくる仕事ループ</text>';
+    ns+='<line x1="'+(LCX-LR-26)+'" y1="'+LCY+'" x2="'+(LCX+LR+26)+'" y2="'+LCY+'" stroke="#000" stroke-width="1"/>';
+    ns+='<line x1="'+LCX+'" y1="'+(LCY-LR-26)+'" x2="'+LCX+'" y2="'+(LCY+LR+22)+'" stroke="#000" stroke-width="1"/>';
+    ns+='<text x="'+(LCX+LR+24)+'" y="'+(LCY+15)+'" text-anchor="end" font-size="10.5">すきま A（≒流れ U）</text>';
+    ns+='<text x="'+(LCX+7)+'" y="'+(LCY-LR-14)+'" font-size="10.5">圧 p</text>';
+    var dl='', i, t;
+    for(i=0;i<=72;i++){
+      t=i/72*2*Math.PI;
+      dl+=(i===0?'M ':'L ')+(LCX+LR*Math.sin(t)).toFixed(1)+' '+(LCY-LR*Math.sin(t+phi)).toFixed(1)+' ';
+    }
+    dl+='Z';
+    ns+='<path d="'+dl+'" fill="none" stroke="#00A4AF" stroke-width="2.6"/>';
+    svg.innerHTML=ns;
+    var sinp=Math.sin(phi);
+    var zone=sinp>0.05?'in':(sinp<-0.05?'co':'ze');
+    ePhi.textContent=phiDeg.toFixed(0)+'\u00B0';
+    eW.textContent=(sinp>=0?'+':'')+sinp.toFixed(2)+'（符号 '+(zone==='in'?'+':zone==='co'?'\u2212':'0')+'）';
+    eVer.textContent={
+      in:'イナーティブ ── 圧が流れより進み、ループがふくらんで正の面積。声帯はエネルギーをもらう。',
+      co:'コンプライアント ── 圧が流れより遅れ、ループは逆向きの負の面積。声帯はエネルギーを奪われる。',
+      ze:'ズレなし ── 2つの波が重なり、ループはぺちゃんこ。エネルギーの受け渡しはゼロ。'
+    }[zone];
+  }
+  sl.addEventListener('input',render);
+  render();
+})();
+</script>
+
+</body>
+</html>

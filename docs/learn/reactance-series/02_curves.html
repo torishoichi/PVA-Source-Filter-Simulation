@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>リアクタンス 中級編 — 管の手応えを「曲線」で見る</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Ubuntu+Mono&display=swap" rel="stylesheet">
+<style>
+:root{ --accent:#00A4AF; }
+*{ box-sizing:border-box; }
+html,body{ margin:0; padding:0; }
+body{ font-family:'Noto Sans JP',sans-serif; color:#000; background:#fff; line-height:1.9; font-size:16.5px; }
+.mono{ font-family:'Ubuntu Mono',monospace; }
+.v{ white-space:nowrap; }
+svg text{ font-family:'Noto Sans JP',sans-serif; fill:#000; }
+
+header.wall{ border-bottom:3px solid #000; }
+.wrap{ max-width:1140px; margin:0 auto; padding:0 28px; }
+header .kicker{ color:var(--accent); font-weight:700; font-size:13px; letter-spacing:.04em; margin:30px 0 6px; }
+header h1{ font-size:28px; font-weight:700; margin:0 0 11px; line-height:1.44; }
+header .dek{ font-size:15.5px; margin:0 0 26px; max-width:780px; }
+
+.layout{ display:grid; grid-template-columns:minmax(0,1fr) 312px; gap:40px; align-items:start; }
+main{ min-width:0; padding:34px 0 64px; }
+aside{ position:sticky; top:0; max-height:100vh; overflow-y:auto; padding:34px 0 40px; }
+
+section{ margin:0 0 38px; }
+h2{ font-size:20px; font-weight:700; margin:0 0 4px; }
+.kick{ color:var(--accent); font-size:12px; font-weight:700; margin:0 0 14px; }
+p{ margin:0 0 14px; }
+a{ color:var(--accent); text-decoration:none; border-bottom:1px solid var(--accent); }
+strong{ font-weight:700; }
+.em{ color:var(--accent); font-weight:700; }
+hr.sep{ border:0; border-top:1px solid #000; margin:36px 0; }
+
+.lead{ font-size:17px; font-weight:500; }
+.panel{ border:1px solid #000; border-radius:11px; padding:18px 20px; margin:16px 0; }
+.fig{ border:1px solid #000; border-radius:11px; padding:16px 18px; margin:18px 0; }
+.fig svg{ display:block; width:100%; height:auto; }
+.figlabel{ font-weight:700; color:var(--accent); font-size:13px; margin-bottom:8px; }
+.figcap{ font-size:13px; margin-top:10px; line-height:1.75; }
+
+.tbox{ border:1px solid #000; border-radius:11px; overflow:hidden; margin:16px 0; }
+table{ border-collapse:collapse; width:100%; font-size:14px; }
+th,td{ text-align:left; padding:9px 12px; vertical-align:top; }
+thead th{ font-weight:700; border-bottom:2px solid #000; }
+tbody td{ border-top:1px solid #000; }
+tbody td.mono{ white-space:nowrap; }
+
+ol,ul{ margin:0 0 14px; padding-left:1.45em; }
+li{ margin:0 0 9px; }
+
+.widget{ border:1.5px solid var(--accent); border-radius:12px; padding:20px; margin:20px 0; }
+.controls{ display:flex; flex-wrap:wrap; gap:22px 26px; align-items:center; }
+.cgroup{ display:flex; flex-direction:column; gap:6px; }
+.clab{ font-size:12px; font-weight:700; }
+.modegroup{ display:flex; gap:8px; }
+.modebtn{ font-family:inherit; font-size:13px; font-weight:700; padding:8px 14px; border:1px solid #000; border-radius:8px; background:#fff; color:#000; cursor:pointer; }
+.modebtn.on{ background:var(--accent); border-color:var(--accent); color:#fff; }
+input[type=range]{ width:260px; accent-color:var(--accent); }
+.maphint{ font-size:12px; margin-top:8px; line-height:1.7; }
+.bigverdict{ font-size:16px; font-weight:700; margin-top:14px; border-top:1px solid #000; padding-top:12px; }
+.bigverdict .vt{ color:var(--accent); }
+.subverdict{ font-size:13.5px; margin-top:4px; }
+
+aside h2{ font-size:15px; border-bottom:2px solid #000; padding-bottom:6px; margin-bottom:0; }
+aside .tbox{ border:none; border-radius:0; }
+aside table{ font-size:12.6px; line-height:1.62; }
+aside th{ display:none; }
+aside td{ padding:9px 4px; }
+aside td.term{ font-weight:700; width:40%; }
+aside tbody td{ border-top:1px solid #000; }
+
+@media(max-width:1000px){
+  .layout{ grid-template-columns:1fr; gap:8px; }
+  aside{ position:static; max-height:none; overflow:visible; order:-1; padding:18px 0 8px; }
+  main{ padding-top:14px; }
+  input[type=range]{ width:220px; }
+}
+</style>
+</head>
+<body>
+
+<header class="wall">
+  <div class="wrap">
+    <div class="kicker">声楽音響 — 中級編</div>
+    <h1>リアクタンス 中級編<br>管の「手応え」を曲線として見る</h1>
+    <p class="dek">導入編では「管が声を助ける／じゃまする」をたとえ話でつかみました。今回は部品に正しい名前をつけ、管の手応えが周波数によって描く「曲線」を見ます。数式は最小限。導入編の絵が、そのまま土台になります。</p>
+  </div>
+</header>
+
+<div class="wrap">
+<div class="layout">
+
+<main>
+
+  <section>
+    <h2>この編の位置づけ</h2>
+    <p class="kick">3段階の真ん中</p>
+    <p class="lead">導入編：たとえ話で全体像。中級編（ここ）：部品に名前をつけ、手応えの「形」を見る。詳細編：物理と数式で「なぜ」を詰める。</p>
+    <p>導入編のキーフレーズはこうでした ── 倍音が「管の得意な高さ」より低いと管は声を助け、高いとじゃまする。中級編ではこれを、<strong>倍音の正体・フォルマント・リアクタンスという3つの名前</strong>でとらえ直し、さらに「手応えは1つの山ではなく、<strong>くり返す曲線</strong>だ」というところまで進みます。</p>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>1 — 声源は「倍音の列」、管は「共鳴の列」</h2>
+    <p class="kick">ソースとフィルター</p>
+    <p>声帯のブザー音は、1本の音ではなく<strong><a href="#t-series">倍音の列</a></strong>です。いちばん低い <span class="v">1f<sub>o</sub></span>（基本周波数＝声の高さ）の上に、その2倍・3倍…の <span class="v">2f<sub>o</sub>, 3f<sub>o</sub>, 4f<sub>o</sub></span>… が等間隔で積み上がる。上の倍音ほど弱くなる傾きを<a href="#t-slope">スペクトル傾斜</a>と呼びます。これが<strong>ソース（声源）</strong>。</p>
+    <p>一方、のど＋口の管も「得意な高さ」を1つではなく<strong>いくつか</strong>持ちます。低い方から <strong><a href="#t-formant">第一フォルマント <span class="v">F1</span></a></strong>、第二フォルマント <span class="v">F2</span>…。これが<strong>フィルター（管）</strong>。フォルマントの近くに来た倍音は強められ、遠い倍音は弱められる ── この組み合わせが母音や声の音色を作ります。</p>
+    <p>導入編で「倍音」と「管の得意な高さ」と呼んでいたものは、正しくは<strong>倍音の列</strong>と<strong>フォルマントの列</strong>。男声のパッサッジョで主役になるのは、このうち <span class="v">2f<sub>o</sub></span> と <span class="v">F1</span> の関係です。</p>
+
+    <div class="fig">
+      <div class="figlabel">図1 — ソース（倍音の列）とフィルター（フォルマント）</div>
+      <svg viewBox="0 0 720 250" role="img" aria-label="等間隔に並ぶ声源の倍音と、その上にかかる管のフォルマント包絡線">
+        <line x1="55" y1="200" x2="675" y2="200" stroke="#000" stroke-width="1.6"/>
+        <text x="675" y="222" text-anchor="end" font-size="11">周波数（高さ）</text>
+        <g stroke="#000" stroke-width="3">
+          <line x1="95" y1="200" x2="95" y2="86"/>
+          <line x1="165" y1="200" x2="165" y2="100"/>
+          <line x1="235" y1="200" x2="235" y2="116"/>
+          <line x1="305" y1="200" x2="305" y2="132"/>
+          <line x1="375" y1="200" x2="375" y2="148"/>
+          <line x1="445" y1="200" x2="445" y2="162"/>
+          <line x1="515" y1="200" x2="515" y2="174"/>
+          <line x1="585" y1="200" x2="585" y2="184"/>
+        </g>
+        <g fill="#000">
+          <circle cx="95" cy="86" r="4"/><circle cx="165" cy="100" r="4"/><circle cx="235" cy="116" r="4"/>
+          <circle cx="305" cy="132" r="4"/><circle cx="375" cy="148" r="4"/><circle cx="445" cy="162" r="4"/>
+          <circle cx="515" cy="174" r="4"/><circle cx="585" cy="184" r="4"/>
+        </g>
+        <text x="95" y="218" text-anchor="middle" font-size="10.5">1fo</text>
+        <text x="165" y="218" text-anchor="middle" font-size="10.5">2fo</text>
+        <text x="235" y="218" text-anchor="middle" font-size="10.5">3fo</text>
+        <text x="305" y="218" text-anchor="middle" font-size="10.5">4fo</text>
+        <text x="445" y="218" text-anchor="middle" font-size="10.5">…</text>
+        <path d="M 60 178 C 135 178 178 78 240 78 C 302 78 332 150 388 150 C 444 150 470 100 520 100 C 575 100 620 160 665 166" fill="none" stroke="#00A4AF" stroke-width="2.6"/>
+        <text x="240" y="68" text-anchor="middle" font-size="12.5" font-weight="700" fill="#00A4AF">F1</text>
+        <text x="520" y="90" text-anchor="middle" font-size="12.5" font-weight="700" fill="#00A4AF">F2</text>
+        <text x="600" y="56" text-anchor="end" font-size="11.5" font-weight="700" fill="#00A4AF">管のフォルマント</text>
+      </svg>
+      <p class="figcap">黒の縦線＝声源の倍音（等間隔、上ほど弱い）。cyan の曲線＝管のフォルマント。フォルマントの山に近い倍音ほど強められる。ただし本編の主題は「強さ」ではなく、次に見る<strong>手応え（リアクタンス）</strong>の方。</p>
+    </div>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>2 — リアクタンス＝手応え。それは「曲線」になっている</h2>
+    <p class="kick">1つの山ではなく、くり返す帯</p>
+    <p>管が声に返す手応えを <strong><a href="#t-reactance">リアクタンス</a></strong> と呼びます。導入編の「助ける／じゃまする手応え」に正式な名前がついたものです。手応えには2つの向きがあります。</p>
+    <ul>
+      <li><strong><a href="#t-inertive">イナーティブ</a></strong>（質量性の手応え）＝声を<strong class="em">助ける</strong>向き。</li>
+      <li><strong><a href="#t-compliant">コンプライアント</a></strong>（ばね性の手応え）＝声に<strong>逆らう</strong>向き。</li>
+    </ul>
+    <p>ここが中級編の核心です。<strong class="em">同じ管でも、倍音の周波数によって手応えの向きが切り替わり、その全体は1本の曲線になっている。</strong>具体的には ── <span class="v">F1</span> より下はイナーティブ、<span class="v">F1</span> を越えるとコンプライアント、さらに上がると<strong>再びイナーティブ</strong>に戻り、<span class="v">F2</span> でまた反転… と、<strong>イナーティブ帯とコンプライアント帯が交互にくり返します</strong>。導入編で見た「1つの山」は、じつはこのくり返す曲線の一区画だったのです。</p>
+    <p>下で倍音（縦線）を動かしてください。曲線が <span class="v">0</span> より上＝イナーティブ（助ける）、下＝コンプライアント（じゃま）。フォルマント（破線）をまたぐたびに符号が反転します。「通常／SOVT」で曲線そのものをずらせます。</p>
+
+    <div class="widget">
+      <div class="controls">
+        <div class="cgroup">
+          <span class="clab">倍音の場所</span>
+          <input id="ix-h" type="range" min="0" max="100" step="1" value="8" aria-label="倍音の場所">
+        </div>
+        <div class="cgroup">
+          <span class="clab">声道</span>
+          <div class="modegroup">
+            <button id="ix-norm" class="modebtn on" aria-pressed="true">通常</button>
+            <button id="ix-sovt" class="modebtn" aria-pressed="false">SOVT（出口せまく）</button>
+          </div>
+        </div>
+      </div>
+      <svg id="ix-svg" viewBox="0 0 900 300" role="img" aria-label="管のリアクタンス曲線と、その上を動く倍音"></svg>
+      <p class="maphint">破線＝フォルマント（管の得意な高さ）。曲線が 0 より上＝イナーティブ（助ける）、下＝コンプライアント（じゃま）。<strong>F1 の下＝助ける／F1〜F2 のあいだに反転をはさむ</strong>… と帯が交互に並ぶ。</p>
+      <div class="bigverdict"><span class="vt">いまの手応え：</span><span id="ix-big">—</span></div>
+      <div class="subverdict" id="ix-sub">—</div>
+    </div>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>3 — なぜ「下」で助け、「上」でじゃまなのか</h2>
+    <p class="kick">中級レベルの理由</p>
+    <p>導入編ではブランコと「重い空気」でたとえました。中級編では、その「重い空気」を一歩はっきりさせます。</p>
+    <p>声道は<strong>唇側が開いた管</strong>です。低い周波数では、声門が押し出す空気は、開いた出口へ向かって<strong>ひと塊（マス）として行ったり来たり</strong>するだけ。塊を加減速するのは慣性 ── だから低い周波数の手応えは<strong>イナーティブ（質量性）</strong>になります。</p>
+    <p><span class="v">F1</span>（第一フォルマント）は、管が<strong>定在波</strong>でぴたりと共振する高さです。声道の長さがちょうど波長の <span class="v">1/4</span> になる周波数、と考えてください。この共振点で手応えは<strong>ゼロ（つるつる＝純抵抗）</strong>を通過し、<strong>すぐ上で符号が反転してコンプライアント（ばね性）</strong>になります。さらに上では、次のフォルマントへ向けてまた質量性へ戻る ── これが「帯が交互にくり返す」理由です。</p>
+    <p class="panel" style="margin-top:6px;">導入編の<strong>ブランコ</strong>は、この曲線を<strong>時間の側から見た同じ話</strong>です。管の残響が声門へ戻ってくるタイミングが、声門の閉じる瞬間と合えば（イナーティブ帯）軽い力で大きく響き、ズレれば（コンプライアント帯）力がいる。周波数で見るか、時間で見るかの違いだけ。</p>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>4 — パッサッジョの「ターン」＝ 2f<sub>o</sub> が F1 を越える</h2>
+    <p class="kick">曲線の上で起きる事件</p>
+    <p>歌い上げていくと、倍音の列は<strong>丸ごと右（高い側）へ</strong>動きます。一方 <span class="v">F1</span> は、母音の形を保てばほぼ同じ位置に留まる。すると <span class="v">2f<sub>o</sub></span>（第二倍音）はいつか <span class="v">F1</span> に追いつき、<strong>下から上へ越えていきます</strong>。</p>
+    <p>越える前 ── <span class="v">2f<sub>o</sub></span> はイナーティブ帯にいて、管が助けてくれる（<a href="#t-aperta">開いた声・voce aperta</a>）。越えた後 ── コンプライアント帯へ入る（<a href="#t-chiusa">閉じた声・voce chiusa</a>）。この越える事件が、男声の<strong><a href="#t-turn">ターン（カバー／コペルト）</a></strong>です。</p>
+    <p>越えさせずに、母音を開いて <span class="v">F1</span> を <span class="v">2f<sub>o</sub></span> ごと引き上げ続けようとするのが<strong><a href="#t-yell">張り上げ</a></strong>。素直に越えさせるのが<strong>カバー</strong>。曲線でいえば、張り上げは <span class="v">2f<sub>o</sub></span> をフォルマントの「つるつるゼロ点」に貼り付け続ける動きで、だから登るほど力がいります。</p>
+
+    <div class="fig">
+      <div class="figlabel">図2 — ピッチが上がると 2f<sub>o</sub> が F1 を越える＝ターン</div>
+      <svg viewBox="0 0 720 220" role="img" aria-label="周波数軸上でF1を左から右へ越えていく第二倍音">
+        <line x1="60" y1="140" x2="660" y2="140" stroke="#000" stroke-width="1.6"/>
+        <text x="660" y="162" text-anchor="end" font-size="11">周波数（高さ）</text>
+        <line x1="370" y1="60" x2="370" y2="160" stroke="#00A4AF" stroke-width="1.4" stroke-dasharray="5 4"/>
+        <text x="370" y="50" text-anchor="middle" font-size="12.5" font-weight="700" fill="#00A4AF">F1</text>
+        <text x="370" y="178" text-anchor="middle" font-size="10.5">ここを越える＝ターン</text>
+        <circle cx="210" cy="140" r="10" fill="#00A4AF" stroke="#00A4AF" stroke-width="2"/>
+        <text x="210" y="118" text-anchor="middle" font-size="11" font-weight="700">2fo</text>
+        <text x="210" y="200" text-anchor="middle" font-size="11">voce aperta（開）／助かる</text>
+        <circle cx="520" cy="140" r="10" fill="#fff" stroke="#000" stroke-width="2"/>
+        <text x="520" y="118" text-anchor="middle" font-size="11" font-weight="700">2fo</text>
+        <text x="520" y="200" text-anchor="middle" font-size="11">voce chiusa（カバー）</text>
+        <path d="M 232 100 Q 365 66 498 100" fill="none" stroke="#000" stroke-width="2"/>
+        <path d="M 490 92 L 503 100 L 489 107 Z" fill="#000"/>
+        <text x="365" y="86" text-anchor="middle" font-size="11">ピッチ上昇で 2fo は右へ</text>
+      </svg>
+      <p class="figcap">同じ母音・同じ <span class="v">F1</span> でも、ピッチが上がれば <span class="v">2f<sub>o</sub></span> はイナーティブ帯から純抵抗点を経てコンプライアント帯へ移る。これがパッサッジョで音色と手応えが切り替わる正体。</p>
+    </div>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>5 — 助けの「中身」── 何が楽になるのか</h2>
+    <p class="kick">CQ と PTP</p>
+    <p>倍音がイナーティブ帯にあると、戻ってくる管の手応えが声帯振動を後押しします。その結果、測れる形で次のことが起きます。</p>
+    <ul>
+      <li><strong><a href="#t-cq">閉鎖率 CQ</a> が上がる</strong>。1回の振動で声帯が閉じている時間の割合が増え、上の倍音がよく出る（張りのある音）。</li>
+      <li><strong><a href="#t-ptp">発声閾値圧 PTP</a> が下がる</strong>。声帯を振動させ続けるのに必要な最低の息圧が減る ── つまり<strong>少ない息で済む</strong>。</li>
+      <li>強い息も強い声帯の閉じも要らないので<strong>のどが自由</strong>。だから<a href="#t-vibrato">ビブラート</a>が自然に出る。</li>
+    </ul>
+    <p>逆にコンプライアント帯や「つるつるゼロ点」に貼り付くと、足りない響きを息と閉じの力で埋めることになる ── これが張り上げの正体です。<strong>共鳴をうまく使う＝声帯の仕事を減らす</strong>、という順序がここに表れています。</p>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>6 — SOVT は曲線をどう変えるのか</h2>
+    <p class="kick">助ける側を強める</p>
+    <p>ストロー・リップトリルなどの <strong><a href="#t-sovt">SOVT</a></strong> は、出口を狭めることで曲線そのものに手を入れます。中級編の言葉では、起きるのは次の3つ。</p>
+    <ol>
+      <li><strong>イナータンス（音響的な質量）を足す。</strong>狭い出口は重い空気の栓のように働き、イナーティブの手応えを強める ── 曲線の「助ける側」が大きくなる。</li>
+      <li><strong>F1 を下げる。</strong>出口が部分的にふさがると、管の共鳴が下がる ── 曲線が左へずれる。</li>
+      <li><strong>背圧を生む。</strong>声門より下流の抵抗が息圧の負担を分け持ち、声帯にかかる圧の差を下げる ── 押しの強い発声を抑える。</li>
+    </ol>
+    <p>つまり SOVT は、この記事の主役である「イナーティブな助け」をわざと強めて体に覚えさせる装置です。インタラクティブの「SOVT」トグルは、このうち <span class="v">F1</span> が下がる効果を見せています。</p>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>次の一歩 — 詳細編へ</h2>
+    <p class="kick">さらに深く</p>
+    <p>ここまでで「手応えは周波数で符号が変わる曲線で、フォルマントの下が助け・上がじゃま」「ターンはその曲線上の事件」「SOVTは曲線を助ける側へ動かす」がつかめました。</p>
+    <p>残るのは「<strong>なぜ</strong>開いた管は下側で慣性的なのか」を物理で詰めること。詳細編では、リアクタンス＝<span class="v">ωM − 1/ωC</span>（質量とばねの綱引き）という式、フォルマントが入力インピーダンスの極大であること、開管の入力リアクタンス <span class="v">tan(kL)</span>、そして PVA／Hearing Singing の引用箇所まで踏み込みます。</p>
+    <p class="figcap">なお本編の曲線は、見通しのよい「一様な管」の近似です。実際の声道はフォルマントがきれいな整数倍からずれ、声門も完全な閉じではないため、反転はもう少しなめらかになります ── そのあたりも詳細編で。</p>
+  </section>
+
+</main>
+
+<aside>
+  <h2>用語</h2>
+  <div class="tbox">
+  <table>
+    <thead><tr><th>用語</th><th>定義</th></tr></thead>
+    <tbody>
+      <tr id="t-fo"><td class="term">1fo（基本周波数）</td><td>声帯の開閉の速さ。声の高さとして聞こえる、倍音列の最下位。</td></tr>
+      <tr id="t-series"><td class="term">倍音の列（倍音列）</td><td>声源は 1fo の上に 2fo, 3fo… が整数倍で等間隔に積み上がった束。</td></tr>
+      <tr id="t-slope"><td class="term">スペクトル傾斜</td><td>上の倍音ほど弱くなる、声源スペクトルの傾き。</td></tr>
+      <tr id="t-formant"><td class="term">フォルマント（F1, F2）</td><td>管が特に響かせる「得意な高さ」。低い方から第一・第二フォルマント。</td></tr>
+      <tr id="t-resonance"><td class="term">共鳴</td><td>系が特定の高さに強く長く応答する性質。フォルマントはその表れ。</td></tr>
+      <tr id="t-standing"><td class="term">定在波</td><td>管の中で前進波と反射波が干渉してできる定常的な振動。長さが波長の1/4で第一フォルマント。</td></tr>
+      <tr id="t-reactance"><td class="term">リアクタンス</td><td>管が声に返す「手応え」。周波数によって向きが変わり、全体は1本の曲線になる。</td></tr>
+      <tr id="t-inertive"><td class="term">イナーティブ（質量性）</td><td>空気の塊の慣性による手応え。声帯振動を後押しする＝助ける向き。フォルマントより下の帯。</td></tr>
+      <tr id="t-compliant"><td class="term">コンプライアント（ばね性）</td><td>空気のばね性による手応え。発声に逆らう向き。フォルマントを越えた帯。</td></tr>
+      <tr id="t-turn"><td class="term">ターン（カバー／コペルト）</td><td>2fo が F1 を下から上へ越えること。男声パッサッジョの音色・手応えの切り替え。</td></tr>
+      <tr id="t-aperta"><td class="term">voce aperta（開いた声）</td><td>2fo がまだ F1 の下にある状態。明るく素朴な音色。</td></tr>
+      <tr id="t-chiusa"><td class="term">voce chiusa（閉じた声）</td><td>2fo が F1 を越えた後の状態。カバーされた音色。</td></tr>
+      <tr id="t-yell"><td class="term">張り上げ</td><td>ターンを拒み、母音を開いて F1 を 2fo に追従させ続ける発声。曲線のゼロ点に貼り付き、登るほど苦しい。</td></tr>
+      <tr id="t-cq"><td class="term">CQ（閉鎖率）</td><td>1振動周期で声帯が閉じている時間の割合。イナーティブな助けで上がる。</td></tr>
+      <tr id="t-ptp"><td class="term">PTP（発声閾値圧）</td><td>声帯を振動させ続けるのに必要な最低の息圧。イナーティブな助けで下がる。</td></tr>
+      <tr id="t-vibrato"><td class="term">ビブラート</td><td>声の自然な揺れ。のどが自由なときに出る、うまくいっているサイン。</td></tr>
+      <tr id="t-sovt"><td class="term">SOVT</td><td>ストロー・リップトリル等で出口を半分ふさぐ練習。イナータンスを足し F1 を下げ、助ける手応えを強める。</td></tr>
+    </tbody>
+  </table>
+  </div>
+</aside>
+
+</div>
+</div>
+
+<script>
+(function(){
+  var svg=document.getElementById('ix-svg');
+  var slider=document.getElementById('ix-h');
+  var bN=document.getElementById('ix-norm'), bS=document.getElementById('ix-sovt');
+  var big=document.getElementById('ix-big'), sub=document.getElementById('ix-sub');
+  var mode='norm';
+  var F1N=490, F1S=320, KN=0.6, KS=0.6;
+  var fMin=0, fMax=2700, X0=70, X1=880, YT=54, YB=246, YMID=150, YSPAN=92;
+  function xOf(f){ return X0+(f-fMin)/(fMax-fMin)*(X1-X0); }
+  function cy(f,F1,kk){
+    return YMID-YSPAN*(2/Math.PI)*Math.atan(kk*Math.tan(Math.PI*f/(2*F1)));
+  }
+  function render(){
+    var F1=(mode==='norm')?F1N:F1S, kk=(mode==='norm')?KN:KS;
+    var f=80+(+slider.value)/100*2500;
+    var d='', pen=false, x, y, c, t;
+    for(t=10;t<=fMax;t+=6){
+      c=Math.cos(Math.PI*t/(2*F1));
+      if(Math.abs(c)<0.055){ pen=false; continue; }
+      x=xOf(t); y=cy(t,F1,kk);
+      if(!pen){ d+=' M '+x.toFixed(1)+' '+y.toFixed(1); pen=true; }
+      else d+=' L '+x.toFixed(1)+' '+y.toFixed(1);
+    }
+    var ns='';
+    ns+='<line x1="'+X0+'" y1="'+YMID+'" x2="'+X1+'" y2="'+YMID+'" stroke="#000" stroke-width="1.4"/>';
+    ns+='<text x="'+(X0-9)+'" y="'+(YMID+4)+'" text-anchor="end" font-size="11">0</text>';
+    ns+='<text x="'+(X0-9)+'" y="'+(YT+12)+'" text-anchor="end" font-size="10.5" fill="#00A4AF" font-weight="700">助ける</text>';
+    ns+='<text x="'+(X0-9)+'" y="'+(YB-2)+'" text-anchor="end" font-size="10.5" fill="#00A4AF" font-weight="700">じゃま</text>';
+    var n=1;
+    while(n*F1<fMax){
+      var px=xOf(n*F1);
+      if(n%2===1){
+        ns+='<line x1="'+px+'" y1="'+YT+'" x2="'+px+'" y2="'+YB+'" stroke="#00A4AF" stroke-width="1" stroke-dasharray="4 4"/>';
+        ns+='<text x="'+px+'" y="'+(YT-6)+'" text-anchor="middle" font-size="11" font-weight="700" fill="#00A4AF">F'+((n+1)/2)+'</text>';
+      }
+      n++;
+    }
+    ns+='<path d="'+d+'" fill="none" stroke="#00A4AF" stroke-width="2.5"/>';
+    var g=f/F1, near=Math.round(g);
+    var zone=(Math.abs(g-near)<0.07&&near%2===1)?'res':((Math.floor(g)%2===0)?'in':'co');
+    var hx=xOf(f);
+    var hy=(Math.abs(Math.cos(Math.PI*f/(2*F1)))<0.055)?YMID:cy(f,F1,kk);
+    var fill=(zone==='in')?'#00A4AF':'#fff', strk=(zone==='in')?'#00A4AF':'#000';
+    ns+='<line x1="'+hx.toFixed(1)+'" y1="'+YT+'" x2="'+hx.toFixed(1)+'" y2="'+YB+'" stroke="#000" stroke-width="2"/>';
+    ns+='<circle cx="'+hx.toFixed(1)+'" cy="'+hy.toFixed(1)+'" r="7" fill="'+fill+'" stroke="'+strk+'" stroke-width="2.2"/>';
+    ns+='<text x="'+hx.toFixed(1)+'" y="'+(YB+22)+'" text-anchor="middle" font-size="11" font-weight="700">倍音</text>';
+    ns+='<text x="'+X1+'" y="'+(YB+22)+'" text-anchor="end" font-size="11">周波数（高さ）</text>';
+    svg.innerHTML=ns;
+    var V={
+      in:['イナーティブ（助ける手応え）','倍音がフォルマントより下の帯にある。管が声帯振動を後押しし、少ない息と閉じで響く。CQ が上がり PTP が下がる。'],
+      co:['コンプライアント（じゃまする手応え）','倍音がフォルマントを越えた帯にある。管が逆らい、響かせるのに余分な力がいる ── 張り上げになりやすい。'],
+      res:['フォルマント上（つるつる＝手応えゼロ）','倍音がちょうどフォルマントの上。助けが消える点。張り上げはこの点に倍音を貼り付け続ける。']
+    }[zone];
+    big.textContent=V[0];
+    sub.textContent=V[1];
+  }
+  function setMode(m){
+    mode=m;
+    bN.className=(m==='norm')?'modebtn on':'modebtn';
+    bS.className=(m==='sovt')?'modebtn on':'modebtn';
+    bN.setAttribute('aria-pressed',m==='norm');
+    bS.setAttribute('aria-pressed',m==='sovt');
+    render();
+  }
+  slider.addEventListener('input',render);
+  bN.addEventListener('click',function(){ setMode('norm'); });
+  bS.addEventListener('click',function(){ setMode('sovt'); });
+  setMode('norm');
+})();
+</script>
+
+</body>
+</html>

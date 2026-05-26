@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>なぜ倍音と共鳴の関係でリアクタンスが変わるのか</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Ubuntu+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{ --accent:#00A4AF; }
+*{ box-sizing:border-box; }
+html,body{ margin:0; padding:0; }
+body{ font-family:'Noto Sans JP',sans-serif; color:#000; background:#fff; line-height:1.85; font-size:16px; }
+.mono{ font-family:'Ubuntu Mono',monospace; }
+.v{ white-space:nowrap; }
+svg text{ font-family:'Noto Sans JP',sans-serif; fill:#000; }
+
+header.wall{ border-bottom:3px solid #000; }
+.wrap{ max-width:1180px; margin:0 auto; padding:0 28px; }
+header .kicker{ color:var(--accent); font-weight:700; font-size:13px; letter-spacing:.04em; margin:30px 0 6px; }
+header h1{ font-size:29px; font-weight:700; margin:0 0 10px; line-height:1.42; }
+header .dek{ font-size:15px; margin:0 0 26px; max-width:800px; }
+
+.layout{ display:grid; grid-template-columns:minmax(0,1fr) 332px; gap:40px; align-items:start; }
+main{ min-width:0; padding:34px 0 64px; }
+aside{ position:sticky; top:0; max-height:100vh; overflow-y:auto; padding:34px 0 40px; }
+
+section{ margin:0 0 38px; }
+h2{ font-size:20px; font-weight:700; margin:0 0 4px; }
+.kick{ color:var(--accent); font-size:12px; font-weight:700; margin:0 0 14px; }
+p{ margin:0 0 14px; }
+a{ color:var(--accent); text-decoration:none; border-bottom:1px solid var(--accent); }
+strong{ font-weight:700; }
+.em{ color:var(--accent); font-weight:700; }
+hr.sep{ border:0; border-top:1px solid #000; margin:36px 0; }
+
+.panel{ border:1px solid #000; border-radius:10px; padding:18px 20px; margin:16px 0; }
+.fig{ border:1px solid #000; border-radius:10px; padding:16px 18px; margin:18px 0; }
+.fig svg{ display:block; width:100%; height:auto; }
+.figlabel{ font-weight:700; color:var(--accent); font-size:13px; margin-bottom:8px; }
+.figcap{ font-size:13px; margin-top:10px; line-height:1.7; }
+
+.tbox{ border:1px solid #000; border-radius:10px; overflow:hidden; margin:16px 0; }
+table{ border-collapse:collapse; width:100%; font-size:14px; }
+th,td{ text-align:left; padding:9px 12px; vertical-align:top; }
+thead th{ font-weight:700; border-bottom:2px solid #000; }
+tbody td{ border-top:1px solid #000; }
+tbody td.mono{ white-space:nowrap; }
+
+ol{ margin:0 0 14px; padding-left:1.45em; }
+ol li{ margin:0 0 9px; }
+
+.widget{ border:1.5px solid var(--accent); border-radius:12px; padding:20px; margin:20px 0; }
+.controls{ display:flex; flex-wrap:wrap; gap:22px 26px; align-items:center; }
+.cgroup{ display:flex; flex-direction:column; gap:6px; }
+.clab{ font-size:12px; font-weight:700; }
+.modegroup{ display:flex; gap:8px; }
+.modebtn{ font-family:inherit; font-size:13px; font-weight:700; padding:8px 14px; border:1px solid #000; border-radius:8px; background:#fff; color:#000; cursor:pointer; }
+.modebtn.on{ background:var(--accent); border-color:var(--accent); color:#fff; }
+input[type=range]{ width:260px; accent-color:var(--accent); }
+.maphint{ font-size:12px; margin-top:8px; line-height:1.7; }
+.readout{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:9px 22px; margin-top:16px; }
+.ro{ font-size:13px; }
+.ro .lab{ font-weight:700; }
+.ro .val{ font-family:'Ubuntu Mono',monospace; }
+.verdict{ border-top:1px solid #000; margin-top:14px; padding-top:12px; font-size:14px; }
+.verdict .vt{ font-weight:700; color:var(--accent); }
+
+aside h2{ font-size:15px; border-bottom:2px solid #000; padding-bottom:6px; margin-bottom:0; }
+aside .tbox{ border:none; border-radius:0; }
+aside table{ font-size:12.5px; line-height:1.6; }
+aside th{ display:none; }
+aside td{ padding:9px 4px; }
+aside td.term{ font-weight:700; width:42%; }
+aside tbody td{ border-top:1px solid #000; }
+
+@media(max-width:1000px){
+  .layout{ grid-template-columns:1fr; gap:8px; }
+  aside{ position:static; max-height:none; overflow:visible; order:-1; padding:18px 0 8px; }
+  main{ padding-top:14px; }
+  .readout{ grid-template-columns:1fr; }
+  input[type=range]{ width:220px; }
+}
+</style>
+</head>
+<body>
+
+<header class="wall">
+  <div class="wrap">
+    <div class="kicker">声楽音響 — メカニズム解説</div>
+    <h1>なぜ「倍音と共鳴の関係」でリアクタンスが変わるのか<br>声道インピーダンスの符号が反転する物理</h1>
+    <p class="dek">同じ声道なのに、ある倍音は声門振動を助け、別の倍音は逆らう。その境目はリアクタンスの符号にある。本稿は PVA（周波数領域）と Hearing Singing（時間領域）の記述を踏まえて符号反転の機構を組み立て、両書が説明していない物理も明示する。</p>
+  </div>
+</header>
+
+<div class="wrap">
+<div class="layout">
+
+<main>
+
+  <section>
+    <h2>背景 — 問いの正体と、2つのレンズ</h2>
+    <p class="kick">何を説明するか</p>
+    <p>「<a href="#t-inertive">イナーティブ・リアクタンス</a>は声門振動を助ける」は結論として知られている。だが<strong>なぜ</strong>、ある<a href="#t-harmonic">倍音</a>が<a href="#t-resonance">共鳴</a>より下にあると慣性的（inertive）で、上にあるとばね的（compliant）になるのか。倍音や共鳴の周波数を物理的に動かしているわけでもないのに、両者の上下関係だけで符号が反転するのは奇妙に見える。</p>
+    <p>プロジェクト内の2冊は、この現象を異なるレンズで描く。<strong>PVA</strong>（Bozeman『Practical Vocal Acoustics』）は<a href="#t-source">ソース・フィルター・モデル</a>を使い、倍音・<a href="#t-formant">フォルマント</a>・<a href="#t-reactance">リアクタンス</a>という<strong>周波数領域</strong>の語彙で語る。<strong>Hearing Singing</strong>（『Hearing Singing: A Guide to Functional Listening and Voice Perception』）は離散倍音モデルをあえて相対化し、<a href="#t-impulse">インパルスと残響</a>という<strong>時間領域</strong>の語彙で語る。両者は同じ物理の<a href="#t-fourier">フーリエ双対</a>であり、本稿はまず周波数領域で符号反転を導き、次に時間領域で同じことを確かめる。</p>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>機構 1 — 用語の精密化：何が「変わる」のか</h2>
+    <p class="kick">インピーダンスの分解</p>
+    <p>音響系が振動的な駆動に返す反作用の総体が<a href="#t-impedance">インピーダンス</a> <span class="v">Z = R + jX</span>。実部 <span class="v">R</span> は<a href="#t-resistance">抵抗</a>（放射や粘性でエネルギーを失う成分）、虚部 <span class="v">X</span> が<strong>リアクタンス</strong>（エネルギーを失わず一時的に蓄える成分）。</p>
+    <p>リアクタンスはさらに、正反対の2つの寄与の和でできている。<span class="v"><strong>X = ωM − 1/(ωC)</strong></span>。</p>
+    <p>第一項 <span class="v">ωM</span> は<strong>質量性（イナーティブ）</strong>。<span class="v">M</span> は<a href="#t-inertance">音響イナータンス</a>＝空気の塊の動かしにくさで、管なら <span class="v">M = ρℓ/A</span>（密度 × 長さ ÷ 断面積）。第二項 <span class="v">1/(ωC)</span> は<strong>ばね性（コンプライアント）</strong>。<span class="v">C</span> は<a href="#t-compliance">音響コンプライアンス</a>＝空気の圧縮されやすさで、容積なら <span class="v">C = V/(ρc²)</span>。</p>
+    <p>ここが第一の要点だ。<strong><span class="v">M</span> も <span class="v">C</span> も声道の形（幾何）が決めた固定量であり、倍音が動いても変わらない。</strong>変わるのは <span class="v">ω</span>（その倍音の角周波数）であり、それによって <span class="v">ωM</span> と <span class="v">1/(ωC)</span> の<strong>どちらが大きいか＝net リアクタンス <span class="v">X</span> の符号</strong>が決まる。「リアクタンスが変わる」は正確には「固定の <span class="v">M</span>・<span class="v">C</span> に対して倍音の周波数が変わり、<span class="v">X</span> の符号が切り替わる」ことを指す。<span class="v">ωM = 1/(ωC)</span> となる周波数 <span class="v">ω₀ = 1/√(MC)</span> が<strong>共鳴</strong>で、そこで2成分はちょうど打ち消し合う。</p>
+
+    <div class="fig">
+      <div class="figlabel">図A — リアクタンスは2成分の綱引き</div>
+      <svg viewBox="0 0 720 285" role="img" aria-label="質量性リアクタンスとばね性リアクタンスの周波数依存と、両者が等しくなる共鳴点">
+        <line x1="70" y1="145" x2="670" y2="145" stroke="#000" stroke-width="1.3"/>
+        <text x="676" y="149" font-size="11">周波数</text>
+        <text x="62" y="60" text-anchor="end" font-size="10.5">大</text>
+        <text x="62" y="240" text-anchor="end" font-size="10.5">大</text>
+        <text x="62" y="149" text-anchor="end" font-size="10.5">0</text>
+        <path d="M 70.0 136.2 L 89.4 134.0 L 108.7 131.8 L 128.1 129.6 L 147.4 127.4 L 166.8 125.2 L 186.1 123.1 L 205.5 120.9 L 224.8 118.7 L 244.2 116.5 L 263.5 114.3 L 282.9 112.1 L 302.3 109.9 L 321.6 107.7 L 341.0 105.5 L 360.3 103.3 L 379.7 101.1 L 399.0 98.9 L 418.4 96.7 L 437.7 94.5 L 457.1 92.3 L 476.5 90.1 L 495.8 87.9 L 515.2 85.7 L 534.5 83.5 L 553.9 81.4 L 573.2 79.2 L 592.6 77.0 L 611.9 74.8 L 631.3 72.6 L 650.6 70.4 L 670.0 68.2" fill="none" stroke="#00A4AF" stroke-width="2.6"/>
+        <path d="M 70.0 235.4 L 79.7 225.4 L 89.4 217.3 L 99.0 210.8 L 108.7 205.3 L 118.4 200.6 L 128.1 196.7 L 137.7 193.2 L 147.4 190.2 L 157.1 187.5 L 166.8 185.2 L 176.5 183.1 L 186.1 181.2 L 195.8 179.4 L 205.5 177.9 L 215.2 176.4 L 224.8 175.1 L 234.5 173.9 L 244.2 172.8 L 253.9 171.8 L 263.5 170.8 L 273.2 169.9 L 282.9 169.1 L 292.6 168.3 L 302.3 167.6 L 311.9 166.9 L 321.6 166.3 L 331.3 165.7 L 341.0 165.1 L 350.6 164.5 L 360.3 164.0 L 370.0 163.5 L 379.7 163.1 L 389.4 162.6 L 399.0 162.2 L 408.7 161.8 L 418.4 161.4 L 428.1 161.1 L 437.7 160.7 L 447.4 160.4 L 457.1 160.1 L 466.8 159.8 L 476.5 159.5 L 486.1 159.2 L 495.8 158.9 L 505.5 158.6 L 515.2 158.4 L 524.8 158.2 L 534.5 157.9 L 544.2 157.7 L 553.9 157.5 L 563.5 157.3 L 573.2 157.1 L 582.9 156.9 L 592.6 156.7 L 602.3 156.5 L 611.9 156.3 L 621.6 156.1 L 631.3 156.0 L 641.0 155.8 L 650.6 155.6 L 660.3 155.5 L 670.0 155.3" fill="none" stroke="#00A4AF" stroke-width="2.2" stroke-dasharray="6 5"/>
+        <line x1="241" y1="55" x2="241" y2="255" stroke="#000" stroke-width="1" stroke-dasharray="3 3"/>
+        <circle cx="241" cy="116.8" r="5" fill="#00A4AF"/>
+        <circle cx="241" cy="173.2" r="5" fill="#fff" stroke="#000" stroke-width="1.6"/>
+        <text x="241" y="45" text-anchor="middle" font-size="12" font-weight="700">ω₀（共鳴）</text>
+        <text x="432" y="78" font-size="11.5" font-weight="700" fill="#00A4AF">イナーティブ +ωM（質量）</text>
+        <text x="120" y="236" font-size="11.5" font-weight="700" fill="#00A4AF">コンプライアント −1/ωC（ばね）</text>
+      </svg>
+      <p class="figcap">リアクタンスは質量性とばね性の綱引き。両者の大きさが等しくなる点が共鳴 ω₀ で、そこで打ち消し合う。ただし「下の帯／上の帯でどちらが勝つか（＝net の符号）」は共鳴の<strong>型</strong>で決まる ── 次節で声道の場合を見る。</p>
+    </div>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>機構 2 — なぜ符号が反転するのか（周波数領域）</h2>
+    <p class="kick">声道は「唇が開いた管」</p>
+    <p>声道は声門側がほぼ閉・唇側が開の管 ── PVA の用語で <a href="#t-qwr">quarter-wave resonator（1/4波長共鳴管）</a>だ。声門から流量を送り込むとき、声道内の空気は<strong>塊（質量）</strong>として加減速されねばならない。開いた遠端（唇）は低周波では圧をそのまま逃がすので、低周波で声門が「感じる」のは主に<strong>この空気塊の慣性</strong>＝イナーティブなリアクタンス（<span class="v">+jωM</span>）になる。</p>
+    <p>周波数を上げて第一フォルマントに近づくと、管が <span class="v">1/4</span> 波長でぴったり<a href="#t-standing">定在波</a>を立て、声門端（閉端）に<a href="#t-antinode">圧の腹</a>ができる。駆動点に圧の腹があるとは「小さな流量で大きな圧」＝<a href="#t-zin">入力インピーダンス</a>が<strong>極大</strong>だということ。フォルマントちょうどでリアクタンスは <span class="v">0</span>（純抵抗）、そして<strong>そのすぐ上で符号が反転してコンプライアントになる</strong>。さらに上では次のフォルマントへ向けて再びイナーティブに戻り、これを各フォルマントで繰り返す。</p>
+    <p>つまり<strong>「倍音が共鳴の下か上か」は、その倍音が、声道入力リアクタンスという固定の曲線の『どの帯』に乗っているかを言い換えているにすぎない</strong>。倍音の周波数はピッチで決まり歌い手は動かせない。フォルマントは声道の形で決まる。両者の上下関係＝倍音が乗る帯＝符号。これが「共鳴と倍音の関係でリアクタンスが変わる」の正体である。</p>
+
+    <div class="fig">
+      <div class="figlabel">図B — フォルマント＝声門端の圧の腹、ゆえに入力インピーダンス極大</div>
+      <svg viewBox="0 0 720 300" role="img" aria-label="閉端が声門・開端が唇の管に立つ1/4波長定在波。声門端で圧の腹、唇で圧の節">
+        <line x1="120" y1="100" x2="620" y2="100" stroke="#000" stroke-width="2"/>
+        <line x1="120" y1="260" x2="620" y2="260" stroke="#000" stroke-width="2"/>
+        <line x1="120" y1="100" x2="120" y2="260" stroke="#000" stroke-width="3"/>
+        <line x1="120" y1="180" x2="620" y2="180" stroke="#000" stroke-width="0.8" stroke-dasharray="3 4"/>
+        <path d="M 140.0 108.0 L 165.0 108.3 L 190.0 109.0 L 215.0 110.3 L 240.0 112.2 L 265.0 114.5 L 290.0 117.2 L 315.0 120.5 L 340.0 124.1 L 365.0 128.2 L 390.0 132.7 L 415.0 137.5 L 440.0 142.6 L 465.0 148.0 L 490.0 153.6 L 515.0 159.4 L 540.0 165.4 L 565.0 171.4 L 590.0 177.5 L 600.0 180.0" fill="none" stroke="#00A4AF" stroke-width="2.6"/>
+        <path d="M 140.0 252.0 L 165.0 251.7 L 190.0 251.0 L 215.0 249.7 L 240.0 247.8 L 265.0 245.5 L 290.0 242.8 L 315.0 239.5 L 340.0 235.9 L 365.0 231.8 L 390.0 227.3 L 415.0 222.5 L 440.0 217.4 L 465.0 212.0 L 490.0 206.4 L 515.0 200.6 L 540.0 194.6 L 565.0 188.6 L 590.0 182.5 L 600.0 180.0" fill="none" stroke="#00A4AF" stroke-width="2.6"/>
+        <text x="120" y="284" text-anchor="middle" font-size="11" font-weight="700">声門（ほぼ閉端）</text>
+        <text x="620" y="284" text-anchor="middle" font-size="11" font-weight="700">唇（開端）</text>
+        <text x="156" y="92" font-size="11" font-weight="700" fill="#00A4AF">圧の腹（最大）</text>
+        <text x="600" y="166" text-anchor="end" font-size="11" font-weight="700" fill="#00A4AF">圧の節（ゼロ）</text>
+        <line x1="120" y1="74" x2="620" y2="74" stroke="#000" stroke-width="1"/>
+        <line x1="120" y1="69" x2="120" y2="79" stroke="#000" stroke-width="1"/>
+        <line x1="620" y1="69" x2="620" y2="79" stroke="#000" stroke-width="1"/>
+        <text x="370" y="66" text-anchor="middle" font-size="11">管長 = λ/4 → このとき第一フォルマント</text>
+      </svg>
+      <p class="figcap">声門端は圧の腹（駆動点インピーダンス極大）、唇は圧の節。なぜ「開いた管」は第一フォルマントの<strong>下</strong>でイナーティブなのか ── 開いた遠端は低周波で圧を逃がすため、低周波の入力インピーダンスは閉じ込めたばねではなく、動かす空気塊の<strong>慣性</strong>で決まるから。閉じた遠端の管なら逆に下側がコンプライアントになる。声道は唇が開いているので下側＝イナーティブ。</p>
+    </div>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>動かす — 声道入力リアクタンス曲線</h2>
+    <p class="kick">符号が反転する瞬間を見る</p>
+    <p>下は、唇が開いた一様管（1/4波長共鳴管）の入力リアクタンスを周波数の関数として描いたもの。<strong>倍音</strong>のスライダーを動かすと、その倍音が曲線のどの帯に乗るか ── イナーティブ（<span class="v">+</span>）か、フォルマント上（<span class="v">≈0</span>）か、コンプライアント（<span class="v">−</span>）か ── が変わる。同じ管でも、倍音の位置だけで符号が反転する。「通常／SOVT」で <span class="v">F1</span> を下げ、曲線そのものをずらすこともできる。</p>
+
+    <div class="widget">
+      <div class="controls">
+        <div class="cgroup">
+          <span class="clab">倍音の周波数</span>
+          <input id="hslider" type="range" min="120" max="2600" step="5" value="350" aria-label="倍音の周波数">
+        </div>
+        <div class="cgroup">
+          <span class="clab">声道</span>
+          <div class="modegroup">
+            <button id="mNorm" class="modebtn on" aria-pressed="true">通常（F1 高め）</button>
+            <button id="mSovt" class="modebtn" aria-pressed="false">SOVT（半閉塞）</button>
+          </div>
+        </div>
+      </div>
+
+      <svg id="rmap" viewBox="0 0 920 320" role="img" aria-label="声道入力リアクタンスの周波数特性と倍音マーカー"></svg>
+      <p class="maphint">破線＝フォルマント（入力インピーダンスの極＝純抵抗点）。小さな白丸＝反共鳴（インピーダンス極小）。曲線が0より上＝イナーティブ、下＝コンプライアント。<strong>F1 より下＝イナーティブ／F1〜2F1＝コンプライアント／2F1〜3F1＝再びイナーティブ</strong>… と帯が交互に並ぶ。</p>
+
+      <div class="readout">
+        <div class="ro"><span class="lab">F1：</span><span id="rF1" class="val">—</span></div>
+        <div class="ro"><span class="lab">倍音：</span><span id="rFh" class="val">—</span></div>
+        <div class="ro"><span class="lab">帯：</span><span id="rZone">—</span></div>
+      </div>
+      <div class="verdict"><span class="vt">この倍音への声道の応答：</span><span id="rVer">—</span></div>
+    </div>
+    <p>SOVT に切り替えると <span class="v">F1</span> が下がり、低域のイナーティブ・リアクタンスの立ち上がりが急になる（曲線が急峻に）。これが後述する「SOVT がなぜ効くか」の視覚的な核心だ。</p>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>機構 3 — 時間領域での同じ話（Hearing Singing のレンズ）</h2>
+    <p class="kick">ブランコのタイミング</p>
+    <p>Hearing Singing は離散倍音とソース・フィルター分離をあえて避け、<strong>インパルスと残響</strong>で語る（第3章「How Do We Hear」）。声門が閉じる瞬間に急な圧低下＝インパルス（バルーン破裂に喩えられる）が起き、声道がそれに反響する。反響する圧パターンの一部 ── 戻ってくる低圧フロント ── が次の声門閉鎖のときに声門へ帰り着く。</p>
+    <p>同書（第6章「Time and Pressure Domain」、第10章）は Titze 由来の<strong>ブランコの比喩</strong>でこれを説明する。共鳴＝ブランコ、声門閉鎖＝押す手。共鳴が1ピッチ周期のあいだに<strong>整数回</strong>振動して戻ってくると、押す手は毎回同じ位相で出会う＝建設的（このとき「フォルマントが <span class="v">f<sub>o</sub></span> の整数倍」＝倍音がフォルマントに一致）。<span class="v">2.5</span> 回など中途半端だと、押す手はブランコの行きと帰りに交互に当たる＝破壊的（倍音がフォルマントをまたぐ straddling）。</p>
+    <p>周波数領域の「イナーティブ・リアクタンス」と、時間領域の「うまく戻ってくる低圧フロント」は<strong>同じ物理のフーリエ双対</strong>だ。倍音が共鳴の下にある状態＝戻る低圧フロントが声門の閉じる瞬間と建設的に重なる位相関係。Hearing Singing 第11章はこれを「a well-timed resonance returning to the glottis as the vocal folds contact」と表現する。</p>
+
+    <div class="fig">
+      <div class="figlabel">図C — 戻ってくる残響と声門閉鎖のタイミング</div>
+      <svg viewBox="0 0 720 330" role="img" aria-label="共鳴の減衰振動と声門インパルスの、建設的および破壊的なタイミング">
+        <text x="70" y="36" font-size="12" font-weight="700">建設的 — 倍音がフォルマントに一致（押す手が毎回同じ位相）</text>
+        <line x1="70" y1="95" x2="660" y2="95" stroke="#000" stroke-width="0.7" stroke-dasharray="3 4"/>
+        <path d="M 70.0 95.0 L 74.0 86.6 L 78.0 78.6 L 82.0 71.5 L 86.0 65.5 L 90.0 60.9 L 94.0 57.9 L 98.0 56.6 L 102.0 57.0 L 106.0 59.1 L 110.0 62.8 L 114.0 67.9 L 118.0 74.2 L 122.0 81.4 L 126.0 89.1 L 130.0 97.0 L 134.0 104.7 L 138.0 111.9 L 142.0 118.2 L 146.0 123.5 L 150.0 127.4 L 154.0 129.8 L 158.0 130.7 L 162.0 129.9 L 166.0 127.5 L 170.0 123.7 L 174.0 118.7 L 178.0 112.6 L 182.0 105.9 L 186.0 98.7 L 190.0 91.4 L 194.0 84.3 L 198.0 77.8 L 202.0 72.1 L 206.0 67.6 L 210.0 64.3 L 214.0 62.4 L 218.0 62.0 L 222.0 63.1 L 226.0 65.6 L 230.0 69.4 L 234.0 74.4 L 238.0 80.2 L 242.0 86.6 L 246.0 93.3 L 250.0 100.0 L 254.0 106.5 L 258.0 112.3 L 262.0 117.3 L 266.0 121.3 L 270.0 124.0 L 274.0 125.4 L 278.0 125.4 L 282.0 124.1 L 286.0 121.4 L 290.0 117.6 L 294.0 112.8 L 298.0 107.3 L 302.0 101.3 L 306.0 95.0 L 310.0 88.8 L 314.0 83.0 L 318.0 77.7 L 322.0 73.3 L 326.0 69.9 L 330.0 67.7 L 334.0 66.7 L 338.0 67.0 L 342.0 68.6 L 346.0 71.3 L 350.0 75.1 L 354.0 79.7 L 358.0 85.0 L 362.0 90.6 L 366.0 96.4 L 370.0 102.1 L 374.0 107.4 L 378.0 112.1 L 382.0 116.0 L 386.0 118.9 L 390.0 120.6 L 394.0 121.2 L 398.0 120.7 L 402.0 118.9 L 406.0 116.1 L 410.0 112.4 L 414.0 108.0 L 418.0 103.0 L 422.0 97.7 L 426.0 92.3 L 430.0 87.1 L 434.0 82.3 L 438.0 78.2 L 442.0 74.8 L 446.0 72.4 L 450.0 71.0 L 454.0 70.7 L 458.0 71.5 L 462.0 73.4 L 466.0 76.2 L 470.0 79.8 L 474.0 84.1 L 478.0 88.8 L 482.0 93.8 L 486.0 98.7 L 490.0 103.4 L 494.0 107.7 L 498.0 111.4 L 502.0 114.3 L 506.0 116.3 L 510.0 117.4 L 514.0 117.4 L 518.0 116.4 L 522.0 114.4 L 526.0 111.6 L 530.0 108.1 L 534.0 104.0 L 538.0 99.6 L 542.0 95.0 L 546.0 90.4 L 550.0 86.1 L 554.0 82.3 L 558.0 79.0 L 562.0 76.5 L 566.0 74.9 L 570.0 74.2 L 574.0 74.4 L 578.0 75.6 L 582.0 77.6 L 586.0 80.3 L 590.0 83.8 L 594.0 87.6 L 598.0 91.8 L 602.0 96.1 L 606.0 100.2 L 610.0 104.1 L 614.0 107.6 L 618.0 110.4 L 622.0 112.6 L 626.0 113.9 L 630.0 114.3 L 634.0 113.9 L 638.0 112.6 L 642.0 110.6 L 646.0 107.8 L 650.0 104.6 L 654.0 100.9 L 658.0 97.0" fill="none" stroke="#00A4AF" stroke-width="2.4"/>
+        <path d="M 63 152 L 77 152 L 70 136 Z" fill="#000"/>
+        <path d="M 299 152 L 313 152 L 306 136 Z" fill="#000"/>
+        <path d="M 535 152 L 549 152 L 542 136 Z" fill="#000"/>
+        <line x1="70" y1="130" x2="70" y2="152" stroke="#000" stroke-width="0.7" stroke-dasharray="2 3"/>
+        <line x1="306" y1="124" x2="306" y2="152" stroke="#000" stroke-width="0.7" stroke-dasharray="2 3"/>
+        <line x1="542" y1="124" x2="542" y2="152" stroke="#000" stroke-width="0.7" stroke-dasharray="2 3"/>
+        <text x="70" y="170" text-anchor="middle" font-size="10.5">声門閉鎖</text>
+
+        <text x="70" y="206" font-size="12" font-weight="700">破壊的 — 倍音がフォルマントをまたぐ（押す手が行き帰りに当たる）</text>
+        <line x1="70" y1="235" x2="660" y2="235" stroke="#000" stroke-width="0.7" stroke-dasharray="3 4"/>
+        <path d="M 70.0 235.0 L 74.0 226.6 L 78.0 218.6 L 82.0 211.5 L 86.0 205.5 L 90.0 200.9 L 94.0 197.9 L 98.0 196.6 L 102.0 197.0 L 106.0 199.1 L 110.0 202.8 L 114.0 207.9 L 118.0 214.2 L 122.0 221.4 L 126.0 229.1 L 130.0 237.0 L 134.0 244.7 L 138.0 251.9 L 142.0 258.2 L 146.0 263.5 L 150.0 267.4 L 154.0 269.8 L 158.0 270.7 L 162.0 269.9 L 166.0 267.5 L 170.0 263.7 L 174.0 258.7 L 178.0 252.6 L 182.0 245.9 L 186.0 238.7 L 190.0 231.4 L 194.0 224.3 L 198.0 217.8 L 202.0 212.1 L 206.0 207.6 L 210.0 204.3 L 214.0 202.4 L 218.0 202.0 L 222.0 203.1 L 226.0 205.6 L 230.0 209.4 L 234.0 214.4 L 238.0 220.2 L 242.0 226.6 L 246.0 233.3 L 250.0 240.0 L 254.0 246.5 L 258.0 252.3 L 262.0 257.3 L 266.0 261.3 L 270.0 264.0 L 274.0 265.4 L 278.0 265.4 L 282.0 264.1 L 286.0 261.4 L 290.0 257.6 L 294.0 252.8 L 298.0 247.3 L 302.0 241.3 L 306.0 235.0 L 310.0 228.8 L 314.0 223.0 L 318.0 217.7 L 322.0 213.3 L 326.0 209.9 L 330.0 207.7 L 334.0 206.7 L 338.0 207.0 L 342.0 208.6 L 346.0 211.3 L 350.0 215.1 L 354.0 219.7 L 358.0 225.0 L 362.0 230.6 L 366.0 236.4 L 370.0 242.1 L 374.0 247.4 L 378.0 252.1 L 382.0 256.0 L 386.0 258.9 L 390.0 260.6 L 394.0 261.2 L 398.0 260.7 L 402.0 258.9 L 406.0 256.1 L 410.0 252.4 L 414.0 248.0 L 418.0 243.0 L 422.0 237.7 L 426.0 232.3 L 430.0 227.1 L 434.0 222.3 L 438.0 218.2 L 442.0 214.8 L 446.0 212.4 L 450.0 211.0 L 454.0 210.7 L 458.0 211.5 L 462.0 213.4 L 466.0 216.2 L 470.0 219.8 L 474.0 224.1 L 478.0 228.8 L 482.0 233.8 L 486.0 238.7 L 490.0 243.4 L 494.0 247.7 L 498.0 251.4 L 502.0 254.3 L 506.0 256.3 L 510.0 257.4 L 514.0 257.4 L 518.0 256.4 L 522.0 254.4 L 526.0 251.6 L 530.0 248.1 L 534.0 244.0 L 538.0 239.6 L 542.0 235.0 L 546.0 230.4 L 550.0 226.1 L 554.0 222.3 L 558.0 219.0 L 562.0 216.5 L 566.0 214.9 L 570.0 214.2 L 574.0 214.4 L 578.0 215.6 L 582.0 217.6 L 586.0 220.3 L 590.0 223.8 L 594.0 227.6 L 598.0 231.8 L 602.0 236.1 L 606.0 240.2 L 610.0 244.1 L 614.0 247.6 L 618.0 250.4 L 622.0 252.6 L 626.0 253.9 L 630.0 254.3 L 634.0 253.9 L 638.0 252.6 L 642.0 250.6 L 646.0 247.8 L 650.0 244.6 L 654.0 240.9 L 658.0 237.0" fill="none" stroke="#00A4AF" stroke-width="2.4"/>
+        <path d="M 63 300 L 77 300 L 70 284 Z" fill="#000"/>
+        <path d="M 358 300 L 372 300 L 365 284 Z" fill="#000"/>
+        <line x1="70" y1="270" x2="70" y2="300" stroke="#000" stroke-width="0.7" stroke-dasharray="2 3"/>
+        <line x1="365" y1="230" x2="365" y2="300" stroke="#000" stroke-width="0.7" stroke-dasharray="2 3"/>
+        <text x="217" y="320" text-anchor="middle" font-size="10.5">押す手が「行き」の途中に当たり、振動を削ぐ</text>
+      </svg>
+      <p class="figcap">上：共鳴が整数回振動して戻り、声門閉鎖（インパルス）が毎回同じ位相で重なる ── イナーティブ結合と等価。下：共鳴が <span class="v">2.5</span> 回で中途半端に切られ、インパルスが行きと帰りに交互に当たる ── 振動を削ぎ、弱く中和された音になる。</p>
+    </div>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>機構 4 — なぜイナーティブだと「助かる」のか</h2>
+    <p class="kick">符号が正であることの利得</p>
+    <p>声道がイナーティブな（質量性の）負荷を返すとき、声門上の圧と声門の流量のあいだに、声道側がサイクルを通じて声帯振動に<strong>正の仕事</strong>をする位相関係が生まれる。質量的な空気は、声門が開いて流れが立ち上がる局面では流量の増加に抵抗し（声門上圧を高めに保つ）、声門が閉じていく局面では動き続けようとして声門上を低圧に引く。この非対称な圧の供給が、声帯組織の振動へエネルギーを送り込む。</p>
+    <p>結果として、PVA がまとめる通り ── イナーティブ・リアクタンスは<strong>声門の<a href="#t-cq">閉鎖率 CQ</a> を上げ、<a href="#t-ptp">発声閾値圧 PTP</a> を下げ、筋的な締め付け（glottal squeeze）なしに気流を減らす</strong>（第8章周辺「Non-Linear Source-Filter Theory Revisited」、p.72–73）。同書の用語集も「inertive reactance」を、transglottal 圧差・声門抵抗・PTP を下げて vibrator との相互作用を改善するもの、と定義している（p.160）。Hearing Singing 第11章の言い方では、戻ってきた低圧フロントが閉じる声門の圧低下と「力を合わせ」、どちらか単独より深いインパルスを作る。</p>
+    <p>逆にコンプライアントな帯では、声道はばね的に逆らい、その倍音の残響を早く減衰させる。PVA は第6章の冒頭で「倍音は共鳴ピークの高域側でリアクタンスにより速く力を失いうる（Titze）」と述べる。これがパッサッジョで <span class="v">2f<sub>o</sub></span> をフォルマント上に貼り付ける「張り上げ」が苦しい理由の音響的な核心である。</p>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>SOVT はなぜリアクタンスを変えるのか</h2>
+    <p class="kick">resonator そのものを動かすレバー</p>
+    <p>機構2で見た通り、リアクタンス曲線は <span class="v">M</span>・<span class="v">C</span>・管の形で決まる。<a href="#t-sovt">SOVT（半閉塞声道）</a>は、その<strong>resonator そのものを変える</strong>操作だ。ストロー・リップトリル・小さな <span class="v">[w]</span> など、唇付近を狭めると次の3つが起きる。</p>
+    <ol>
+      <li><strong>出口に重い空気栓を足す。</strong>狭い開口は大きなイナータンス（<span class="v">M ∝ 1/A</span>、断面積が小さいほど大）を持つ。系全体のイナーティブ・リアクタンスが増す。PVA：唇付近や舌背・口蓋の狭めは「inertive reactance を増やし、PTP を下げうる」（p.142）。</li>
+      <li><strong><span class="v">F1</span> を下げる。</strong>遠端が部分的に閉じるほど管は閉端管に近づき、第一フォルマントが下がる。インタラクティブの「SOVT」トグルがこのずれを示す。</li>
+      <li><strong>背圧を生み、transglottal 圧差を下げる。</strong>PVA の<a href="#t-downstream">ダウンストリーム・レジスター</a>の考え方：声門より下流の抵抗が肺からの圧負荷を分担し、声門での圧差と抵抗を下げ、押しの強い発声（pressed phonation）を抑える（p.142, 166）。</li>
+    </ol>
+    <p>「SOVT で変化する」のはこの3点 ── イナーティブ・リアクタンスの<strong>増大</strong>、<span class="v">F1</span> の<strong>移動</strong>、背圧による圧差の<strong>低下</strong>。だから SOVT エクササイズは、イナーティブ結合の感覚を強く・安全に体験させる装置になる。PVA は同じ原理の「常時版」として、収束形共鳴器（<a href="#t-convergent">convergent resonator</a>）や<a href="#t-epilarynx">喉頭上部の管（epilarynx）</a>の出口を狭める微調整を挙げ、これらがいずれも inertive reactance を高めると述べる（p.37–38, 73, 157）。</p>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>具体例 — 倍音がどの帯に乗るか</h2>
+    <p class="kick">数値で追う</p>
+    <p>母音 <span class="v">[a]</span> の第一共鳴を仮に <span class="v">F1 ≈ 700 Hz</span> とする。倍音は <span class="v">f<sub>o</sub></span> の整数倍。各倍音がイナーティブ帯（<span class="v">F1</span> の下）にあるか、フォルマント上か、コンプライアント帯（<span class="v">F1</span>〜<span class="v">2F1</span>）にあるかを見る。</p>
+    <div class="tbox">
+      <table>
+        <thead><tr><th>歌うピッチ</th><th>f<sub>o</sub></th><th>F1 近傍の倍音</th><th>声道の応答</th></tr></thead>
+        <tbody>
+          <tr><td>C3</td><td class="mono">131</td><td>1〜5fo = 131〜655、すべて 700 未満</td><td>低い倍音が軒並みイナーティブ ── 楽な低音域、共鳴調整がほぼ不要</td></tr>
+          <tr><td>E3</td><td class="mono">165</td><td>4fo = 660（700 の直下）</td><td>4fo がイナーティブ帯の上端へ ── まだ助けられる側</td></tr>
+          <tr><td>F4</td><td class="mono">349</td><td>2fo = 698（≈ 700）</td><td>2fo がフォルマント上 ── 純抵抗、慣性の助けが消える（パッサッジョ）</td></tr>
+          <tr><td>A4</td><td class="mono">440</td><td>2fo = 880（700 超）</td><td>2fo はコンプライアント帯（F1〜2F1）。一方 1fo = 440 はイナーティブのまま</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="figcap">同じ <span class="v">[a]</span>・同じ声道でも、ピッチが上がって倍音列がずれるだけで、特定の倍音がイナーティブ帯から純抵抗点を経てコンプライアント帯へ移っていく。「共鳴と倍音の関係」とは、この移動のことに他ならない。</p>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>注記 — PVA / Hearing Singing からはわからないこと</h2>
+    <p class="kick">本稿が両書の外から補った部分</p>
+    <ol>
+      <li><strong>符号反転そのものの物理は、両書とも導出していない。</strong>PVA は「reactance」を機能的に定義し（用語集：声門と声道のインピーダンスの「マッチング」、p.166）、Titze を引いて「高域側で速く力を失う」と<strong>結果</strong>のみ述べる。Hearing Singing は時間領域へ振り、離散倍音モデル自体を相対化する。<strong>「なぜ開管では F1 の下＝イナーティブ・上＝コンプライアントなのか」</strong>── 入力インピーダンスの符号、フォルマントが入力インピーダンス極大（並列型共鳴）であること、<span class="v">Z_in ∝ tan(kL)</span> という開管の入力リアクタンス ── は本稿が一般音響学から補った。</li>
+      <li><strong>定量は書かれていない。</strong>イナーティブ帯で声門上圧が流量に対しどれだけ位相先行するか（理論上 <span class="v">±90°</span> まで）、PTP がどれだけ下がるか、SOVT が <span class="v">F1</span> をどれだけ下げるか ── これらは Titze の原著（特に下記 2008 年論文）の領域。</li>
+      <li><strong>イナータンスとイナーティブ・リアクタンスは厳密には別物。</strong>PVA 用語集の「inertive reactance」定義（収束によって作られる空気分子の sluggishness、p.160）は機能的説明であり、物理的には<strong>イナータンス <span class="v">M</span>（固定の幾何量）</strong>と<strong>イナーティブ・リアクタンス <span class="v">ωM</span>（周波数依存）</strong>を区別すべき。本稿の機構1はそこを精密化した。</li>
+      <li><strong>未解決・係争中の部分。</strong>共鳴が「ソース（声帯振動そのもの）」をどの程度動かすか ── 非線形ソース・フィルター結合の強さ ── は依然研究中。Hearing Singing は Brad Story を引きつつ「filter もまた source」と論じ、ソース・フィルターの線形分離自体に疑問を呈する（第3章）。本稿の周波数領域の図は教育用の一様管近似であり、実際の声道はフォルマントが奇数倍からずれ、声門は完全な閉端ではなく、損失もあるため、極や符号反転はなめらかになる。</li>
+    </ol>
+    <div class="panel">
+      <p style="margin:0;"><strong>2冊のフレーミングの緊張。</strong>PVA ＝ 周波数領域（倍音・フォルマント・リアクタンス）。Hearing Singing ＝ 時間領域（インパルス・残響・タイミング）。両者は同じ物理のフーリエ双対だが、用語も直感も異なる。リアクタンスという問いは PVA のレンズに native であり、Hearing Singing での等価物は「戻ってくる圧フロントのタイミング」だ。どちらか一方ではなく、両方を持つことが理解を強くする。</p>
+    </div>
+    <p style="margin-top:18px;"><strong>出典（詳細）。</strong></p>
+    <p class="figcap" style="margin-top:4px;">
+    PVA ＝ K. Bozeman, <em>Practical Vocal Acoustics</em>：第6章「Harmonic:Resonance Interactions」冒頭（高域側でリアクタンスにより減衰、Titze 引用）／「Non-Linear Source-Filter Theory Revisited」・Lower Passaggio Training, p.72–73（inertive reactance を高める条件、CQ・PTP）／Singer's Formant Cluster の節, p.37–38（reactance と inertance で少ない圧で多くの音響パワー）／「Downstream Resistors and Semi-Occluded Vocal Tracts」, p.142／用語集 p.156–169（Reactance, Inertive reactance, Quarter-wave resonator, Semi-occluded vocal tract, Epilarynx, Downstream resistor）／第2章「Preliminary Basics」, p.13（return-swing の "pull"）。<br>
+    Hearing Singing ＝『Hearing Singing: A Guide to Functional Listening and Voice Perception』：第3章「How Do We Hear」（インパルス／バルーン破裂モデル、空気塊の慣性、残響としての共鳴）／第6章「Time and Pressure Domain」（ブランコの比喩、建設的・破壊的アライメント、<span class="v">f<sub>R1</sub>=2.5f<sub>o</sub></span> の straddling）／第10章（ブランコの減衰、低圧フロントが閉じる声門に合う）／第11章「How To Teach Singing」（phonation と resonation の統合、well-timed resonance、空気塊＝shock absorber、注3に Titze 2008）。<br>
+    両書の外（一般音響学）＝ Ingo R. Titze, "Nonlinear Source-Filter Coupling in Phonation: Theory," <em>JASA</em> 123(5), 2008；I. R. Titze &amp; K. Verdolini Abbott, <em>Vocology</em>（2012）；管の入力インピーダンスについては Fletcher &amp; Rossing, <em>The Physics of Musical Instruments</em> 等の標準的な音響学。
+    </p>
+  </section>
+
+</main>
+
+<aside>
+  <h2>用語</h2>
+  <div class="tbox">
+  <table>
+    <thead><tr><th>用語</th><th>定義</th></tr></thead>
+    <tbody>
+      <tr id="t-impedance"><td class="term">インピーダンス Z</td><td>音響系が振動的な駆動に返す反作用の総体。複素数 Z=R+jX で表す。</td></tr>
+      <tr id="t-resistance"><td class="term">抵抗（レジスタンス R）</td><td>インピーダンスの実部。放射や粘性でエネルギーを散逸させる成分。</td></tr>
+      <tr id="t-reactance"><td class="term">リアクタンス X</td><td>インピーダンスの虚部。エネルギーを散逸させず一時的に蓄える成分。符号を持ち、X=ωM−1/ωC。</td></tr>
+      <tr id="t-inertance"><td class="term">音響イナータンス M</td><td>空気の塊の動かしにくさ（音響的な質量）。管では M=ρℓ/A。幾何で決まる固定量。</td></tr>
+      <tr id="t-compliance"><td class="term">音響コンプライアンス C</td><td>空気の圧縮されやすさ（音響的なばね）。容積では C=V/ρc²。固定量。</td></tr>
+      <tr id="t-inertive"><td class="term">イナーティブ・リアクタンス</td><td>質量性のリアクタンス +ωM。net リアクタンスが質量項優勢の状態。声門振動を助ける。</td></tr>
+      <tr id="t-compliant"><td class="term">コンプライアント・リアクタンス</td><td>ばね性のリアクタンス −1/ωC。net リアクタンスがばね項優勢の状態。発声に逆らう。</td></tr>
+      <tr id="t-resonance"><td class="term">共鳴</td><td>系が特定周波数に強く長く応答する性質。リアクタンスの2成分が打ち消し合う周波数 ω₀。</td></tr>
+      <tr id="t-formant"><td class="term">フォルマント</td><td>声道共鳴が放射音スペクトルに作るピーク。声門から見れば入力インピーダンスの極大。</td></tr>
+      <tr id="t-zin"><td class="term">入力インピーダンス</td><td>声門の位置で声道が声門に返すインピーダンス。声門部の圧 ÷ 声門部の体積流量。</td></tr>
+      <tr id="t-qwr"><td class="term">quarter-wave resonator</td><td>一端が閉・一端が開の管。波長の1/4とその奇数倍で定在波が立つ。声道のモデル。</td></tr>
+      <tr id="t-standing"><td class="term">定在波</td><td>管内で前進波と反射波が干渉してできる定常的な振動パターン。</td></tr>
+      <tr id="t-antinode"><td class="term">圧の腹／圧の節</td><td>定在波で圧変動が最大の点が腹、ゼロの点が節。閉端は腹、開端は節になる。</td></tr>
+      <tr id="t-harmonic"><td class="term">倍音（harmonic）</td><td>声源の周波数成分。fo の整数倍。ピッチで決まり、歌い手は直接動かせない。</td></tr>
+      <tr id="t-fo"><td class="term">fo（基本周波数）</td><td>声帯の開閉頻度。倍音列の最下位 1fo。知覚される音の高さ。</td></tr>
+      <tr id="t-source"><td class="term">ソース・フィルター・モデル</td><td>声帯（源）と声道（フィルタ）を分離して扱う線形モデル。PVA が主に用いる枠組み。</td></tr>
+      <tr id="t-nlc"><td class="term">非線形ソース・フィルター結合</td><td>声道の反射が声帯振動そのものに影響する非線形相互作用。リアクタンスがその実体。</td></tr>
+      <tr id="t-impulse"><td class="term">インパルス／残響</td><td>声門閉鎖が起こす急な圧変化（インパルス）と、声道がそれに反響する応答（残響）。Hearing Singing の中心モデル。</td></tr>
+      <tr id="t-cq"><td class="term">CQ（閉鎖率）</td><td>1振動周期で声門が閉じている割合。イナーティブ結合で上がる。</td></tr>
+      <tr id="t-ptp"><td class="term">PTP（発声閾値圧）</td><td>声帯振動を始めるのに必要な最低声門下圧。イナーティブ結合で下がる。</td></tr>
+      <tr id="t-sovt"><td class="term">SOVT（半閉塞声道）</td><td>唇付近を狭めた声道（ストロー・リップトリル・小さな [w] 等）。背圧と inertive リアクタンスを増す。</td></tr>
+      <tr id="t-downstream"><td class="term">ダウンストリーム・レジスター</td><td>声門より下流（唇寄り）で気流に抵抗する要素。背圧で transglottal 圧差を下げる。</td></tr>
+      <tr id="t-epilarynx"><td class="term">epilarynx（喉頭上部の管）</td><td>声帯直上の短い管。出口（披裂喉頭蓋部）を狭めるとリアクタンスが増す。</td></tr>
+      <tr id="t-convergent"><td class="term">convergent resonator</td><td>声門側が広く唇側が狭い収束形の声道。inertive リアクタンスを高める。閉母音は本質的にこの形。</td></tr>
+      <tr id="t-fourier"><td class="term">フーリエ双対</td><td>時間領域の記述と周波数領域の記述が、同じ物理を表す対の関係であること。</td></tr>
+      <tr id="t-books"><td class="term">PVA / Hearing Singing</td><td>PVA＝Bozeman『Practical Vocal Acoustics』（周波数領域・倍音中心）。Hearing Singing＝『Hearing Singing: A Guide to Functional Listening and Voice Perception』（時間領域・知覚中心）。</td></tr>
+    </tbody>
+  </table>
+  </div>
+</aside>
+
+</div>
+</div>
+
+<script>
+(function(){
+  var svg=document.getElementById('rmap');
+  var slider=document.getElementById('hslider');
+  var bN=document.getElementById('mNorm'), bS=document.getElementById('mSovt');
+  var rF1=document.getElementById('rF1'), rFh=document.getElementById('rFh'),
+      rZone=document.getElementById('rZone'), rVer=document.getElementById('rVer');
+  var mode='norm';
+  var F1N=490, F1S=320, KN=0.55, KS=0.95;
+  var fMin=0, fMax=2700, X0=70, X1=880, YT=58, YB=262, YMID=160, YSPAN=100;
+  function xOf(f){ return X0+(f-fMin)/(fMax-fMin)*(X1-X0); }
+  function curveY(f,F1,kk){
+    var s=(2/Math.PI)*Math.atan(kk*Math.tan(Math.PI*f/(2*F1)));
+    return YMID-YSPAN*s;
+  }
+  function render(){
+    var F1=(mode==='norm')?F1N:F1S;
+    var kk=(mode==='norm')?KN:KS;
+    var fh=+slider.value;
+    var d='', pen=false, f, th, c, x, y;
+    for(f=10;f<=fMax;f+=6){
+      th=Math.PI*f/(2*F1);
+      c=Math.cos(th);
+      if(Math.abs(c)<0.055){ pen=false; continue; }
+      x=xOf(f); y=curveY(f,F1,kk);
+      if(!pen){ d+=' M '+x.toFixed(1)+' '+y.toFixed(1); pen=true; }
+      else d+=' L '+x.toFixed(1)+' '+y.toFixed(1);
+    }
+    var ns='';
+    ns+='<line x1="'+X0+'" y1="'+YMID+'" x2="'+X1+'" y2="'+YMID+'" stroke="#000" stroke-width="1.4"/>';
+    ns+='<text x="'+(X0-9)+'" y="'+(YMID+4)+'" text-anchor="end" font-size="11">0</text>';
+    ns+='<text x="'+(X0-9)+'" y="'+(YT+12)+'" text-anchor="end" font-size="10.5" fill="#00A4AF" font-weight="700">+ 慣性</text>';
+    ns+='<text x="'+(X0-9)+'" y="'+(YB-2)+'" text-anchor="end" font-size="10.5" fill="#00A4AF" font-weight="700">- ばね</text>';
+    var n=1;
+    while(n*F1<fMax){
+      var pf=n*F1, px=xOf(pf);
+      if(n%2===1){
+        ns+='<line x1="'+px+'" y1="'+YT+'" x2="'+px+'" y2="'+YB+'" stroke="#00A4AF" stroke-width="1" stroke-dasharray="4 4"/>';
+        ns+='<text x="'+px+'" y="'+(YT-6)+'" text-anchor="middle" font-size="11" font-weight="700" fill="#00A4AF">F'+((n+1)/2)+'</text>';
+      } else {
+        ns+='<circle cx="'+px+'" cy="'+YMID+'" r="3.6" fill="#FFFFFF" stroke="#000" stroke-width="1.4"/>';
+      }
+      n++;
+    }
+    ns+='<path d="'+d+'" fill="none" stroke="#00A4AF" stroke-width="2.5"/>';
+    var g=fh/F1, near=Math.round(g);
+    var poleNear=(Math.abs(g-near)<0.07)&&(near%2===1);
+    var zone= poleNear ? 'resonance' : ((Math.floor(g)%2===0) ? 'inertive' : 'compliant');
+    var hx=xOf(fh);
+    var hy=(Math.abs(Math.cos(Math.PI*fh/(2*F1)))<0.055) ? YMID : curveY(fh,F1,kk);
+    var fill=(zone==='inertive')?'#00A4AF':'#FFFFFF';
+    var strk=(zone==='inertive')?'#00A4AF':'#000000';
+    ns+='<line x1="'+hx+'" y1="'+YT+'" x2="'+hx+'" y2="'+YB+'" stroke="#000" stroke-width="2"/>';
+    ns+='<circle cx="'+hx+'" cy="'+hy.toFixed(1)+'" r="6.5" fill="'+fill+'" stroke="'+strk+'" stroke-width="2"/>';
+    ns+='<text x="'+hx+'" y="'+(YB+22)+'" text-anchor="middle" font-size="11" font-weight="700">倍音</text>';
+    ns+='<text x="'+X1+'" y="'+(YB+22)+'" text-anchor="end" font-size="11">周波数 (Hz)</text>';
+    svg.innerHTML=ns;
+    rF1.textContent=Math.round(F1)+' Hz';
+    rFh.textContent=Math.round(fh)+' Hz';
+    var zj={ inertive:'イナーティブ（+）', compliant:'コンプライアント（-）', resonance:'フォルマント上（約0）' }[zone];
+    rZone.textContent=zj;
+    var ver={
+      inertive:'イナーティブ ── 声道は質量性の負荷を返す。反射圧が声門振動にエネルギーを足し、PTP を下げ CQ を上げる。',
+      compliant:'コンプライアント ── 声道はばね性の負荷を返す。発声に逆らい、この倍音の残響の減衰を早める。',
+      resonance:'フォルマント上 ── リアクタンスはほぼ 0（純抵抗）。入力インピーダンス最大。慣性の助けはこの一点で消える。'
+    }[zone];
+    rVer.textContent=ver;
+  }
+  function setMode(m){
+    mode=m;
+    bN.className=(m==='norm')?'modebtn on':'modebtn';
+    bS.className=(m==='sovt')?'modebtn on':'modebtn';
+    bN.setAttribute('aria-pressed', m==='norm');
+    bS.setAttribute('aria-pressed', m==='sovt');
+    render();
+  }
+  slider.addEventListener('input',render);
+  bN.addEventListener('click',function(){ setMode('norm'); });
+  bS.addEventListener('click',function(){ setMode('sovt'); });
+  setMode('norm');
+})();
+</script>
+
+</body>
+</html>

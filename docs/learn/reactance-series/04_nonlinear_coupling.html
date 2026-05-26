@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>リアクタンス 上級編 — 非線形ソース・フィルター結合</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Ubuntu+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{ --accent:#00A4AF; }
+*{ box-sizing:border-box; }
+html,body{ margin:0; padding:0; }
+body{ font-family:'Noto Sans JP',sans-serif; color:#000; background:#fff; line-height:1.88; font-size:16px; }
+.mono{ font-family:'Ubuntu Mono',monospace; }
+.v{ white-space:nowrap; }
+.eq{ font-family:'Ubuntu Mono',monospace; white-space:nowrap; font-size:14.5px; }
+svg text{ font-family:'Noto Sans JP',sans-serif; fill:#000; }
+
+header.wall{ border-bottom:3px solid #000; }
+.wrap{ max-width:1160px; margin:0 auto; padding:0 28px; }
+header .kicker{ color:var(--accent); font-weight:700; font-size:13px; letter-spacing:.04em; margin:30px 0 6px; }
+header h1{ font-size:28px; font-weight:700; margin:0 0 11px; line-height:1.44; }
+header .dek{ font-size:15px; margin:0 0 26px; max-width:790px; }
+
+.layout{ display:grid; grid-template-columns:minmax(0,1fr) 326px; gap:40px; align-items:start; }
+main{ min-width:0; padding:34px 0 64px; }
+aside{ position:sticky; top:0; max-height:100vh; overflow-y:auto; padding:34px 0 40px; }
+
+section{ margin:0 0 38px; }
+h2{ font-size:20px; font-weight:700; margin:0 0 4px; }
+.kick{ color:var(--accent); font-size:12px; font-weight:700; margin:0 0 14px; }
+p{ margin:0 0 14px; }
+a{ color:var(--accent); text-decoration:none; border-bottom:1px solid var(--accent); }
+strong{ font-weight:700; }
+.em{ color:var(--accent); font-weight:700; }
+hr.sep{ border:0; border-top:1px solid #000; margin:36px 0; }
+
+.eqblock{ font-family:'Ubuntu Mono',monospace; font-size:14.5px; border:1px solid #000; border-radius:10px; padding:13px 16px; margin:14px 0; line-height:1.7; }
+.panel{ border:1px solid #000; border-radius:10px; padding:18px 20px; margin:16px 0; }
+.fig{ border:1px solid #000; border-radius:10px; padding:16px 18px; margin:18px 0; }
+.fig svg{ display:block; width:100%; height:auto; }
+.figlabel{ font-weight:700; color:var(--accent); font-size:13px; margin-bottom:8px; }
+.figcap{ font-size:13px; margin-top:10px; line-height:1.75; }
+
+.tbox{ border:1px solid #000; border-radius:10px; overflow:hidden; margin:16px 0; }
+table{ border-collapse:collapse; width:100%; font-size:14px; }
+th,td{ text-align:left; padding:9px 12px; vertical-align:top; }
+thead th{ font-weight:700; border-bottom:2px solid #000; }
+tbody td{ border-top:1px solid #000; }
+
+ol,ul{ margin:0 0 14px; padding-left:1.45em; }
+li{ margin:0 0 9px; }
+
+.widget{ border:1.5px solid var(--accent); border-radius:12px; padding:20px; margin:20px 0; }
+.controls{ display:flex; flex-wrap:wrap; gap:22px 26px; align-items:center; }
+.cgroup{ display:flex; flex-direction:column; gap:6px; }
+.clab{ font-size:12px; font-weight:700; }
+input[type=range]{ width:300px; accent-color:var(--accent); }
+.wlayout{ display:flex; flex-wrap:wrap; gap:18px; align-items:flex-start; }
+.wlayout svg{ flex:0 0 320px; max-width:340px; }
+.wside{ flex:1; min-width:220px; }
+.maphint{ font-size:12px; margin-top:8px; line-height:1.7; }
+.readout{ font-size:13.5px; }
+.readout .row{ margin:0 0 6px; }
+.readout .lab{ font-weight:700; }
+.readout .val{ font-family:'Ubuntu Mono',monospace; }
+.verdict{ border-top:1px solid #000; margin-top:12px; padding-top:11px; font-size:14px; }
+.verdict .vt{ font-weight:700; color:var(--accent); }
+
+aside h2{ font-size:15px; border-bottom:2px solid #000; padding-bottom:6px; margin-bottom:0; }
+aside .tbox{ border:none; border-radius:0; }
+aside table{ font-size:12.5px; line-height:1.6; }
+aside th{ display:none; }
+aside td{ padding:9px 4px; }
+aside td.term{ font-weight:700; width:40%; }
+aside tbody td{ border-top:1px solid #000; }
+
+@media(max-width:1000px){
+  .layout{ grid-template-columns:1fr; gap:8px; }
+  aside{ position:static; max-height:none; overflow:visible; order:-1; padding:18px 0 8px; }
+  main{ padding-top:14px; }
+  input[type=range]{ width:230px; }
+  .wlayout svg{ flex-basis:auto; width:100%; }
+}
+</style>
+</head>
+<body>
+
+<header class="wall">
+  <div class="wrap">
+    <div class="kicker">声楽音響 — 上級編</div>
+    <h1>リアクタンス 上級編<br>非線形ソース・フィルター結合の理論</h1>
+    <p class="dek">詳細編は <span class="eq">X = ωM − 1/ωC</span> と開管の <span class="eq">tan(kL)</span> まで到達し、定量は「Titze 2008 の領域」と保留した。本編はその保留分 ── 声道が声帯の振動そのものに干渉し、流パルスの形・発声閾値圧・系の安定性まで変える「非線形結合」── を扱う。</p>
+  </div>
+</header>
+
+<div class="wrap">
+<div class="layout">
+
+<main>
+
+  <section>
+    <h2>この編の位置づけ</h2>
+    <p class="kick">梯子のいちばん上</p>
+    <p>導入編：たとえ話。中級編：手応えの曲線。詳細編：<span class="eq">tan(kL)</span> と符号反転の物理。<strong>上級編（ここ）：声源と声道を別々に扱う線形モデルが崩れる場所</strong> ── 声道のリアクタンスが声帯振動へ「逆流」して結合する非線形領域。</p>
+    <p>これまでは暗黙に、声帯（ソース）が音を作り、声道（フィルタ）がそれを受動的に色づける、という<strong>一方向</strong>を前提にしてきた。実際の発声では、声道が声門へ返す圧が、声帯の振動の<strong>形・タイミング・安定性そのもの</strong>を変える。Titze はこの双方向の干渉を<strong>非線形ソース・フィルター結合</strong>と呼ぶ。本編はそれを4段階で追う ── 厳密なインピーダンス、エネルギー収支、Level 1／Level 2 の結合、非線形力学としての不安定性 ── 最後に声門下系まで視野を広げる。</p>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>1 — 厳密な入力インピーダンスと、損失</h2>
+    <p class="kick">tan(kL) と、その理想化の限界</p>
+    <p>詳細編の「開管の入力リアクタンスは下側で慣性的」を式で書く。無損失の一様管（声門側で駆動、唇側が開）の入力インピーダンスは</p>
+    <div class="eqblock">Z<sub>in</sub>(ω) = j · Z<sub>0</sub> · tan(kL)　　Z<sub>0</sub> = ρc / A,　k = ω / c</div>
+    <p><span class="eq">Z<sub>0</sub></span> は<a href="#t-z0">特性インピーダンス</a>（<span class="eq">ρ</span>＝空気密度、<span class="eq">c</span>＝音速、<span class="eq">A</span>＝断面積）、<span class="eq">L</span> は管長。低周波（<span class="eq">kL</span> 小）では <span class="eq">tan(kL) ≈ kL > 0</span> → <span class="eq">Z<sub>in</sub></span> は正の虚数＝<strong>イナーティブ</strong>。<span class="eq">kL = π/2</span>（管が <span class="v">1/4</span> 波長）で <span class="eq">tan → ∞</span>、ここが第一フォルマント＝<strong>入力インピーダンスの極</strong>。その直上で <span class="eq">tan</span> は <span class="eq">−∞</span> へ飛び、<strong>コンプライアント</strong>に反転する。これが詳細編の符号反転の、式としての裏付けだ。</p>
+    <p>ただし <span class="eq">tan</span> の極（<span class="eq">±∞</span>）は理想化にすぎない。実際の声道には3種類の<a href="#t-loss">損失</a>がある ── 壁の粘弾性損失、空気の粘性・熱損失、そして<a href="#t-zrad">唇からの放射</a>（放射インピーダンス <span class="eq">Z<sub>rad</sub></span> は小さいが <span class="eq">0</span> ではない＝開端は完全な開ではなく、小さな抵抗と慣性=端補正を持つ）。これらが極を<strong>有限の高さ・有限の幅の山</strong>に丸める。共鳴の鋭さは <a href="#t-q">Q値</a>で表され、声道 <span class="v">F1</span> の Q はおよそ十数程度。結果、リアクタンスは <span class="eq">±∞</span> を取らずに<strong>なめらかに 0 を横切る</strong>（図1）。符号の規則（下＝イナーティブ・上＝コンプライアント）は保たれるが、「フォルマント上＝純抵抗」は厳密には「抵抗が極大・リアクタンス 0」の有限点になる。</p>
+
+    <div class="fig">
+      <div class="figlabel">図1 — 理想（無損失）の極と、損失で丸められた実際のリアクタンス</div>
+      <svg viewBox="0 0 720 290" role="img" aria-label="フォルマント付近の入力リアクタンス。理想は極で発散、実際は損失で有限の山になる">
+        <line x1="70" y1="155" x2="670" y2="155" stroke="#000" stroke-width="1.4"/>
+        <text x="666" y="149" text-anchor="end" font-size="11">リアクタンス 0</text>
+        <text x="676" y="175" text-anchor="end" font-size="11">周波数</text>
+        <line x1="370" y1="40" x2="370" y2="270" stroke="#000" stroke-width="1" stroke-dasharray="3 3"/>
+        <text x="370" y="32" text-anchor="middle" font-size="12" font-weight="700">F1</text>
+        <path d="M 90 152 C 220 146 320 122 358 50" fill="none" stroke="#000" stroke-width="2" stroke-dasharray="6 5"/>
+        <path d="M 382 262 C 420 188 540 160 670 156" fill="none" stroke="#000" stroke-width="2" stroke-dasharray="6 5"/>
+        <path d="M 90 155 C 200 150 250 86 312 82 C 346 80 360 112 370 155 C 380 198 396 230 432 228 C 500 224 570 159 670 156" fill="none" stroke="#00A4AF" stroke-width="2.7"/>
+        <text x="150" y="120" font-size="11.5" font-weight="700">理想（無損失）：極＝±∞</text>
+        <text x="470" y="120" font-size="11.5" font-weight="700" fill="#00A4AF">実際（損失あり）：有限の山</text>
+      </svg>
+      <p class="figcap">壁・粘性・放射の損失が <span class="eq">tan</span> の極を有限の山に丸める。下＝イナーティブ／上＝コンプライアントの反転は残るが、不連続はならされ、フォルマント上は「抵抗が極大・リアクタンス 0」の有限点になる。</p>
+    </div>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>2 — エネルギー収支：なぜイナーティブが PTP を下げるのか</h2>
+    <p class="kick">仕事ループ</p>
+    <p>詳細編は「イナーティブだと声門振動を助ける」と述べたが、<strong>なぜ助かるのか</strong>を定量で言う。声帯は自分では動力源を持たない。気流から組織へ<strong>エネルギーが正味で流れ込み</strong>、組織の粘弾性損失を上回るときだけ、振動が自励的に持続する。</p>
+    <p>1振動周期に声帯組織へ渡る正味エネルギーは、声帯表面にかかる圧 <span class="eq">p</span> と声門面積 <span class="eq">A</span> がつくる<a href="#t-loop">仕事ループ</a>の<strong>囲む面積</strong>に等しい。</p>
+    <div class="eqblock">W = ∮ p dA　　（1周期の正味仕事）　　W &gt; 0 ⇔ 振動が自励持続</div>
+    <p>このループが正の面積を囲むか負を囲むかは、<strong>駆動圧 <span class="eq">p</span> と面積 <span class="eq">A</span> の位相差 <span class="eq">φ</span></strong> で決まる。そして<strong class="em">その位相差を設定しているのが声道のリアクタンス</strong>だ。声道がイナーティブなら、声門上の圧は流量に対して位相が進み（理論上 <span class="eq">+90°</span> まで）、ループは<strong>正の面積</strong>を囲む ── 気流から声帯へエネルギーが入る。コンプライアントなら位相が逆へ振れ、ループは負の面積＝エネルギーが<strong>流出</strong>し、振動に逆らう。</p>
+    <p>これが<a href="#t-ptp">発声閾値圧 PTP</a>を動かす機構そのものだ。Titze の<a href="#t-sao">小振幅振動理論</a>では、PTP は「気流から入るエネルギー＝組織損失」が釣り合う肺圧として与えられる。イナーティブな声道は、入る側に有利な項を足して PTP を<strong>下げ</strong>、コンプライアントな声道はそれを<strong>上げ</strong>、極端には振動を消す。下のループを動かして、声道リアクタンスが仕事の符号をどう決めるかを見てほしい。</p>
+
+    <div class="widget">
+      <div class="controls">
+        <div class="cgroup">
+          <span class="clab">声道リアクタンス（コンプライアント ← 0 → イナーティブ）</span>
+          <input id="wl-r" type="range" min="0" max="100" step="1" value="78" aria-label="声道リアクタンス">
+        </div>
+      </div>
+      <div class="wlayout">
+        <svg id="wl-svg" viewBox="0 0 320 320" role="img" aria-label="声門面積と駆動圧がつくる仕事ループ"></svg>
+        <div class="wside">
+          <div class="readout">
+            <div class="row"><span class="lab">位相差 φ：</span><span id="wl-phi" class="val">—</span></div>
+            <div class="row"><span class="lab">1周期の正味仕事 W（∝ sin φ）：</span><span id="wl-w" class="val">—</span></div>
+            <div class="row"><span class="lab">PTP への効果：</span><span id="wl-ptp">—</span></div>
+          </div>
+          <div class="verdict"><span class="vt">声帯への影響：</span><span id="wl-ver">—</span></div>
+          <p class="maphint">ループが囲む面積＝1周期に声帯へ渡る正味エネルギー。φ&gt;0（イナーティブ）で正、φ&lt;0（コンプライアント）で負、φ=0 でループはつぶれて面積ゼロ。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>3 — グロッタル流パルスの歪み（skewing）</h2>
+    <p class="kick">イナーティブ負荷の、時間領域の指紋</p>
+    <p>イナーティブ結合のいちばん直接に観測できる結果は、<a href="#t-flow">グロッタル流</a>パルスの<strong>形の歪み</strong>だ。結合がなければ、流パルスはおおむね声門面積の変化に従う、ほぼ対称な山になる。</p>
+    <p>イナーティブな声道が載ると、質量性の空気は<strong>立ち上がりでは流れの増加に抵抗し</strong>、いったん流れ出すと<strong>慣性で流れ続ける</strong>。結果、流パルスは閉じ側（右）へ<strong>歪む</strong> ── 立ち上がりはゆるく、<strong>閉じ際の傾きが急峻</strong>になる。この歪みは Rothenberg (1981) が最初に記述した。</p>
+    <p>閉じ際の急峻さは <a href="#t-mfdr">MFDR（最大流量下降率）</a>として測られる。MFDR は<strong>励起の強さの主要な決定因</strong>であり、放射音の音圧と高次倍音の量をほぼ支配する。つまりイナーティブ結合は二重に効く ── 第2節で見た<strong>振動の維持</strong>に加え、パルスを歪めて<strong>励起を強め、音を明るくする</strong>。</p>
+
+    <div class="fig">
+      <div class="figlabel">図2 — 流パルスの歪み：結合なし（対称） vs イナーティブ負荷（閉じ側へ歪む）</div>
+      <svg viewBox="0 0 600 250" role="img" aria-label="対称な流パルスと、閉じ側へ歪んだ流パルスの比較">
+        <line x1="100" y1="210" x2="540" y2="210" stroke="#000" stroke-width="1.4"/>
+        <text x="540" y="230" text-anchor="end" font-size="11">時間（1周期）</text>
+        <text x="92" y="86" text-anchor="end" font-size="11">流量</text>
+        <path d="M 120.0 210.0 L 156.0 199.9 L 192.0 172.7 L 228.0 136.9 L 264.0 103.6 L 300.0 83.2 L 318.0 80.0 L 336.0 82.0 L 372.0 100.5 L 408.0 132.8 L 444.0 168.9 L 480.0 197.6 L 516.0 209.9 L 519.0 210.0" fill="none" stroke="#000" stroke-width="1.8" stroke-dasharray="6 5"/>
+        <path d="M 120.0 210.0 L 156.0 209.8 L 192.0 207.8 L 228.0 200.2 L 264.0 182.9 L 300.0 153.8 L 336.0 117.4 L 372.0 87.0 L 396.0 80.0 L 420.0 89.5 L 444.0 116.3 L 462.0 144.3 L 480.0 173.7 L 498.0 197.7 L 516.0 209.6 L 519.0 210.0" fill="none" stroke="#00A4AF" stroke-width="2.8"/>
+        <line x1="448" y1="120" x2="476" y2="186" stroke="#000" stroke-width="1.6"/>
+        <circle cx="462" cy="153" r="3.6" fill="#000"/>
+        <text x="250" y="74" font-size="11.5" font-weight="700">結合なし：ほぼ対称</text>
+        <text x="486" y="120" font-size="11.5" font-weight="700" fill="#00A4AF">イナーティブ負荷：</text>
+        <text x="486" y="136" font-size="11.5" font-weight="700" fill="#00A4AF">閉じ側へ歪む</text>
+        <text x="500" y="170" font-size="10.5">閉じ際が急峻＝MFDR 大</text>
+      </svg>
+      <p class="figcap">イナーティブ負荷は流パルスを閉じ側へ歪ませ、閉じ際の傾き（MFDR）を急にする。MFDR が大きいほど励起が強く、高次倍音が増えて音が明るくなる。</p>
+    </div>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>4 — Level 1 と Level 2：結合の2つの深さ</h2>
+    <p class="kick">「共鳴がソースをどれだけ動かすか」の正体</p>
+    <p>詳細編は「共鳴が声帯振動そのものをどれだけ動かすかは研究中」と書いた。Titze はこの干渉を<strong>2つのレベル</strong>に区別する。</p>
+    <ul>
+      <li><strong><a href="#t-lv1">Level 1 結合</a></strong>：声道の音響が<strong>グロッタル流パルスの形</strong>を変える（第3節の skewing）。流れは負荷で整形されるが、声帯<strong>組織の振動パターンそのものは基本的に不変</strong>。これは「音響的負荷」であり、つねに存在し、議論の余地は小さい。</li>
+      <li><strong><a href="#t-lv2">Level 2 結合</a></strong>：声道の音響が<strong>声帯組織の振動そのもの</strong>を変える ── 振幅、周波数、声帯の層どうしの位相、さらには「振動するか否か」まで。これが真に非線形な双方向結合で、PTP のシフト、<span class="v">f<sub>o</sub></span> の共鳴への引き込み（entrainment）、レジスター転換、周波数ジャンプ、サブハーモニックを生みうる。</li>
+    </ul>
+    <p>「共鳴がソースをどれだけ動かすか」という問いは、正確には<strong>「通常の歌唱で Level 2 がどれだけ強いか」</strong>だ。Level 1 は常在で堅固。Level 2 の大きさ ── どこまで声道が声帯振動を支配しうるか ── が、いまも活発な研究対象である。</p>
+
+    <div class="fig">
+      <div class="figlabel">図3 — Level 1（流の整形）と Level 2（振動そのものへの干渉）</div>
+      <svg viewBox="0 0 680 250" role="img" aria-label="声帯と声道のあいだの、Level 1とLevel 2の結合経路">
+        <rect x="70" y="92" width="170" height="76" rx="12" fill="#fff" stroke="#000" stroke-width="2.4"/>
+        <text x="155" y="126" text-anchor="middle" font-size="13" font-weight="700">声帯</text>
+        <text x="155" y="146" text-anchor="middle" font-size="11">（振動体）</text>
+        <rect x="440" y="92" width="170" height="76" rx="12" fill="#fff" stroke="#000" stroke-width="2.4"/>
+        <text x="525" y="126" text-anchor="middle" font-size="13" font-weight="700">声道</text>
+        <text x="525" y="146" text-anchor="middle" font-size="11">（共鳴器）</text>
+        <line x1="240" y1="118" x2="432" y2="118" stroke="#000" stroke-width="2.2"/>
+        <path d="M 424 110 L 438 118 L 424 126 Z" fill="#000"/>
+        <text x="336" y="108" text-anchor="middle" font-size="11">流れ（ソース信号）</text>
+        <path d="M 432 150 C 360 184 300 184 250 150" fill="none" stroke="#00A4AF" stroke-width="2.2"/>
+        <path d="M 256 158 L 244 146 L 262 142 Z" fill="#00A4AF"/>
+        <text x="340" y="200" text-anchor="middle" font-size="11" font-weight="700" fill="#00A4AF">Level 1：声道音響 → 流パルスの形（skewing）</text>
+        <path d="M 525 92 C 525 44 155 44 155 88" fill="none" stroke="#00A4AF" stroke-width="2.2" stroke-dasharray="6 5"/>
+        <path d="M 149 80 L 155 94 L 162 80 Z" fill="#00A4AF"/>
+        <text x="340" y="32" text-anchor="middle" font-size="11" font-weight="700" fill="#00A4AF">Level 2：声道音響 → 声帯振動そのもの（非線形・双方向）</text>
+      </svg>
+      <p class="figcap">Level 1 は流パルスの整形（常在・堅固）。Level 2 は声帯の振動そのものへの干渉（非線形・双方向、強さは研究中）。詳細編が保留した「未解決」は、この Level 2 の大きさのこと。</p>
+    </div>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>5 — 非線形力学系としての声：分岐と不安定性</h2>
+    <p class="kick">パッサッジョを「分岐」として見直す</p>
+    <p>Level 2 結合が効くと、声帯と声道の空気は<strong>互いに結合した非線形振動子の系</strong>になる。線形なら入力に比例した応答が返るだけだが、非線形結合系は<a href="#t-bif">分岐（bifurcation）</a>を起こす ── ピッチ・母音・息圧などのパラメータをゆっくり動かしたとき、ある点で系の挙動が<strong>不連続に質的に変わる</strong>。</p>
+    <p>結合がもっとも強いのは<strong>フォルマントと倍音が交差する近傍</strong> ── まさに <span class="v">2f<sub>o</sub></span> が <span class="v">F1</span> を越えるパッサッジョの「ターン」だ。この近傍で結合系は不安定になりやすく、周波数ジャンプ、声の break、レジスターの飛び、サブハーモニック、極端には準周期・カオス的振動が現れうる。さらに<a href="#t-hys">ヒステリシス</a> ── break が起きるピッチが、上行と下行で違う（系が「記憶」と双安定性を持つ）。</p>
+    <p>これは中級・詳細編の「<span class="v">2f<sub>o</sub></span> が <span class="v">F1</span> を越えてリアクタンスが反転する」という像を、一段深く描き直す。パッサッジョが単にしんどいだけでなく<strong>不安定で予測しにくい</strong>のは、そこが結合系の分岐点だからだ。熟練した歌い手は、この分岐をなめらかに通過するよう声道と声門を調整している ── カバーや <span class="v">[næ]</span> のような戦略は、分岐の通り抜け方を制御していると解釈できる。</p>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>6 — 声門は「両側」から負荷を受ける</h2>
+    <p class="kick">声門下系と、epilarynx</p>
+    <p>ここまで声道＝声門より上だけを見てきた。だが声門は<strong>上下両側</strong>から音響負荷を受ける。下側には<a href="#t-subglottal">気管・声門下系</a>（肺までの気道）が広がり、これも声門にインピーダンスを返す ── 下からのイナーティブ／コンプライアントなリアクタンスだ。</p>
+    <p>声門下系にも共鳴があり、第一<a href="#t-subres">気管共鳴</a>はおよそ <span class="v">600 Hz</span> 付近（その上に <span class="v">1.3 kHz</span>、<span class="v">2.2 kHz</span> 程度）。倍音が声門下共鳴を横切ると、声源は<strong>下から</strong>もリアクタンスのシフトを受ける。第一気管共鳴が男声のパッサッジョ帯にかかることから、レジスターの break に声門下結合が関与するという議論もある（ただし定説には至っていない）。</p>
+    <p>もう一つ、声門の<strong>すぐ上</strong>にある短い管 ── <a href="#t-epilarynx">epilarynx（喉頭上部管）</a>。これは声道の一部であると同時に、半ば独立した共鳴器として働く。出口（披裂喉頭蓋部）を狭めると epilarynx のインピーダンスが上がり、<strong>声源のすぐ近くで</strong>イナーティブなリアクタンスを足す ── 声門に最も近いぶん結合効率が高い。同時に高次の共鳴を <span class="v">3 kHz</span> 付近へ束ね、<a href="#t-sfc">シンガーズ・フォルマント・クラスター</a>（声の通り）を作る（Titze &amp; Story; Sundberg）。</p>
+
+    <div class="fig">
+      <div class="figlabel">図4 — 声門は上（声道）と下（声門下系）の両方から負荷を受ける</div>
+      <svg viewBox="0 0 620 240" role="img" aria-label="声門を中心に、上の声道と下の気管がそれぞれリアクタンスを返す">
+        <line x1="240" y1="120" x2="380" y2="120" stroke="#000" stroke-width="3"/>
+        <text x="310" y="112" text-anchor="middle" font-size="12" font-weight="700">声門</text>
+        <rect x="270" y="40" width="80" height="64" rx="10" fill="#fff" stroke="#000" stroke-width="2.2"/>
+        <text x="310" y="68" text-anchor="middle" font-size="11.5" font-weight="700">声道</text>
+        <text x="310" y="86" text-anchor="middle" font-size="10">（声門上）</text>
+        <rect x="270" y="136" width="80" height="64" rx="10" fill="#fff" stroke="#000" stroke-width="2.2"/>
+        <text x="310" y="164" text-anchor="middle" font-size="11.5" font-weight="700">気管</text>
+        <text x="310" y="182" text-anchor="middle" font-size="10">声門下系</text>
+        <path d="M 372 56 C 470 56 470 110 392 116" fill="none" stroke="#00A4AF" stroke-width="2.2"/>
+        <path d="M 400 110 L 388 117 L 399 124 Z" fill="#00A4AF"/>
+        <text x="486" y="60" font-size="11" font-weight="700" fill="#00A4AF">上からの</text>
+        <text x="486" y="76" font-size="11" font-weight="700" fill="#00A4AF">リアクタンス</text>
+        <path d="M 372 184 C 470 184 470 130 392 124" fill="none" stroke="#00A4AF" stroke-width="2.2"/>
+        <path d="M 400 130 L 388 123 L 399 116 Z" fill="#00A4AF"/>
+        <text x="486" y="172" font-size="11" font-weight="700" fill="#00A4AF">下からの</text>
+        <text x="486" y="188" font-size="11" font-weight="700" fill="#00A4AF">リアクタンス</text>
+        <path d="M 248 96 C 200 96 200 76 168 76" fill="none" stroke="#000" stroke-width="1.8"/>
+        <text x="150" y="80" text-anchor="end" font-size="10.5">epilarynx＝</text>
+        <text x="150" y="95" text-anchor="end" font-size="10.5">声門直上の小管</text>
+      </svg>
+      <p class="figcap">完全な像：声門は2つのリアクティブな負荷のあいだに座り、さらに声門直上の epilarynx が「声源のすぐ隣のリアクティブ素子」として特別に強く効く。</p>
+    </div>
+  </section>
+
+  <hr class="sep">
+
+  <section>
+    <h2>注記 — 研究の最前線と出典</h2>
+    <p class="kick">まだ決着していないこと</p>
+    <ul>
+      <li><strong>Level 2 の大きさ。</strong>通常の・熟練した歌唱で、声道が声帯振動そのものをどこまで支配するか。Level 1（流の整形）は堅固だが、Level 2 の定量は依然研究中。</li>
+      <li><strong>「フォルマント・チューニング」の駆動因。</strong>クラシックの母音調整による利得が、リアクタンス結合（能動的なエネルギー授受）によるのか、単に倍音をフォルマントの振幅ピークに乗せる受動的増幅によるのか ── 両者の寄与配分は文脈依存で、完全には切り分けられていない。</li>
+      <li><strong>測定の難しさ。</strong>声門内の圧や結合の強さを生体で直接測ることは困難で、多くはモデル・合成・間接指標による。</li>
+      <li><strong>声門下結合のレジスターへの関与</strong>は提唱されているが定説には至らない。</li>
+    </ul>
+    <p style="margin-top:16px;"><strong>出典。</strong></p>
+    <p class="figcap" style="margin-top:4px;">
+    中核：I. R. Titze, "Nonlinear source–filter coupling in phonation: Theory," <em>JASA</em>, 2008（非線形ソース・フィルター結合、Level 1／Level 2）。<br>
+    流の歪み：M. Rothenberg, "Acoustic interaction between the glottal source and the vocal tract"（<em>Vocal Fold Physiology</em>, 1981 ── inertive 負荷による skewing）。<br>
+    閾値圧：I. R. Titze, "The physics of small-amplitude oscillation of the vocal folds," <em>JASA</em>, 1988（小振幅振動理論と PTP）。<br>
+    下部声道・epilarynx：I. R. Titze &amp; B. H. Story, "Acoustic interactions of the voice source with the lower vocal tract," <em>JASA</em>, 1997。シンガーズ・フォルマントは J. Sundberg の一連の研究。<br>
+    非線形力学：H. Herzel, P. Mergell, J. C. Lucero, I. Tokuda らによる声の分岐・不安定性の研究。<br>
+    プロジェクト内：PVA の「Non-Linear Source-Filter Theory Revisited」節、および Hearing Singing 第11章（注3に Titze 2008）は本編の主題に触れるが、ここまでは展開していない ── 本編はそれを一般の声科学文献から補ったもの。
+    </p>
+  </section>
+
+</main>
+
+<aside>
+  <h2>用語</h2>
+  <div class="tbox">
+  <table>
+    <thead><tr><th>用語</th><th>定義</th></tr></thead>
+    <tbody>
+      <tr id="t-nlc"><td class="term">非線形ソース・フィルター結合</td><td>声道の音響が声帯側へ逆流し、流れと振動を双方向に変える干渉。線形な source/filter 分離が崩れる領域。</td></tr>
+      <tr id="t-z0"><td class="term">特性インピーダンス Z<sub>0</sub></td><td>管が進行波に返すインピーダンス。Z<sub>0</sub>=ρc/A（密度×音速÷断面積）。</td></tr>
+      <tr id="t-loss"><td class="term">損失（声道の）</td><td>壁の粘弾性、空気の粘性・熱、唇からの放射によるエネルギー散逸。共鳴の極を有限の山に丸める。</td></tr>
+      <tr id="t-zrad"><td class="term">放射インピーダンス Z<sub>rad</sub></td><td>唇の開口が外気へ音を放つときの負荷。小さな抵抗＋小さな慣性（端補正）を持ち、開端は完全な開ではない。</td></tr>
+      <tr id="t-q"><td class="term">Q値</td><td>共鳴の鋭さ。高いほど山が細く高い。声道 F1 の Q はおよそ十数。</td></tr>
+      <tr id="t-loop"><td class="term">仕事ループ</td><td>声帯にかかる圧と声門面積がつくる閉曲線。囲む面積＝1周期に声帯へ渡る正味エネルギー。</td></tr>
+      <tr id="t-ptp"><td class="term">発声閾値圧 PTP</td><td>声帯振動を始める最低肺圧。気流から入るエネルギーと組織損失が釣り合う点。</td></tr>
+      <tr id="t-sao"><td class="term">小振幅振動理論</td><td>Titze による、声帯振動の立ち上がり条件（PTP）を扱う線形安定性の理論。声道リアクタンス項を含む。</td></tr>
+      <tr id="t-flow"><td class="term">グロッタル流</td><td>声門を通り抜ける体積流量。その波形の形（パルス）が放射音の質を決める。</td></tr>
+      <tr id="t-mfdr"><td class="term">MFDR（最大流量下降率）</td><td>グロッタル流が閉じ際に減る最大の傾き。励起の強さと高次倍音量をほぼ支配する。</td></tr>
+      <tr id="t-lv1"><td class="term">Level 1 結合</td><td>声道音響が流パルスの形を変える結合（skewing）。常在し、議論の余地が小さい。</td></tr>
+      <tr id="t-lv2"><td class="term">Level 2 結合</td><td>声道音響が声帯組織の振動そのもの（振幅・周波数・安定性）を変える結合。真に非線形・双方向。</td></tr>
+      <tr id="t-entrain"><td class="term">引き込み（entrainment）</td><td>声帯の振動数が、近い声道共鳴に引き寄せられて同調する現象。Level 2 結合の表れ。</td></tr>
+      <tr id="t-bif"><td class="term">分岐（bifurcation）</td><td>パラメータをゆっくり変えたとき、系の挙動が不連続に質的に変わること。周波数ジャンプや break の数理。</td></tr>
+      <tr id="t-hys"><td class="term">ヒステリシス</td><td>同じパラメータ値でも、上行か下行かで系の状態が違うこと。双安定性・記憶の表れ。</td></tr>
+      <tr id="t-subglottal"><td class="term">声門下系</td><td>声門より下、気管から肺までの気道。声門に下からインピーダンスを返す。</td></tr>
+      <tr id="t-subres"><td class="term">気管共鳴（声門下共鳴）</td><td>声門下系の共鳴。第一はおよそ 600 Hz 付近。倍音が横切ると下からのリアクタンスが変わる。</td></tr>
+      <tr id="t-epilarynx"><td class="term">epilarynx（喉頭上部管）</td><td>声帯直上の短い管。半ば独立した共鳴器で、声源のすぐ近くで強くリアクタンスを足す。</td></tr>
+      <tr id="t-sfc"><td class="term">シンガーズ・フォルマント・クラスター</td><td>3 kHz 付近に高次共鳴が束ねられたピーク。声の通り（carrying power）を生む。epilarynx 由来。</td></tr>
+    </tbody>
+  </table>
+  </div>
+</aside>
+
+</div>
+</div>
+
+<script>
+(function(){
+  var svg=document.getElementById('wl-svg');
+  var sl=document.getElementById('wl-r');
+  var ePhi=document.getElementById('wl-phi'), eW=document.getElementById('wl-w'),
+      ePtp=document.getElementById('wl-ptp'), eVer=document.getElementById('wl-ver');
+  var CX=160, CY=172, R=104;
+  function render(){
+    var s=+sl.value;
+    var phiDeg=-80+(s/100)*160;
+    var phi=phiDeg*Math.PI/180;
+    var d='', i, th, x, y;
+    for(i=0;i<=72;i++){
+      th=i/72*2*Math.PI;
+      x=CX+R*Math.cos(th);
+      y=CY-R*Math.cos(th-phi);
+      d+=(i===0?'M ':'L ')+x.toFixed(1)+' '+y.toFixed(1)+' ';
+    }
+    d+='Z';
+    var ns='';
+    ns+='<line x1="'+(CX-R-24)+'" y1="'+CY+'" x2="'+(CX+R+24)+'" y2="'+CY+'" stroke="#000" stroke-width="1.1"/>';
+    ns+='<line x1="'+CX+'" y1="'+(CY-R-32)+'" x2="'+CX+'" y2="'+(CY+R+22)+'" stroke="#000" stroke-width="1.1"/>';
+    ns+='<text x="'+(CX+R+24)+'" y="'+(CY+15)+'" text-anchor="end" font-size="10.5">声門の開き A</text>';
+    ns+='<text x="'+(CX+7)+'" y="'+(CY-R-22)+'" font-size="10.5">駆動圧 p</text>';
+    ns+='<path d="'+d+'" fill="none" stroke="#00A4AF" stroke-width="2.6"/>';
+    var ta=0.22*2*Math.PI;
+    var ax=CX+R*Math.cos(ta), ay=CY-R*Math.cos(ta-phi);
+    var tx=-Math.sin(ta), ty=Math.sin(ta-phi);
+    var tl=Math.sqrt(tx*tx+ty*ty)||1; tx/=tl; ty/=tl;
+    var a1x=ax-9*tx+4.5*ty, a1y=ay-9*ty-4.5*tx;
+    var a2x=ax-9*tx-4.5*ty, a2y=ay-9*ty+4.5*tx;
+    ns+='<path d="M '+ax.toFixed(1)+' '+ay.toFixed(1)+' L '+a1x.toFixed(1)+' '+a1y.toFixed(1)+' L '+a2x.toFixed(1)+' '+a2y.toFixed(1)+' Z" fill="#00A4AF"/>';
+    svg.innerHTML=ns;
+    var sinp=Math.sin(phi);
+    var zone = sinp>0.04?'in':(sinp<-0.04?'co':'ze');
+    ePhi.textContent=phiDeg.toFixed(0)+'\u00B0';
+    eW.textContent=(sinp>=0?'+':'')+sinp.toFixed(2);
+    ePtp.textContent={in:'下げる（振動が立ちやすい）',co:'上げる（振動が立ちにくい）',ze:'ほぼ変えない'}[zone];
+    eVer.textContent={
+      in:'イナーティブ ── ループが正の面積を囲む。気流から声帯へ正味エネルギーが流入し、自励振動を支える。',
+      co:'コンプライアント ── ループが負の面積を囲む。声帯から正味エネルギーが流出し、振動に逆らう。',
+      ze:'リアクタンスほぼ 0 ── ループがつぶれて面積ゼロ。声道は振動を支えも妨げもしない。'
+    }[zone];
+  }
+  sl.addEventListener('input',render);
+  render();
+})();
+</script>
+
+</body>
+</html>
