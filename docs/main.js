@@ -212,6 +212,11 @@ const els = {
     btnPlay: document.getElementById('audio-toggle'),
     btnMic: document.getElementById('mic-toggle'),
     btnMicPause: document.getElementById('mic-pause'),
+    btnMicRecord: document.getElementById('mic-record'),
+    micRecordTimer: document.getElementById('mic-record-timer'),
+    recordingsList: document.getElementById('recordings-list'),
+    recordingsMeta: document.getElementById('recordings-meta'),
+    recordingsEmpty: document.getElementById('recordings-empty'),
     btnSlopeLine: document.getElementById('slope-line-toggle'),
     btnLogScale: document.getElementById('log-scale-toggle'),
     btnRoughness: document.getElementById('roughness-toggle'),
@@ -2903,6 +2908,13 @@ els.btnMic.addEventListener('click', async () => {
         state.cachedMicFormants = null;
         state.cachedMicFormantsTime = null;
         els.btnMic.classList.remove('mic-active');
+        // Stop any in-progress recording when mic is turned off
+        if (mediaRecorder && mediaRecorder.state === 'recording') stopRecording();
+        if (els.btnMicRecord) {
+            els.btnMicRecord.style.display = 'none';
+            els.btnMicRecord.classList.remove('is-recording');
+            if (els.micRecordTimer) els.micRecordTimer.textContent = '';
+        }
         if (els.btnMicPause) {
             els.btnMicPause.style.display = 'none';
             els.btnMicPause.classList.remove('mic-paused');
@@ -2961,6 +2973,9 @@ els.btnMic.addEventListener('click', async () => {
             if (els.btnMicPause) {
                 els.btnMicPause.style.display = 'inline-flex';
             }
+            if (els.btnMicRecord) {
+                els.btnMicRecord.style.display = 'inline-flex';
+            }
 
             // Kick off visualizer if it wasn't already running
             if (!isPlaying) {
@@ -2991,6 +3006,265 @@ if (els.btnMicPause) {
             els.btnMicPause.innerHTML = isMobilePage ? svgPause : `${svgPause}Pause`;
         }
     });
+}
+
+// ============================================================
+// Recording (local IndexedDB) — record / playback / list / delete
+// ============================================================
+const REC_MAX_MS = 15000;
+let mediaRecorder = null;
+let recChunks = [];
+let recStartTs = 0;
+let recTimerId = null;
+let recAutoStopId = null;
+
+let playbackSource = null;   // AudioBufferSourceNode currently playing a saved recording
+let playbackRecId = null;    // id of recording being played back
+let micWasActiveBeforePlayback = false;
+
+function fmtDuration(ms) {
+    const s = Math.max(0, ms / 1000);
+    return s.toFixed(1) + 's';
+}
+function fmtTimestamp(ms) {
+    const d = new Date(ms);
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function pickRecorderMime() {
+    const candidates = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/mp4;codecs=mp4a.40.2',
+        'audio/mp4',
+        'audio/ogg;codecs=opus'
+    ];
+    for (const m of candidates) {
+        if (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m)) return m;
+    }
+    return '';
+}
+
+function updateRecTimer() {
+    if (!els.micRecordTimer) return;
+    const elapsed = performance.now() - recStartTs;
+    const remain = Math.max(0, REC_MAX_MS - elapsed);
+    els.micRecordTimer.textContent = (remain / 1000).toFixed(1) + 's';
+}
+
+async function startRecording() {
+    if (!micStream || !state.isMicActive) {
+        alert('まずマイクを ON にしてください');
+        return;
+    }
+    if (mediaRecorder && mediaRecorder.state === 'recording') return;
+
+    const mime = pickRecorderMime();
+    try {
+        mediaRecorder = mime ? new MediaRecorder(micStream, { mimeType: mime }) : new MediaRecorder(micStream);
+    } catch (err) {
+        console.error('MediaRecorder init failed:', err);
+        alert('このブラウザは録音をサポートしていません');
+        return;
+    }
+    recChunks = [];
+    mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) recChunks.push(e.data); };
+    mediaRecorder.onstop = async () => {
+        const actualMime = mediaRecorder.mimeType || mime || 'audio/webm';
+        const blob = new Blob(recChunks, { type: actualMime });
+        const durationMs = Math.min(REC_MAX_MS, performance.now() - recStartTs);
+        try {
+            await RecordingsDB.save({
+                blob,
+                durationMs,
+                mimeType: actualMime,
+                sampleRate: audioCtx ? audioCtx.sampleRate : null
+            });
+            await refreshRecordingsList();
+        } catch (err) {
+            console.error('Failed to save recording:', err);
+            alert('録音の保存に失敗しました: ' + err.message);
+        }
+        recChunks = [];
+        if (els.btnMicRecord) els.btnMicRecord.classList.remove('is-recording');
+        if (els.micRecordTimer) els.micRecordTimer.textContent = '';
+        if (recTimerId) { clearInterval(recTimerId); recTimerId = null; }
+        if (recAutoStopId) { clearTimeout(recAutoStopId); recAutoStopId = null; }
+    };
+
+    recStartTs = performance.now();
+    mediaRecorder.start();
+    if (els.btnMicRecord) els.btnMicRecord.classList.add('is-recording');
+    updateRecTimer();
+    recTimerId = setInterval(updateRecTimer, 100);
+    recAutoStopId = setTimeout(() => stopRecording(), REC_MAX_MS);
+}
+
+function stopRecording() {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+    }
+}
+
+// Ensure mic analysis pipeline exists even when live mic is off (for playback)
+async function ensureAnalysisPipeline() {
+    initAudio();
+    if (audioCtx.state === 'suspended') await audioCtx.resume();
+    if (!micGainNode) {
+        micGainNode = audioCtx.createGain();
+        micGainNode.gain.value = state.micGain;
+    }
+    if (!micAnalyser) {
+        micAnalyser = audioCtx.createAnalyser();
+        micAnalyser.fftSize = 4096;
+        micAnalyser.smoothingTimeConstant = 0.8;
+        micGainNode.connect(micAnalyser);
+        // Keep graph alive (same trick as live mic path)
+        const silenceFilter = audioCtx.createGain();
+        silenceFilter.gain.value = 0;
+        micAnalyser.connect(silenceFilter);
+        silenceFilter.connect(audioCtx.destination);
+    }
+}
+
+async function playRecording(id) {
+    // Stop any current playback first
+    if (playbackSource) stopPlayback();
+
+    const rec = await RecordingsDB.get(id);
+    if (!rec) return;
+
+    await ensureAnalysisPipeline();
+
+    // If live mic is currently feeding micGainNode, disconnect it
+    micWasActiveBeforePlayback = !!(micSource && state.isMicActive);
+    if (micWasActiveBeforePlayback && micSource) {
+        try { micSource.disconnect(micGainNode); } catch (_) {}
+    }
+
+    const arrayBuf = await rec.blob.arrayBuffer();
+    let audioBuf;
+    try {
+        audioBuf = await audioCtx.decodeAudioData(arrayBuf.slice(0));
+    } catch (err) {
+        console.error('decodeAudioData failed:', err);
+        alert('録音の再生に失敗しました');
+        // Restore mic connection if we disconnected it
+        if (micWasActiveBeforePlayback && micSource) {
+            try { micSource.connect(micGainNode); } catch (_) {}
+        }
+        return;
+    }
+
+    playbackSource = audioCtx.createBufferSource();
+    playbackSource.buffer = audioBuf;
+    playbackSource.connect(micGainNode);
+
+    playbackRecId = id;
+    state.isMicActive = true; // reuse visualizer path
+    state.isMicPaused = false;
+    if (els.btnMic) els.btnMic.classList.add('mic-active');
+
+    playbackSource.onended = () => {
+        cleanupPlayback();
+    };
+    playbackSource.start();
+
+    if (!isPlaying) {
+        cancelAnimationFrame(animationId);
+        drawVisualizer();
+    }
+    renderRecordingsList();
+}
+
+function stopPlayback() {
+    if (playbackSource) {
+        try { playbackSource.onended = null; playbackSource.stop(); } catch (_) {}
+        try { playbackSource.disconnect(); } catch (_) {}
+    }
+    cleanupPlayback();
+}
+
+function cleanupPlayback() {
+    playbackSource = null;
+    playbackRecId = null;
+    if (micWasActiveBeforePlayback && micSource && micGainNode) {
+        try { micSource.connect(micGainNode); } catch (_) {}
+        micWasActiveBeforePlayback = false;
+    } else {
+        // No live mic — turn off the visualizer mic-active flag
+        state.isMicActive = false;
+        if (els.btnMic) els.btnMic.classList.remove('mic-active');
+        state.cachedMicData = null;
+        state.cachedMicFormants = null;
+    }
+    renderRecordingsList();
+}
+
+async function deleteRecording(id) {
+    if (playbackRecId === id) stopPlayback();
+    if (!confirm('この録音を削除しますか？')) return;
+    await RecordingsDB.remove(id);
+    await refreshRecordingsList();
+}
+
+let cachedRecordingsList = [];
+async function refreshRecordingsList() {
+    cachedRecordingsList = await RecordingsDB.list();
+    renderRecordingsList();
+}
+
+function renderRecordingsList() {
+    if (!els.recordingsList) return;
+    const list = cachedRecordingsList;
+    els.recordingsList.innerHTML = '';
+    if (els.recordingsMeta) els.recordingsMeta.textContent = `${list.length} 件`;
+    if (els.recordingsEmpty) els.recordingsEmpty.style.display = list.length === 0 ? 'block' : 'none';
+
+    for (const rec of list) {
+        const li = document.createElement('li');
+        li.className = 'recordings-item' + (rec.id === playbackRecId ? ' is-playing' : '');
+
+        const timeEl = document.createElement('span');
+        timeEl.className = 'rec-time';
+        timeEl.textContent = fmtTimestamp(rec.createdAt);
+
+        const durEl = document.createElement('span');
+        durEl.className = 'rec-dur';
+        durEl.textContent = fmtDuration(rec.durationMs);
+
+        const playBtn = document.createElement('button');
+        playBtn.className = 'rec-btn';
+        playBtn.type = 'button';
+        const isPlayingThis = rec.id === playbackRecId;
+        playBtn.textContent = isPlayingThis ? '■ Stop' : '▶ Play';
+        playBtn.addEventListener('click', () => {
+            if (isPlayingThis) stopPlayback();
+            else playRecording(rec.id);
+        });
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'rec-btn danger';
+        delBtn.type = 'button';
+        delBtn.textContent = 'Del';
+        delBtn.addEventListener('click', () => deleteRecording(rec.id));
+
+        li.append(timeEl, durEl, playBtn, delBtn);
+        els.recordingsList.appendChild(li);
+    }
+}
+
+if (els.btnMicRecord) {
+    els.btnMicRecord.addEventListener('click', () => {
+        if (mediaRecorder && mediaRecorder.state === 'recording') stopRecording();
+        else startRecording();
+    });
+}
+
+// Initial load
+if (window.RecordingsDB) {
+    refreshRecordingsList().catch(err => console.error('Initial recordings load failed:', err));
 }
 
 // Source Controls

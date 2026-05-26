@@ -443,6 +443,13 @@
                                         fill="currentColor" style="vertical-align: -1px; margin-right: 4px;">
                                         <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
                                     </svg>Pause</button>
+                                <button id="mic-record" class="btn btn-sm" style="display:none;"
+                                    title="Record (max 15s)" aria-label="Record">
+                                    <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"
+                                        style="vertical-align: -1px; margin-right: 4px;">
+                                        <circle cx="12" cy="12" r="6" />
+                                    </svg>Rec<span id="mic-record-timer" style="margin-left:4px;"></span>
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -550,6 +557,18 @@
                             </section>
                         </div>
                     </details>
+                </div>
+
+                <!-- Recordings panel: local-only voice recordings (IndexedDB) -->
+                <div id="recordings-panel" class="recordings-panel">
+                    <div class="recordings-head">
+                        <span class="recordings-title">Recordings</span>
+                        <span class="recordings-meta" id="recordings-meta">0 件</span>
+                    </div>
+                    <ul id="recordings-list" class="recordings-list" aria-live="polite"></ul>
+                    <div class="recordings-empty" id="recordings-empty">
+                        マイクをONにして Rec ボタンで録音（最大15秒・端末内のみに保存）
+                    </div>
                 </div>
 
             </section>
@@ -1110,6 +1129,7 @@
         </div><!-- /.learn-drawer-body -->
     </aside>
 
+    <script src="recordings-db.js"></script>
     <script src="main.js"></script>
     <script>
         // ============================================================
