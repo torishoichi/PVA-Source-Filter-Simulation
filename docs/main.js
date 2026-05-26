@@ -3472,23 +3472,15 @@ function renderRecordingsList() {
             else playRecording(rec.id);
         });
 
-        const makeExportBtn = (fmt, label) => {
-            const b = document.createElement('button');
-            b.className = 'rec-btn rec-btn-export';
-            b.type = 'button';
-            b.textContent = label;
-            b.title = `Download as ${label}`;
-            b.addEventListener('click', async () => {
-                b.disabled = true;
-                const orig = b.textContent;
-                b.textContent = '…';
-                try { await exportRecording(rec.id, fmt); }
-                finally { b.disabled = false; b.textContent = orig; }
-            });
-            return b;
-        };
-        const wavBtn = makeExportBtn('wav', 'WAV');
-        const mp3Btn = makeExportBtn('mp3', 'MP3');
+        const dlBtn = document.createElement('button');
+        dlBtn.className = 'rec-btn';
+        dlBtn.type = 'button';
+        dlBtn.textContent = '↓';
+        dlBtn.title = 'Download (WAV / MP3)';
+        dlBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openExportMenu(dlBtn, rec.id);
+        });
 
         const delBtn = document.createElement('button');
         delBtn.className = 'rec-btn danger';
@@ -3496,10 +3488,61 @@ function renderRecordingsList() {
         delBtn.textContent = 'Del';
         delBtn.addEventListener('click', () => deleteRecording(rec.id));
 
-        li.append(timeEl, labelInput, durEl, playBtn, wavBtn, mp3Btn, delBtn);
+        li.append(timeEl, labelInput, durEl, playBtn, dlBtn, delBtn);
         els.recordingsList.appendChild(li);
     }
 }
+
+// Singleton export menu (position: fixed, anchored to the clicked ↓ button)
+let _exportMenuEl = null;
+function getExportMenu() {
+    if (_exportMenuEl) return _exportMenuEl;
+    const m = document.createElement('div');
+    m.className = 'rec-export-menu';
+    const wav = document.createElement('button');
+    wav.type = 'button'; wav.textContent = 'WAV'; wav.dataset.fmt = 'wav';
+    const mp3 = document.createElement('button');
+    mp3.type = 'button'; mp3.textContent = 'MP3'; mp3.dataset.fmt = 'mp3';
+    m.append(wav, mp3);
+    document.body.appendChild(m);
+    _exportMenuEl = m;
+    return m;
+}
+function closeExportMenu() {
+    if (_exportMenuEl) _exportMenuEl.classList.remove('is-open');
+}
+function openExportMenu(anchorBtn, recId) {
+    const m = getExportMenu();
+    // Re-bind handlers with the current recId
+    for (const btn of m.querySelectorAll('button')) {
+        btn.onclick = async (e) => {
+            e.stopPropagation();
+            const fmt = btn.dataset.fmt;
+            btn.disabled = true;
+            const orig = btn.textContent;
+            btn.textContent = '…';
+            try { await exportRecording(recId, fmt); }
+            finally { btn.disabled = false; btn.textContent = orig; closeExportMenu(); }
+        };
+    }
+    // Position below-right of the anchor, clamped to viewport
+    const r = anchorBtn.getBoundingClientRect();
+    m.classList.add('is-open');
+    const mw = m.offsetWidth;
+    const mh = m.offsetHeight;
+    let left = r.right - mw;
+    let top = r.bottom + 2;
+    if (left < 4) left = 4;
+    if (left + mw > window.innerWidth - 4) left = window.innerWidth - mw - 4;
+    if (top + mh > window.innerHeight - 4) top = r.top - mh - 2;
+    m.style.left = left + 'px';
+    m.style.top = top + 'px';
+}
+document.addEventListener('click', (e) => {
+    if (_exportMenuEl && !_exportMenuEl.contains(e.target)) closeExportMenu();
+});
+window.addEventListener('scroll', closeExportMenu, true);
+window.addEventListener('resize', closeExportMenu);
 
 if (els.btnMicRecord) {
     els.btnMicRecord.addEventListener('click', () => {

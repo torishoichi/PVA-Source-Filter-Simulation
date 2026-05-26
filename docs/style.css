@@ -2651,21 +2651,17 @@ body.learn-drawer-open { overflow: hidden; }
     cursor: pointer;
 }
 
-/* Export menu inside recording row */
-.rec-export-wrap { position: relative; }
+/* Export menu — positioned via JS (position: fixed) to escape overflow */
 .rec-export-menu {
-    position: absolute;
-    right: 0;
-    top: 100%;
-    margin-top: 2px;
-    background: #1c2024;
+    position: fixed;
+    background: var(--bg-panel, #2b2f36);
     border: 1px solid var(--glass-border);
     border-radius: 4px;
     padding: 4px;
-    z-index: 10;
+    z-index: 1000;
     display: none;
-    min-width: 88px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    min-width: 80px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
 }
 .rec-export-menu.is-open { display: block; }
 .rec-export-menu button {
@@ -2675,12 +2671,13 @@ body.learn-drawer-open { overflow: hidden; }
     border: none;
     color: var(--text-primary);
     text-align: left;
-    padding: 5px 8px;
+    padding: 5px 10px;
     font-size: 0.76rem;
     cursor: pointer;
     border-radius: 3px;
+    font-family: inherit;
 }
-.rec-export-menu button:hover { background: rgba(255, 255, 255, 0.08); }
+.rec-export-menu button:hover { background: rgba(127, 127, 127, 0.18); }
 .rec-export-menu button:disabled { opacity: 0.4; cursor: wait; }
 
 .pb-loop-btn {
