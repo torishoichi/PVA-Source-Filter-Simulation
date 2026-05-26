@@ -293,6 +293,151 @@ input[type=range]::-moz-range-track {
     cursor: grabbing;
 }
 
+#spectrogram-canvas {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    background: #0a0a14;
+}
+
+/* Spectrum / Spectrogram view tabs (top-left of canvas) */
+.view-tabs {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    display: inline-flex;
+    background: rgba(255, 255, 255, 0.85);
+    border: 1px solid var(--glass-border);
+    border-radius: 6px;
+    padding: 2px;
+    gap: 2px;
+    z-index: 5;
+    backdrop-filter: blur(4px);
+}
+
+.view-tab {
+    appearance: none;
+    background: transparent;
+    border: none;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary, #555);
+    cursor: pointer;
+    border-radius: 4px;
+    line-height: 1.2;
+    transition: background 0.15s, color 0.15s;
+}
+
+.view-tab:hover {
+    background: rgba(33, 150, 243, 0.08);
+}
+
+.view-tab.is-active {
+    background: var(--accent-color, #2196F3);
+    color: #fff;
+}
+
+/* Vibrato analysis panel */
+.vibrato-panel {
+    margin-top: 10px;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.65);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+}
+
+.vibrato-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
+.vibrato-title {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-secondary, #555);
+}
+
+.vibrato-stats {
+    display: inline-flex;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+
+.vstat {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    padding: 4px 10px;
+    background: rgba(255, 255, 255, 0.7);
+    border: 1px solid var(--glass-border);
+    border-radius: 6px;
+    font-variant-numeric: tabular-nums;
+}
+
+.vstat-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-secondary, #666);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.vstat-val {
+    font-size: 16px;
+    font-weight: 700;
+    color: #1a1a1a;
+    min-width: 28px;
+    text-align: right;
+}
+
+.vstat-unit {
+    font-size: 10px;
+    color: var(--text-secondary, #888);
+}
+
+.vstat-verdict .vstat-val {
+    font-size: 13px;
+    padding: 2px 8px;
+    background: rgba(33, 150, 243, 0.12);
+    color: var(--accent-color, #2196F3);
+    border-radius: 4px;
+}
+
+.vstat-verdict.is-good .vstat-val {
+    background: rgba(76, 175, 80, 0.18);
+    color: #2e7d32;
+}
+
+.vstat-verdict.is-warn .vstat-val {
+    background: rgba(255, 152, 0, 0.18);
+    color: #ef6c00;
+}
+
+.vibrato-canvas-wrap {
+    width: 100%;
+    height: 110px;
+    background: #fdfcf6;
+    border: 1px solid var(--glass-border);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+#vibrato-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
 input[type=range]::-webkit-slider-thumb {
     height: 16px;
     width: 16px;

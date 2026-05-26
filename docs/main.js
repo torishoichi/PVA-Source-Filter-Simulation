@@ -199,6 +199,17 @@ const state = {
         onsetRamp: 400,   // ms
         amDepth: 4,       // %
         waveform: 'sine'  // 'sine' | 'triangle' | 'sawtooth'
+    },
+    viewMode: 'spectrum', // 'spectrum' | 'spectrogram'
+    vibratoAnalysis: {
+        pitchBuf: [],     // [{t: ms, hz: number}], rolling 5s
+        rate: 0,          // Hz
+        extent: 0,        // cents (single-side amplitude)
+        regularity: 0,    // 0–1
+        verdict: '—',     // 'Good vibrato' | 'Straight' | 'Off-rate' | 'Tremor' | '—'
+        lastAnalysisAt: 0,
+        lastDrawnAt: 0,
+        traceCents: [],   // cached cents series for drawing (parallel to pitchBuf)
     }
 };
 
@@ -234,6 +245,15 @@ const els = {
     btnFullscreen: document.getElementById('spectrum-fullscreen-btn'),
     micMethodSelect: document.getElementById('mic-formant-method'),
     canvas: document.getElementById('spectrum-canvas'),
+    spectrogramCanvas: document.getElementById('spectrogram-canvas'),
+    viewTabs: document.getElementById('view-tabs'),
+    vibratoPanel: document.getElementById('vibrato-panel'),
+    vibratoCanvas: document.getElementById('vibrato-canvas'),
+    vibRate: document.getElementById('vib-rate'),
+    vibExtent: document.getElementById('vib-extent'),
+    vibRegularity: document.getElementById('vib-regularity'),
+    vibVerdict: document.getElementById('vib-verdict'),
+    vibVerdictBox: document.getElementById('vib-verdict-box'),
     masterVolume: document.getElementById('master-volume'),
     micGainSlider: document.getElementById('mic-gain'),
     spectrumSlopeSlider: document.getElementById('spectrum-slope'),
@@ -1583,6 +1603,337 @@ function autocorr(buf, period) {
     return sum / (buf.length - period);
 }
 
+// =====================================================================
+// Spectrogram (scrolling) + Vibrato analysis
+// =====================================================================
+
+const SPECTROGRAM_WIDTH = 800;       // history columns (≈10s @ 60fps)
+const SPECTROGRAM_HEIGHT = 256;      // displayed frequency rows
+const SPECTROGRAM_MAX_FREQ = 5000;   // Hz, matches main spectrum upper bound
+let spectrogramImageData = null;
+let spectrogramBuf32 = null;
+let spectrogramCtx = null;
+let spectrogramPalette = null;
+
+function getSpectrogramCtx() {
+    if (!spectrogramCtx && els.spectrogramCanvas) {
+        spectrogramCtx = els.spectrogramCanvas.getContext('2d');
+    }
+    return spectrogramCtx;
+}
+
+function buildSpectrogramPalette() {
+    // Viridis-ish: dark → blue → teal → green → yellow → near-white
+    const stops = [
+        [10, 5, 30],
+        [40, 30, 110],
+        [50, 100, 180],
+        [40, 170, 160],
+        [110, 200, 90],
+        [230, 220, 60],
+        [255, 250, 220]
+    ];
+    const lut = new Uint32Array(256);
+    for (let i = 0; i < 256; i++) {
+        const t = i / 255;
+        const seg = t * (stops.length - 1);
+        const lo = Math.floor(seg);
+        const hi = Math.min(stops.length - 1, lo + 1);
+        const fr = seg - lo;
+        const r = Math.round(stops[lo][0] + (stops[hi][0] - stops[lo][0]) * fr);
+        const g = Math.round(stops[lo][1] + (stops[hi][1] - stops[lo][1]) * fr);
+        const b = Math.round(stops[lo][2] + (stops[hi][2] - stops[lo][2]) * fr);
+        // Uint32 view of ImageData is little-endian: AABBGGRR
+        lut[i] = (0xff << 24) | (b << 16) | (g << 8) | r;
+    }
+    spectrogramPalette = lut;
+}
+
+function initSpectrogramBuffer() {
+    const ctx = getSpectrogramCtx();
+    if (!ctx || !els.spectrogramCanvas) return;
+    if (!spectrogramPalette) buildSpectrogramPalette();
+    if (els.spectrogramCanvas.width !== SPECTROGRAM_WIDTH) {
+        els.spectrogramCanvas.width = SPECTROGRAM_WIDTH;
+        els.spectrogramCanvas.height = SPECTROGRAM_HEIGHT;
+    }
+    if (!spectrogramImageData || spectrogramImageData.width !== SPECTROGRAM_WIDTH) {
+        spectrogramImageData = ctx.createImageData(SPECTROGRAM_WIDTH, SPECTROGRAM_HEIGHT);
+        spectrogramBuf32 = new Uint32Array(spectrogramImageData.data.buffer);
+        spectrogramBuf32.fill(spectrogramPalette[0]);
+    }
+}
+
+function pickSpectrogramAnalyser() {
+    const playbackOn = (typeof playbackAudio !== 'undefined') && playbackAudio && !playbackAudio.paused;
+    if ((state.isMicActive || playbackOn) && micAnalyser) return micAnalyser;
+    if (isPlaying && analyser) return analyser;
+    return null;
+}
+
+function pushSpectrogramColumn() {
+    if (!spectrogramBuf32 || !spectrogramPalette) return;
+    const w = SPECTROGRAM_WIDTH, h = SPECTROGRAM_HEIGHT;
+
+    // Shift left by 1 column (whole buffer; copyWithin is fast)
+    for (let y = 0; y < h; y++) {
+        const off = y * w;
+        spectrogramBuf32.copyWithin(off, off + 1, off + w);
+    }
+
+    const an = pickSpectrogramAnalyser();
+    const colX = w - 1;
+    if (!an || !audioCtx) {
+        for (let y = 0; y < h; y++) spectrogramBuf32[y * w + colX] = spectrogramPalette[0];
+        return;
+    }
+
+    const bins = an.frequencyBinCount;
+    const fft = new Float32Array(bins);
+    an.getFloatFrequencyData(fft);
+    const minDb = an.minDecibels;
+    const maxDb = an.maxDecibels;
+    const dbRange = maxDb - minDb;
+    const nyquist = audioCtx.sampleRate / 2;
+    const useLog = !!state.logScale;
+    const logMin = Math.log10(50);
+    const logMax = Math.log10(SPECTROGRAM_MAX_FREQ);
+
+    for (let y = 0; y < h; y++) {
+        const ny = 1 - (y / (h - 1)); // bottom = 0Hz
+        const freq = useLog
+            ? Math.pow(10, logMin + ny * (logMax - logMin))
+            : ny * SPECTROGRAM_MAX_FREQ;
+        const binF = (freq / nyquist) * bins;
+        const bi = Math.min(bins - 1, Math.max(0, Math.floor(binF)));
+        let db = fft[bi];
+        if (!isFinite(db)) db = minDb;
+        const t = Math.max(0, Math.min(1, (db - minDb) / dbRange));
+        const idx = Math.min(255, Math.max(0, Math.floor(Math.pow(t, 0.7) * 255)));
+        spectrogramBuf32[y * w + colX] = spectrogramPalette[idx];
+    }
+}
+
+function renderSpectrogram() {
+    const ctx = getSpectrogramCtx();
+    if (!ctx || !spectrogramImageData) return;
+    ctx.putImageData(spectrogramImageData, 0, 0);
+}
+
+function applyViewMode(mode) {
+    state.viewMode = mode === 'spectrogram' ? 'spectrogram' : 'spectrum';
+    if (els.canvas) els.canvas.style.display = state.viewMode === 'spectrum' ? 'block' : 'none';
+    if (els.spectrogramCanvas) els.spectrogramCanvas.style.display = state.viewMode === 'spectrogram' ? 'block' : 'none';
+    // Spectrum's x-axis (freq labels) is meaningless in spectrogram mode (freq is on Y there)
+    const xAxis = document.querySelector('.canvas-container .axis-labels.x-axis');
+    if (xAxis) xAxis.style.display = state.viewMode === 'spectrogram' ? 'none' : (state.logScale ? 'none' : '');
+    if (els.viewTabs) {
+        els.viewTabs.querySelectorAll('.view-tab').forEach(btn => {
+            const active = btn.dataset.view === state.viewMode;
+            btn.classList.toggle('is-active', active);
+            btn.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+    }
+    if (state.viewMode === 'spectrogram') {
+        initSpectrogramBuffer();
+        renderSpectrogram();
+    }
+}
+
+// ---------- Vibrato analysis ----------
+const VIBRATO_BUFFER_MS = 5000;
+const VIBRATO_ANALYSIS_MS = 3000;
+const VIBRATO_ANALYSIS_INTERVAL = 200;
+
+function pushPitchSample(hz) {
+    const t = performance.now();
+    const buf = state.vibratoAnalysis.pitchBuf;
+    buf.push({ t, hz: hz > 0 ? hz : null });
+    const cutoff = t - VIBRATO_BUFFER_MS;
+    while (buf.length > 0 && buf[0].t < cutoff) buf.shift();
+}
+
+function resetVibratoUi() {
+    const va = state.vibratoAnalysis;
+    va.rate = 0; va.extent = 0; va.regularity = 0; va.verdict = '—';
+    va.traceCents = [];
+    if (els.vibRate) els.vibRate.textContent = '—';
+    if (els.vibExtent) els.vibExtent.textContent = '—';
+    if (els.vibRegularity) els.vibRegularity.textContent = '—';
+    if (els.vibVerdict) els.vibVerdict.textContent = '—';
+    if (els.vibVerdictBox) els.vibVerdictBox.classList.remove('is-good', 'is-warn');
+}
+
+function analyzeVibrato() {
+    const va = state.vibratoAnalysis;
+    const now = performance.now();
+    va.lastAnalysisAt = now; // always advance to honor throttling even on early-returns
+    const buf = va.pitchBuf;
+    if (buf.length < 30) { resetVibratoUi(); return; }
+
+    const cutoff = now - VIBRATO_ANALYSIS_MS;
+    let idx0 = 0;
+    for (let i = 0; i < buf.length; i++) { if (buf[i].t >= cutoff) { idx0 = i; break; } }
+    const slice = buf.slice(idx0);
+    if (slice.length < 25) { resetVibratoUi(); return; }
+
+    const valid = slice.filter(s => s.hz != null);
+    if (valid.length < slice.length * 0.5 || valid.length < 20) { resetVibratoUi(); return; }
+
+    const hzs = valid.map(s => s.hz).sort((a, b) => a - b);
+    const median = hzs[Math.floor(hzs.length / 2)];
+    if (median <= 0) { resetVibratoUi(); return; }
+
+    // Convert to cents relative to median; hold last value through gaps
+    const cents = new Array(slice.length);
+    let lastC = 0;
+    for (let i = 0; i < slice.length; i++) {
+        if (slice[i].hz != null) lastC = 1200 * Math.log2(slice[i].hz / median);
+        cents[i] = lastC;
+    }
+    // Detrend
+    let mean = 0;
+    for (const c of cents) mean += c;
+    mean /= cents.length;
+    for (let i = 0; i < cents.length; i++) cents[i] -= mean;
+
+    const durationSec = (slice[slice.length - 1].t - slice[0].t) / 1000;
+    if (durationSec < 0.8) { resetVibratoUi(); return; }
+    const sampleRate = (slice.length - 1) / durationSec;
+
+    // Goertzel scan 2–12Hz, 0.1Hz steps
+    const N = cents.length;
+    let peakFreq = 0, peakAmp = 0, peakPower = 0, totalPower = 0;
+    for (let f = 2.0; f <= 12.0 + 1e-6; f += 0.1) {
+        const omega = 2 * Math.PI * f / sampleRate;
+        const cosW = Math.cos(omega);
+        const sinW = Math.sin(omega);
+        const coeff = 2 * cosW;
+        let q1 = 0, q2 = 0;
+        for (let i = 0; i < N; i++) {
+            const q0 = coeff * q1 - q2 + cents[i];
+            q2 = q1; q1 = q0;
+        }
+        const real = q1 - q2 * cosW;
+        const imag = q2 * sinW;
+        const power = real * real + imag * imag;
+        totalPower += power;
+        if (power > peakPower) {
+            peakPower = power;
+            peakFreq = f;
+            peakAmp = 2 * Math.sqrt(power) / N;
+        }
+    }
+
+    const regularity = totalPower > 0 ? Math.min(1, peakPower / totalPower * 8) : 0;
+
+    let verdict = '—', verdictClass = '';
+    if (peakAmp < 15) { verdict = 'Straight'; verdictClass = 'is-warn'; }
+    else if (peakFreq < 4.5) { verdict = peakAmp > 25 ? 'Wobble' : 'Slow'; verdictClass = 'is-warn'; }
+    else if (peakFreq > 7.5) { verdict = 'Tremor'; verdictClass = 'is-warn'; }
+    else if (regularity < 0.25) { verdict = 'Unsteady'; verdictClass = 'is-warn'; }
+    else { verdict = 'Good'; verdictClass = 'is-good'; }
+
+    va.rate = peakFreq;
+    va.extent = peakAmp;
+    va.regularity = regularity;
+    va.verdict = verdict;
+    va.lastAnalysisAt = now;
+    va.traceCents = slice.map(s => ({ t: s.t, cents: s.hz != null ? 1200 * Math.log2(s.hz / median) - mean : null }));
+
+    if (els.vibRate) els.vibRate.textContent = peakFreq.toFixed(1);
+    if (els.vibExtent) els.vibExtent.textContent = Math.round(peakAmp);
+    if (els.vibRegularity) els.vibRegularity.textContent = Math.round(regularity * 100);
+    if (els.vibVerdict) els.vibVerdict.textContent = verdict;
+    if (els.vibVerdictBox) {
+        els.vibVerdictBox.classList.remove('is-good', 'is-warn');
+        if (verdictClass) els.vibVerdictBox.classList.add(verdictClass);
+    }
+}
+
+let vibratoCanvasCtx = null;
+function getVibratoCanvasCtx() {
+    if (!vibratoCanvasCtx && els.vibratoCanvas) {
+        vibratoCanvasCtx = els.vibratoCanvas.getContext('2d');
+    }
+    return vibratoCanvasCtx;
+}
+
+function drawVibratoTrace() {
+    const c = els.vibratoCanvas;
+    const ctx = getVibratoCanvasCtx();
+    if (!c || !ctx) return;
+    const w = c.clientWidth || 600;
+    const h = c.clientHeight || 110;
+    if (c.width !== w) c.width = w;
+    if (c.height !== h) c.height = h;
+
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#fdfcf6';
+    ctx.fillRect(0, 0, w, h);
+
+    const Y_RANGE = 150;
+    const yFor = (cents) => h / 2 - (cents / Y_RANGE) * (h / 2 - 4);
+
+    ctx.strokeStyle = 'rgba(0,0,0,0.08)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (const c0 of [-100, -50, 50, 100]) {
+        const y = yFor(c0);
+        ctx.moveTo(0, y); ctx.lineTo(w, y);
+    }
+    ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+    ctx.beginPath();
+    ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2);
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.font = '9px Inter, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    for (const c0 of [-100, 0, 100]) {
+        ctx.fillText(`${c0 > 0 ? '+' : ''}${c0}¢`, 4, yFor(c0));
+    }
+
+    const series = state.vibratoAnalysis.traceCents;
+    if (!series || series.length < 2) return;
+    const t0 = series[0].t;
+    const tN = series[series.length - 1].t;
+    const tSpan = Math.max(1, tN - t0);
+
+    ctx.beginPath();
+    ctx.strokeStyle = '#1e88e5';
+    ctx.lineWidth = 1.5;
+    let started = false;
+    for (const s of series) {
+        if (s.cents == null) { started = false; continue; }
+        const x = ((s.t - t0) / tSpan) * w;
+        const y = yFor(Math.max(-Y_RANGE, Math.min(Y_RANGE, s.cents)));
+        if (!started) { ctx.moveTo(x, y); started = true; }
+        else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.font = '9px Inter, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(`${(tSpan / 1000).toFixed(1)}s`, w - 4, h - 2);
+}
+
+let lastVibPanelVisible = null;
+function updateVibratoPanelVisibility() {
+    if (!els.vibratoPanel) return;
+    const visible = !!state.isMicActive;
+    if (visible !== lastVibPanelVisible) {
+        els.vibratoPanel.style.display = visible ? 'block' : 'none';
+        lastVibPanelVisible = visible;
+        if (!visible) resetVibratoUi();
+    }
+}
+
 // --- Visualizer ---
 
 function resizeCanvas() {
@@ -1592,6 +1943,35 @@ function resizeCanvas() {
 
 function drawVisualizer() {
     if (!isPlaying && !state.isMicActive) return;
+
+    // Pitch sampling + vibrato analysis (independent of view mode)
+    if (state.isMicActive && micAnalyser) {
+        if (!state.isMicPaused) {
+            const micPitch = detectPitchFromMic();
+            state.cachedMicPitch = micPitch;
+            pushPitchSample(micPitch);
+        }
+    } else if (state.vibratoAnalysis.pitchBuf.length) {
+        state.vibratoAnalysis.pitchBuf = [];
+        resetVibratoUi();
+    }
+
+    const nowT = performance.now();
+    const va = state.vibratoAnalysis;
+    if (state.isMicActive && nowT - va.lastAnalysisAt >= VIBRATO_ANALYSIS_INTERVAL) {
+        analyzeVibrato();
+        drawVibratoTrace();
+    }
+    updateVibratoPanelVisibility();
+
+    // Spectrogram view: replace spectrum drawing entirely
+    if (state.viewMode === 'spectrogram') {
+        initSpectrogramBuffer();
+        pushSpectrogramColumn();
+        renderSpectrogram();
+        animationId = requestAnimationFrame(drawVisualizer);
+        return;
+    }
 
     resizeCanvas();
     const width = els.canvas.width;
@@ -1627,16 +2007,9 @@ function drawVisualizer() {
         }
     }
 
-    // Tuner-style pitch display from mic input
+    // Tuner-style pitch display from mic input (pitch already cached at top of drawVisualizer)
     if (state.isMicActive && micAnalyser) {
-        let detectedPitch = -1;
-
-        if (state.isMicPaused) {
-            detectedPitch = state.cachedMicPitch;
-        } else {
-            detectedPitch = detectPitchFromMic();
-            state.cachedMicPitch = detectedPitch;
-        }
+        const detectedPitch = state.cachedMicPitch;
 
         if (detectedPitch > 0) {
             const noteName = freqToNote(detectedPitch);
@@ -2917,6 +3290,7 @@ els.btnMic.addEventListener('click', async () => {
         state.cachedMicFormants = null;
         state.cachedMicFormantsTime = null;
         els.btnMic.classList.remove('mic-active');
+        updateVibratoPanelVisibility();
         // Stop any in-progress recording when mic is turned off
         if (mediaRecorder && mediaRecorder.state === 'recording') stopRecording();
         if (els.btnMicRecord) {
@@ -3266,6 +3640,7 @@ function cleanupPlayback() {
         if (els.btnMic) els.btnMic.classList.remove('mic-active');
         state.cachedMicData = null;
         state.cachedMicFormants = null;
+        updateVibratoPanelVisibility();
     }
     renderRecordingsList();
 }
@@ -3909,6 +4284,16 @@ if (els.btnRoughness) {
         els.btnRoughness.classList.toggle('roughness-active', state.roughnessVisible);
         updateRoughnessReadout();
     });
+}
+
+// View tabs: Spectrum / Spectrogram
+if (els.viewTabs) {
+    els.viewTabs.addEventListener('click', (e) => {
+        const btn = e.target.closest('.view-tab');
+        if (!btn) return;
+        applyViewMode(btn.dataset.view);
+    });
+    applyViewMode(state.viewMode);
 }
 
 // Log/Linear Frequency Scale Toggle

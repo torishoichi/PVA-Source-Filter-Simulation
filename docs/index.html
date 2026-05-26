@@ -462,6 +462,11 @@
                 </div>
                 <div class="canvas-container">
                     <canvas id="spectrum-canvas"></canvas>
+                    <canvas id="spectrogram-canvas" style="display:none;"></canvas>
+                    <div class="view-tabs" id="view-tabs" role="tablist" aria-label="View mode">
+                        <button class="view-tab is-active" data-view="spectrum" type="button" role="tab" aria-selected="true">Spectrum</button>
+                        <button class="view-tab" data-view="spectrogram" type="button" role="tab" aria-selected="false">Spectrogram</button>
+                    </div>
                     <button id="log-scale-toggle" class="axis-scale-btn"
                         title="Toggle Log/Linear frequency scale">Log</button>
                     <div class="axis-labels x-axis">
@@ -471,6 +476,37 @@
                         <span>3kHz</span>
                         <span>4kHz</span>
                         <span>5kHz</span>
+                    </div>
+                </div>
+
+                <!-- Vibrato analysis panel (visible when mic active) -->
+                <div id="vibrato-panel" class="vibrato-panel" style="display:none;">
+                    <div class="vibrato-head">
+                        <span class="vibrato-title">Vibrato</span>
+                        <div class="vibrato-stats">
+                            <div class="vstat" title="ビブラートの速さ (5–7Hz が一般的)">
+                                <span class="vstat-label">Rate</span>
+                                <span class="vstat-val" id="vib-rate">—</span>
+                                <span class="vstat-unit">Hz</span>
+                            </div>
+                            <div class="vstat" title="ビブラートの深さ (片振幅 cents)">
+                                <span class="vstat-label">Extent</span>
+                                <span class="vstat-val" id="vib-extent">—</span>
+                                <span class="vstat-unit">±¢</span>
+                            </div>
+                            <div class="vstat" title="波形の規則性 (0–100%)">
+                                <span class="vstat-label">Regularity</span>
+                                <span class="vstat-val" id="vib-regularity">—</span>
+                                <span class="vstat-unit">%</span>
+                            </div>
+                            <div class="vstat vstat-verdict" title="自動判定" id="vib-verdict-box">
+                                <span class="vstat-label">Type</span>
+                                <span class="vstat-val" id="vib-verdict">—</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="vibrato-canvas-wrap">
+                        <canvas id="vibrato-canvas"></canvas>
                     </div>
                 </div>
 
