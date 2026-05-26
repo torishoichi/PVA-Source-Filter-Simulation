@@ -2699,3 +2699,31 @@ body.learn-drawer-open { overflow: hidden; }
     border-color: rgba(79, 150, 80, 0.6);
     background: rgba(79, 150, 80, 0.1);
 }
+
+/* Import button in recordings head */
+.recordings-head { gap: 8px; }
+.rec-import-btn {
+    margin-left: auto;
+    font-size: 0.72rem;
+    padding: 2px 8px;
+}
+
+/* Inline editable label */
+.rec-label-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    background: transparent;
+    color: var(--text-primary);
+    border: 1px solid transparent;
+    border-radius: 3px;
+    padding: 2px 5px;
+    font-size: 0.78rem;
+    font-family: inherit;
+}
+.rec-label-input::placeholder { color: var(--text-secondary); opacity: 0.4; font-style: italic; }
+.rec-label-input:hover { border-color: var(--glass-border); }
+.rec-label-input:focus { outline: none; border-color: rgba(79, 150, 80, 0.6); background: rgba(255, 255, 255, 0.04); }
+
+/* Tighten row to fit new column */
+.recordings-item { gap: 6px; }
+.rec-time { flex: 0 0 auto; min-width: 110px; font-size: 0.74rem; }

@@ -6,6 +6,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Vocal Simulator</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#4f9650">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Voice Studio">
+    <link rel="apple-touch-icon" href="icon-192.png">
     <script>
         // Auto-redirect to mobile version on small screens
         if (window.innerWidth <= 768 && 'ontouchstart' in window) {
@@ -564,6 +570,8 @@
                     <div class="recordings-head">
                         <span class="recordings-title">Recordings</span>
                         <span class="recordings-meta" id="recordings-meta">0 件</span>
+                        <button id="rec-import-btn" class="rec-btn rec-import-btn" type="button" title="音声ファイルを取り込み">+ Import</button>
+                        <input type="file" id="rec-import-input" accept="audio/*,.wav,.mp3,.m4a,.ogg,.webm,.flac" style="display:none;">
                     </div>
                     <ul id="recordings-list" class="recordings-list" aria-live="polite"></ul>
                     <div class="recordings-empty" id="recordings-empty">

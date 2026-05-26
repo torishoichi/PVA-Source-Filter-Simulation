@@ -217,6 +217,8 @@ const els = {
     recordingsList: document.getElementById('recordings-list'),
     recordingsMeta: document.getElementById('recordings-meta'),
     recordingsEmpty: document.getElementById('recordings-empty'),
+    btnImport: document.getElementById('rec-import-btn'),
+    importInput: document.getElementById('rec-import-input'),
     playbackControls: document.getElementById('playback-controls'),
     pbSeek: document.getElementById('pb-seek'),
     pbRate: document.getElementById('pb-rate'),
@@ -3439,6 +3441,23 @@ function renderRecordingsList() {
         timeEl.className = 'rec-time';
         timeEl.textContent = fmtTimestamp(rec.createdAt);
 
+        const labelInput = document.createElement('input');
+        labelInput.type = 'text';
+        labelInput.className = 'rec-label-input';
+        labelInput.placeholder = 'label (任意)';
+        labelInput.maxLength = 60;
+        labelInput.value = rec.label || '';
+        const commitLabel = async () => {
+            const v = labelInput.value.trim();
+            if (v === (rec.label || '')) return;
+            try { await RecordingsDB.updateLabel(rec.id, v); rec.label = v; }
+            catch (err) { console.error('Failed to update label:', err); }
+        };
+        labelInput.addEventListener('blur', commitLabel);
+        labelInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); labelInput.blur(); }
+        });
+
         const durEl = document.createElement('span');
         durEl.className = 'rec-dur';
         durEl.textContent = fmtDuration(rec.durationMs);
@@ -3477,7 +3496,7 @@ function renderRecordingsList() {
         delBtn.textContent = 'Del';
         delBtn.addEventListener('click', () => deleteRecording(rec.id));
 
-        li.append(timeEl, durEl, playBtn, wavBtn, mp3Btn, delBtn);
+        li.append(timeEl, labelInput, durEl, playBtn, wavBtn, mp3Btn, delBtn);
         els.recordingsList.appendChild(li);
     }
 }
@@ -3489,9 +3508,73 @@ if (els.btnMicRecord) {
     });
 }
 
+// ============================================================
+// Import — load an external audio file and save as a recording
+// ============================================================
+async function importAudioFile(file) {
+    if (!file) return;
+    // Decode to obtain duration. Use a temporary AudioContext if needed.
+    let ctx = audioCtx;
+    let tempCtx = false;
+    if (!ctx) {
+        ctx = new (window.AudioContext || window.webkitAudioContext)();
+        tempCtx = true;
+    }
+    let buf;
+    try {
+        const arr = await file.arrayBuffer();
+        buf = await ctx.decodeAudioData(arr.slice(0));
+    } catch (err) {
+        console.error('Import decode failed:', err);
+        alert(`「${file.name}」をデコードできませんでした。対応形式の音声ファイルを選んでください`);
+        if (tempCtx) ctx.close();
+        return;
+    }
+    const durationMs = buf.duration * 1000;
+    const mimeType = file.type || 'audio/octet-stream';
+    try {
+        await RecordingsDB.save({
+            blob: file,
+            durationMs,
+            mimeType,
+            sampleRate: buf.sampleRate
+        });
+        // Use filename (without extension) as default label
+        const list = await RecordingsDB.list();
+        const newest = list[0];
+        if (newest) {
+            const base = file.name.replace(/\.[^.]+$/, '').slice(0, 60);
+            await RecordingsDB.updateLabel(newest.id, base);
+        }
+        await refreshRecordingsList();
+    } catch (err) {
+        console.error('Failed to save imported file:', err);
+        alert('インポートに失敗しました: ' + err.message);
+    }
+    if (tempCtx) ctx.close();
+}
+
+if (els.btnImport && els.importInput) {
+    els.btnImport.addEventListener('click', () => els.importInput.click());
+    els.importInput.addEventListener('change', async (e) => {
+        const files = Array.from(e.target.files || []);
+        for (const f of files) await importAudioFile(f);
+        els.importInput.value = ''; // reset so same file can be re-imported
+    });
+}
+
 // Initial load
 if (window.RecordingsDB) {
     refreshRecordingsList().catch(err => console.error('Initial recordings load failed:', err));
+}
+
+// Service Worker — enables offline use and "Add to Home Screen"
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(err => {
+            console.warn('SW registration failed:', err);
+        });
+    });
 }
 
 // Source Controls
