@@ -342,7 +342,7 @@ input[type=range]::-moz-range-track {
 }
 
 /* Vibrato analysis panel */
-.vibrato-panel {
+.vib-analysis-panel {
     margin-top: 10px;
     padding: 10px 12px;
     background: rgba(255, 255, 255, 0.65);
@@ -350,7 +350,7 @@ input[type=range]::-moz-range-track {
     border-radius: 8px;
 }
 
-.vibrato-head {
+.vib-analysis-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -359,7 +359,7 @@ input[type=range]::-moz-range-track {
     flex-wrap: wrap;
 }
 
-.vibrato-title {
+.vib-analysis-title {
     font-size: 12px;
     font-weight: 700;
     letter-spacing: 0.04em;
@@ -367,7 +367,7 @@ input[type=range]::-moz-range-track {
     color: var(--text-secondary, #555);
 }
 
-.vibrato-stats {
+.vib-analysis-stats {
     display: inline-flex;
     gap: 14px;
     flex-wrap: wrap;
@@ -423,7 +423,7 @@ input[type=range]::-moz-range-track {
     color: #ef6c00;
 }
 
-.vibrato-canvas-wrap {
+.vib-analysis-canvas-wrap {
     width: 100%;
     height: 110px;
     background: #fdfcf6;
