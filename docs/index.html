@@ -566,13 +566,14 @@
                 </div>
 
                 <!-- Recordings panel: local-only voice recordings (IndexedDB) -->
-                <div id="recordings-panel" class="recordings-panel">
-                    <div class="recordings-head">
+                <details id="recordings-panel" class="recordings-panel">
+                    <summary class="recordings-head">
+                        <span class="recordings-disclosure" aria-hidden="true">▸</span>
                         <span class="recordings-title">Recordings</span>
                         <span class="recordings-meta" id="recordings-meta">0 件</span>
                         <button id="rec-import-btn" class="rec-btn rec-import-btn" type="button" title="音声ファイルを取り込み">+ Import</button>
                         <input type="file" id="rec-import-input" accept="audio/*,.wav,.mp3,.m4a,.ogg,.webm,.flac" style="display:none;">
-                    </div>
+                    </summary>
                     <ul id="recordings-list" class="recordings-list" aria-live="polite"></ul>
                     <div class="recordings-empty" id="recordings-empty">
                         マイクをONにして Rec ボタンで録音（最大15秒・端末内のみに保存）
@@ -591,7 +592,7 @@
                             <option value="2">2x</option>
                         </select>
                     </div>
-                </div>
+                </details>
 
             </section>
         </main>

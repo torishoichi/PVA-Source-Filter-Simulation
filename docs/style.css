@@ -2520,18 +2520,31 @@ body.learn-drawer-open { overflow: hidden; }
    Recordings panel — local-only voice recordings (IndexedDB)
    ============================================================ */
 .recordings-panel {
-    margin-top: 12px;
-    padding: 10px 12px;
+    margin-top: 8px;
+    padding: 6px 12px;
     border: 1px solid var(--glass-border);
     border-radius: 8px;
     background: rgba(255, 255, 255, 0.02);
 }
+.recordings-panel[open] { padding-bottom: 10px; }
 .recordings-head {
     display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    margin-bottom: 6px;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+    padding: 4px 0;
 }
+.recordings-head::-webkit-details-marker { display: none; }
+.recordings-disclosure {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    transition: transform 0.15s ease;
+    width: 10px;
+    display: inline-block;
+}
+.recordings-panel[open] .recordings-disclosure { transform: rotate(90deg); }
 .recordings-title {
     font-size: 0.82rem;
     font-weight: 600;

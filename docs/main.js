@@ -219,6 +219,7 @@ const els = {
     recordingsEmpty: document.getElementById('recordings-empty'),
     btnImport: document.getElementById('rec-import-btn'),
     importInput: document.getElementById('rec-import-input'),
+    recordingsPanel: document.getElementById('recordings-panel'),
     playbackControls: document.getElementById('playback-controls'),
     pbSeek: document.getElementById('pb-seek'),
     pbRate: document.getElementById('pb-rate'),
@@ -3112,6 +3113,8 @@ async function startRecording() {
 
     recStartTs = performance.now();
     mediaRecorder.start();
+    // Auto-expand the recordings panel so the new item is visible after stop
+    if (els.recordingsPanel) els.recordingsPanel.open = true;
     if (els.btnMicRecord) els.btnMicRecord.classList.add('is-recording');
     updateRecTimer();
     recTimerId = setInterval(updateRecTimer, 100);
@@ -3598,11 +3601,13 @@ async function importAudioFile(file) {
 }
 
 if (els.btnImport && els.importInput) {
-    els.btnImport.addEventListener('click', () => els.importInput.click());
+    // stopPropagation so clicking Import inside <summary> doesn't toggle the panel
+    els.btnImport.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); els.importInput.click(); });
     els.importInput.addEventListener('change', async (e) => {
         const files = Array.from(e.target.files || []);
         for (const f of files) await importAudioFile(f);
-        els.importInput.value = ''; // reset so same file can be re-imported
+        els.importInput.value = '';
+        if (els.recordingsPanel) els.recordingsPanel.open = true;
     });
 }
 
