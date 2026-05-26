@@ -2499,54 +2499,67 @@ function drawVisualizer() {
 
         drawSpectrum(micAnalyser, 'rgba(79, 150, 80, 0.95)', null, 1.2, state.cachedMicData);
 
-        // --- Mic harmonic cent overlay ---
-        // For each detected harmonic peak n·f₀ (f₀ from pitch detector), show
-        // its cent deviation from the nearest equal-tempered semitone.
-        const micF0 = state.cachedMicPitch;
-        if (micF0 > 0 && state.cachedMicData) {
+        // --- Mic spectrum peak Hz labels ---
+        // Find local maxima in the mic spectrum and label each with its Hz.
+        // Independent of pitch detection so it works even on weak signals.
+        if (state.cachedMicData) {
             const micBufLen = state.cachedMicData.length;
             const micNyq = audioCtx.sampleRate / 2;
-            const micMaxDb = micAnalyser.maxDecibels;
             const micMinDb = micAnalyser.minDecibels;
+            const micMaxDb = micAnalyser.maxDecibels;
             const micDbRange = micMaxDb - micMinDb;
-            const micSearchHz = micF0 * 0.15;
-            const micMaxH = Math.min(MAX_HARMONICS_ON_SPECTRUM, Math.floor(MAX_FREQ_DISPLAY / micF0));
+            // Peak qualification thresholds
+            const dbThresh = micMinDb + micDbRange * 0.25;
+            // Compute bin range we care about (≤ MAX_FREQ_DISPLAY)
+            const maxBin = Math.min(micBufLen - 2, Math.ceil((MAX_FREQ_DISPLAY / micNyq) * micBufLen));
+            // Minimum horizontal pixel spacing between labels to avoid overlap
+            const MIN_LABEL_PX = 32;
+            // Local-maxima window in bins (smooths against tiny FFT ripples)
+            const WIN = 3;
 
-            canvasCtx.save();
-            canvasCtx.textAlign = 'center';
-            canvasCtx.font = '9px monospace';
-            for (let h = 1; h <= micMaxH; h++) {
-                const expF = micF0 * h;
-                const minF = expF - micSearchHz;
-                const maxF = expF + micSearchHz;
-                let peakVal = -Infinity;
-                let peakFreq = expF;
-                for (let i = 0; i < micBufLen; i++) {
-                    const f = (i * micNyq) / micBufLen;
-                    if (f < minF) continue;
-                    if (f > maxF) break;
-                    if (state.cachedMicData[i] > peakVal) {
-                        peakVal = state.cachedMicData[i];
-                        peakFreq = f;
+            const labels = [];
+            for (let i = WIN; i < maxBin; i++) {
+                const v = state.cachedMicData[i];
+                if (v < dbThresh) continue;
+                let isLocalMax = true;
+                for (let k = 1; k <= WIN; k++) {
+                    if (state.cachedMicData[i - k] >= v || state.cachedMicData[i + k] > v) {
+                        isLocalMax = false; break;
                     }
                 }
-                if (peakVal <= micMinDb + (micDbRange * 0.15)) continue;
-
-                const normVal = Math.max(0, (peakVal - micMinDb) / micDbRange);
-                const displayVal = Math.pow(normVal, 1.5);
-                const y = height - (displayVal * height * 0.9);
-                const x = freqToX(peakFreq, width);
-
-                const hzTxt = `${Math.round(peakFreq)}Hz`;
-
-                // White-backed pill for legibility over green mic spectrum
-                const txtW = canvasCtx.measureText(hzTxt).width;
-                canvasCtx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-                canvasCtx.fillRect(x - txtW / 2 - 3, y - 22, txtW + 6, 12);
-                canvasCtx.fillStyle = 'rgba(40, 100, 40, 0.95)';
-                canvasCtx.fillText(hzTxt, x, y - 13);
+                if (!isLocalMax) continue;
+                const f = (i * micNyq) / micBufLen;
+                labels.push({ freq: f, val: v });
             }
-            canvasCtx.restore();
+
+            if (labels.length) {
+                canvasCtx.save();
+                canvasCtx.textAlign = 'center';
+                canvasCtx.font = 'bold 9px monospace';
+
+                // Greedy filter: keep tallest peaks first, drop ones too close in x
+                labels.sort((a, b) => b.val - a.val);
+                const kept = [];
+                for (const lab of labels) {
+                    const x = freqToX(lab.freq, width);
+                    if (kept.every(k => Math.abs(k.x - x) >= MIN_LABEL_PX)) {
+                        kept.push({ ...lab, x });
+                    }
+                }
+
+                for (const lab of kept) {
+                    const normVal = Math.max(0, (lab.val - micMinDb) / micDbRange);
+                    const displayVal = Math.pow(normVal, 1.5);
+                    const y = height - (displayVal * height * 0.9);
+                    const hzTxt = `${Math.round(lab.freq)}Hz`;
+                    const txtW = canvasCtx.measureText(hzTxt).width;
+                    canvasCtx.fillStyle = 'rgba(255, 255, 255, 0.88)';
+                    canvasCtx.fillRect(lab.x - txtW / 2 - 3, y - 22, txtW + 6, 12);
+                    canvasCtx.fillStyle = 'rgba(40, 100, 40, 0.95)';
+                    canvasCtx.fillText(hzTxt, lab.x, y - 13);
+                }
+                canvasCtx.restore();
+            }
         }
 
         // --- Real-time Formant Tracking (Mic F1 / F2) ---
