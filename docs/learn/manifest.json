@@ -2,6 +2,12 @@
   "version": 1,
   "series": [
     {
+      "slug": "basic-series",
+      "title": "基本シリーズ",
+      "description": "Roughness/Resolution、Source-Filter モデル、発声モードの基礎3章。",
+      "manifest": "basic-series/series.json"
+    },
+    {
       "slug": "reactance-series",
       "title": "リアクタンス解説シリーズ",
       "description": "声帯から見た声道インピーダンスの「手応え」を、入門〜上級まで段階的に解きほぐすシリーズ。",

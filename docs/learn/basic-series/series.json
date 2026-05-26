@@ -1,0 +1,9 @@
+{
+  "title": "基本シリーズ",
+  "description": "Roughness/Resolution、Source-Filter モデル、発声モード（Flow/Pressed/Breathy）の基礎3章。",
+  "lessons": [
+    { "file": "01_roughness_resolution.html", "title": "Roughness と Resolution の違い",            "level": "第1章" },
+    { "file": "02_source_filter.html",        "title": "フォルマントと音色 — Source-Filter モデル",  "level": "第2章" },
+    { "file": "03_phonation.html",            "title": "発声モード — Flow / Pressed / Breathy",     "level": "第3章" }
+  ]
+}

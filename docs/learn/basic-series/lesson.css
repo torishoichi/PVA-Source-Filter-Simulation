@@ -1,0 +1,32 @@
+/**
+ * basic-series lesson stylesheet
+ * Imports the main app's stylesheet so all .lesson-* / .story-sec /
+ * .hm-* / .rl-* / etc. selectors behave identically inside the iframe.
+ */
+@import url("../../style.css");
+
+/* Standalone page chrome (only meaningful when opened outside the drawer) */
+.lesson-page {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 24px 22px 80px;
+    background: var(--bg-color, #FCFAF3);
+}
+.lesson-page-header {
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--glass-border, rgba(28,24,16,0.12));
+    margin-bottom: 16px;
+}
+.lesson-page-kicker {
+    color: var(--accent-color, #00A4AF);
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 0.05em;
+}
+.lesson-page-title {
+    font-size: 21px;
+    font-weight: 700;
+    margin: 6px 0 0;
+    line-height: 1.4;
+}
+.lesson-page > .lesson-body { padding: 0; }
