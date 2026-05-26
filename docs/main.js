@@ -220,6 +220,7 @@ const els = {
     playbackControls: document.getElementById('playback-controls'),
     pbSeek: document.getElementById('pb-seek'),
     pbRate: document.getElementById('pb-rate'),
+    pbLoop: document.getElementById('pb-loop'),
     pbCurTime: document.getElementById('pb-cur-time'),
     pbTotalTime: document.getElementById('pb-total-time'),
     btnSlopeLine: document.getElementById('slope-line-toggle'),
@@ -3031,6 +3032,7 @@ let playbackMediaSrc = null;    // MediaElementAudioSourceNode
 let playbackObjectUrl = null;
 let playbackRecId = null;
 let playbackRate = 1.0;
+let playbackLoop = false;
 let playbackGainNode = null;    // audible output branch
 let playbackUiRaf = null;
 let micWasActiveBeforePlayback = false;
@@ -3183,6 +3185,7 @@ async function playRecording(id) {
     playbackAudio.mozPreservesPitch = true;
     playbackAudio.webkitPreservesPitch = true;
     playbackAudio.playbackRate = playbackRate;
+    playbackAudio.loop = playbackLoop;
     playbackAudio.crossOrigin = 'anonymous';
 
     try {
@@ -3279,6 +3282,15 @@ if (els.pbRate) {
         const r = Number(els.pbRate.value);
         playbackRate = r;
         if (playbackAudio) playbackAudio.playbackRate = r;
+    });
+}
+
+// Loop toggle
+if (els.pbLoop) {
+    els.pbLoop.addEventListener('click', () => {
+        playbackLoop = !playbackLoop;
+        els.pbLoop.classList.toggle('is-active', playbackLoop);
+        if (playbackAudio) playbackAudio.loop = playbackLoop;
     });
 }
 
@@ -3441,38 +3453,23 @@ function renderRecordingsList() {
             else playRecording(rec.id);
         });
 
-        // Export menu (WAV / MP3)
-        const expWrap = document.createElement('span');
-        expWrap.className = 'rec-export-wrap';
-        const expBtn = document.createElement('button');
-        expBtn.className = 'rec-btn';
-        expBtn.type = 'button';
-        expBtn.textContent = '⇩';
-        expBtn.title = 'Export';
-        const expMenu = document.createElement('div');
-        expMenu.className = 'rec-export-menu';
-        const wavBtn = document.createElement('button');
-        wavBtn.type = 'button';
-        wavBtn.textContent = 'WAV';
-        const mp3Btn = document.createElement('button');
-        mp3Btn.type = 'button';
-        mp3Btn.textContent = 'MP3';
-        const runExport = async (btn, fmt) => {
-            btn.disabled = true;
-            const orig = btn.textContent;
-            btn.textContent = '…';
-            try { await exportRecording(rec.id, fmt); }
-            finally { btn.disabled = false; btn.textContent = orig; expMenu.classList.remove('is-open'); }
+        const makeExportBtn = (fmt, label) => {
+            const b = document.createElement('button');
+            b.className = 'rec-btn rec-btn-export';
+            b.type = 'button';
+            b.textContent = label;
+            b.title = `Download as ${label}`;
+            b.addEventListener('click', async () => {
+                b.disabled = true;
+                const orig = b.textContent;
+                b.textContent = '…';
+                try { await exportRecording(rec.id, fmt); }
+                finally { b.disabled = false; b.textContent = orig; }
+            });
+            return b;
         };
-        wavBtn.addEventListener('click', (e) => { e.stopPropagation(); runExport(wavBtn, 'wav'); });
-        mp3Btn.addEventListener('click', (e) => { e.stopPropagation(); runExport(mp3Btn, 'mp3'); });
-        expMenu.append(wavBtn, mp3Btn);
-        expBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            document.querySelectorAll('.rec-export-menu.is-open').forEach(m => { if (m !== expMenu) m.classList.remove('is-open'); });
-            expMenu.classList.toggle('is-open');
-        });
-        expWrap.append(expBtn, expMenu);
+        const wavBtn = makeExportBtn('wav', 'WAV');
+        const mp3Btn = makeExportBtn('mp3', 'MP3');
 
         const delBtn = document.createElement('button');
         delBtn.className = 'rec-btn danger';
@@ -3480,15 +3477,10 @@ function renderRecordingsList() {
         delBtn.textContent = 'Del';
         delBtn.addEventListener('click', () => deleteRecording(rec.id));
 
-        li.append(timeEl, durEl, playBtn, expWrap, delBtn);
+        li.append(timeEl, durEl, playBtn, wavBtn, mp3Btn, delBtn);
         els.recordingsList.appendChild(li);
     }
 }
-
-// Close any open export menu when clicking elsewhere
-document.addEventListener('click', () => {
-    document.querySelectorAll('.rec-export-menu.is-open').forEach(m => m.classList.remove('is-open'));
-});
 
 if (els.btnMicRecord) {
     els.btnMicRecord.addEventListener('click', () => {

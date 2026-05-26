@@ -2682,3 +2682,20 @@ body.learn-drawer-open { overflow: hidden; }
 }
 .rec-export-menu button:hover { background: rgba(255, 255, 255, 0.08); }
 .rec-export-menu button:disabled { opacity: 0.4; cursor: wait; }
+
+.pb-loop-btn {
+    flex: 0 0 auto;
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--glass-border);
+    border-radius: 3px;
+    padding: 1px 6px;
+    font-size: 0.85rem;
+    line-height: 1;
+    cursor: pointer;
+}
+.pb-loop-btn.is-active {
+    color: #4f9650;
+    border-color: rgba(79, 150, 80, 0.6);
+    background: rgba(79, 150, 80, 0.1);
+}
