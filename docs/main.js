@@ -324,6 +324,21 @@ function freqToNote(freq) {
     return noteNames[n] + octave;
 }
 
+// Cents deviation from nearest semitone, range (-50, +50]
+function freqToCents(freq) {
+    const a4 = 440;
+    const c0 = a4 * Math.pow(2, -4.75);
+    const semis = 12 * Math.log2(freq / c0);
+    return Math.round((semis - Math.round(semis)) * 100);
+}
+
+// Combined "A3 (+39¢)" label
+function noteWithCents(freq) {
+    const cents = freqToCents(freq);
+    const sign = cents > 0 ? '+' : (cents < 0 ? '' : '±');
+    return `${freqToNote(freq)} (${sign}${cents}¢)`;
+}
+
 // Map frequency to canvas x coordinate (linear or logarithmic)
 const MAX_FREQ_DISPLAY = 6000;
 const MIN_FREQ_LOG = 50; // Lower bound for log scale
@@ -1623,7 +1638,9 @@ function drawVisualizer() {
             // Frequency below
             canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.08)';
             canvasCtx.font = '400 18px Inter, sans-serif';
-            canvasCtx.fillText(`${Math.round(detectedPitch)} Hz`, width / 2, height / 2 + 28);
+            const cents = freqToCents(detectedPitch);
+            const centsLabel = `${cents > 0 ? '+' : (cents < 0 ? '' : '±')}${cents}¢`;
+            canvasCtx.fillText(`${Math.round(detectedPitch)} Hz  ${centsLabel}`, width / 2, height / 2 + 28);
 
             canvasCtx.restore();
         }
@@ -2949,7 +2966,7 @@ function applyVoiceType(value) {
     els.pressureSlider.value = 1.0; state.pressure = 1.0;
 
     els.pitchVal.textContent = state.pitch;
-    els.pitchNote.textContent = freqToNote(state.pitch);
+    els.pitchNote.textContent = noteWithCents(state.pitch);
     els.f1Val.textContent = state.formants.f1.freq;
     els.resistanceVal.textContent = state.resistance.toFixed(1);
     els.pressureVal.textContent = state.pressure.toFixed(1);
@@ -2993,7 +3010,7 @@ if (els.voiceTypeSelect && els.voiceTypeSelect.tagName === 'SELECT') {
 function applyPitchChange(newPitch) {
     state.pitch = newPitch;
     els.pitchVal.textContent = state.pitch;
-    els.pitchNote.textContent = freqToNote(state.pitch);
+    els.pitchNote.textContent = noteWithCents(state.pitch);
     autoSyncVoiceTypeFromPitch(state.pitch);
     updateSourceParams();
     analyzeAcoustics();
@@ -3155,7 +3172,7 @@ function updateRoughnessReadout() {
 
     // Header: current f₀ + sync mirror slider
     const f0El = els.roughnessLegend.querySelector('#rl-f0');
-    if (f0El) f0El.textContent = `${Math.round(f0)} Hz (${freqToNote(f0)})`;
+    if (f0El) f0El.textContent = `${Math.round(f0)} Hz ${noteWithCents(f0)}`;
     if (els.pitchMirror && els.pitchMirror.value !== String(Math.round(f0))) {
         els.pitchMirror.value = Math.round(f0);
     }
@@ -3355,7 +3372,7 @@ els.presets.forEach(btn => {
                 state.pitch = p.pitch;
                 els.pitchSlider.value = p.pitch;
                 els.pitchVal.textContent = p.pitch;
-                els.pitchNote.textContent = freqToNote(p.pitch);
+                els.pitchNote.textContent = noteWithCents(p.pitch);
                 updateSourceParams();
             }
 
@@ -3497,7 +3514,7 @@ els.canvas.addEventListener('touchend', handleCanvasInteraction);
 els.canvas.addEventListener('touchcancel', handleCanvasInteraction);
 
 // Init notes & analysis
-els.pitchNote.textContent = freqToNote(state.pitch);
+els.pitchNote.textContent = noteWithCents(state.pitch);
 updatePitchRangeHint();
 reorderFormantBounds();
 analyzeAcoustics();
