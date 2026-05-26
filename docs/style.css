@@ -373,6 +373,60 @@ input[type=range]::-moz-range-track {
     flex-wrap: wrap;
 }
 
+.vib-analysis-toggles {
+    display: inline-flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-left: 4px;
+}
+
+.vib-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px;
+    background: rgba(255, 255, 255, 0.7);
+    border: 1px solid var(--glass-border);
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary, #555);
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.12s, color 0.12s, border-color 0.12s, opacity 0.12s;
+}
+
+.vib-toggle input[type="checkbox"] {
+    display: none;
+}
+
+.vib-toggle:has(input:not(:checked)) {
+    opacity: 0.45;
+}
+
+.vib-toggle:hover {
+    background: rgba(33, 150, 243, 0.08);
+}
+
+.vib-toggle-swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+}
+
+.vib-swatch-f0 {
+    background: #ef6c00;
+}
+
+.vib-swatch-cents {
+    background: #1e88e5;
+}
+
+.vib-toggle-label {
+    line-height: 1;
+}
+
 .vstat {
     display: inline-flex;
     align-items: baseline;

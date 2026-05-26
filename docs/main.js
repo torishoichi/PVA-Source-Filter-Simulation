@@ -202,14 +202,16 @@ const state = {
     },
     viewMode: 'spectrum', // 'spectrum' | 'spectrogram'
     vibratoAnalysis: {
-        pitchBuf: [],     // [{t: ms, hz: number}], rolling 5s
+        pitchBuf: [],     // [{t: ms, hz: number|null}], rolling 5s
         rate: 0,          // Hz
-        extent: 0,        // cents (single-side amplitude)
+        extent: 0,        // cents (single-side amplitude, Hann-corrected)
         regularity: 0,    // 0–1
-        verdict: '—',     // 'Good vibrato' | 'Straight' | 'Off-rate' | 'Tremor' | '—'
+        verdict: '—',
+        f0Median: 0,      // Hz, median over analysis window
         lastAnalysisAt: 0,
-        lastDrawnAt: 0,
-        traceCents: [],   // cached cents series for drawing (parallel to pitchBuf)
+        trace: [],        // [{t, hz, cents}] — null where unvoiced/onset-gated
+        showF0: true,
+        showCents: true,
     }
 };
 
@@ -254,6 +256,9 @@ const els = {
     vibRegularity: document.getElementById('vib-regularity'),
     vibVerdict: document.getElementById('vib-verdict'),
     vibVerdictBox: document.getElementById('vib-verdict-box'),
+    vibF0: document.getElementById('vib-f0'),
+    vibShowF0: document.getElementById('vib-show-f0'),
+    vibShowCents: document.getElementById('vib-show-cents'),
     masterVolume: document.getElementById('master-volume'),
     micGainSlider: document.getElementById('mic-gain'),
     spectrumSlopeSlider: document.getElementById('spectrum-slope'),
@@ -1755,19 +1760,29 @@ function pushPitchSample(hz) {
 
 function resetVibratoUi() {
     const va = state.vibratoAnalysis;
-    va.rate = 0; va.extent = 0; va.regularity = 0; va.verdict = '—';
-    va.traceCents = [];
+    va.rate = 0; va.extent = 0; va.regularity = 0; va.verdict = '—'; va.f0Median = 0;
+    va.trace = [];
     if (els.vibRate) els.vibRate.textContent = '—';
     if (els.vibExtent) els.vibExtent.textContent = '—';
     if (els.vibRegularity) els.vibRegularity.textContent = '—';
     if (els.vibVerdict) els.vibVerdict.textContent = '—';
+    if (els.vibF0) els.vibF0.textContent = '—';
     if (els.vibVerdictBox) els.vibVerdictBox.classList.remove('is-good', 'is-warn');
 }
 
+// Vibrato analysis with several quality-improvement steps:
+//  (1) Outlier rejection vs. median (drops octave errors from upstream pitch detector)
+//  (2) Onset gating — skip first 250 ms of any voiced run (vibrato builds gradually)
+//  (3) Linear detrend (subtract least-squares line, not just mean)
+//  (4) Hann window before Goertzel (cuts spectral leakage → accurate extent)
+//  (5) Parabolic peak interpolation on the oversampled Goertzel grid (sub-bin Rate)
+const VIBRATO_ONSET_GATE_MS = 250;
+const VIBRATO_OUTLIER_CENTS = 700; // anything > ±700¢ from median is treated as unvoiced
 function analyzeVibrato() {
     const va = state.vibratoAnalysis;
     const now = performance.now();
-    va.lastAnalysisAt = now; // always advance to honor throttling even on early-returns
+    va.lastAnalysisAt = now;
+
     const buf = va.pitchBuf;
     if (buf.length < 30) { resetVibratoUi(); return; }
 
@@ -1780,31 +1795,72 @@ function analyzeVibrato() {
     const valid = slice.filter(s => s.hz != null);
     if (valid.length < slice.length * 0.5 || valid.length < 20) { resetVibratoUi(); return; }
 
+    // Median pitch
     const hzs = valid.map(s => s.hz).sort((a, b) => a - b);
     const median = hzs[Math.floor(hzs.length / 2)];
     if (median <= 0) { resetVibratoUi(); return; }
+    va.f0Median = median;
 
-    // Convert to cents relative to median; hold last value through gaps
+    // (1) Outlier rejection: mark anything too far from median as unvoiced
+    const hzNorm = new Array(slice.length);
+    for (let i = 0; i < slice.length; i++) {
+        const s = slice[i];
+        if (s.hz == null) { hzNorm[i] = null; continue; }
+        const c = 1200 * Math.log2(s.hz / median);
+        hzNorm[i] = Math.abs(c) > VIBRATO_OUTLIER_CENTS ? null : s.hz;
+    }
+
+    // (2) Onset gating: walk through voiced runs, drop first 250 ms of each
+    const gated = hzNorm.slice();
+    let runStart = -1;
+    for (let i = 0; i <= slice.length; i++) {
+        const voiced = i < slice.length && gated[i] != null;
+        if (voiced && runStart < 0) { runStart = i; }
+        else if (!voiced && runStart >= 0) {
+            const t0 = slice[runStart].t;
+            for (let j = runStart; j < i; j++) {
+                if (slice[j].t - t0 < VIBRATO_ONSET_GATE_MS) gated[j] = null;
+            }
+            runStart = -1;
+        }
+    }
+
+    // Build cents series, holding last value through (now smaller) gaps so DFT input is continuous
     const cents = new Array(slice.length);
     let lastC = 0;
+    let validCount = 0;
     for (let i = 0; i < slice.length; i++) {
-        if (slice[i].hz != null) lastC = 1200 * Math.log2(slice[i].hz / median);
+        if (gated[i] != null) { lastC = 1200 * Math.log2(gated[i] / median); validCount++; }
         cents[i] = lastC;
     }
-    // Detrend
-    let mean = 0;
-    for (const c of cents) mean += c;
-    mean /= cents.length;
-    for (let i = 0; i < cents.length; i++) cents[i] -= mean;
+    if (validCount < 20) { resetVibratoUi(); return; }
+
+    // (3) Linear detrend (least-squares on index)
+    const N = cents.length;
+    let sx = 0, sy = 0, sxx = 0, sxy = 0;
+    for (let i = 0; i < N; i++) { sx += i; sy += cents[i]; sxx += i * i; sxy += i * cents[i]; }
+    const denom = N * sxx - sx * sx;
+    const slope = denom !== 0 ? (N * sxy - sx * sy) / denom : 0;
+    const intercept = (sy - slope * sx) / N;
+    for (let i = 0; i < N; i++) cents[i] -= slope * i + intercept;
 
     const durationSec = (slice[slice.length - 1].t - slice[0].t) / 1000;
     if (durationSec < 0.8) { resetVibratoUi(); return; }
-    const sampleRate = (slice.length - 1) / durationSec;
+    const sampleRate = (N - 1) / durationSec;
 
-    // Goertzel scan 2–12Hz, 0.1Hz steps
-    const N = cents.length;
-    let peakFreq = 0, peakAmp = 0, peakPower = 0, totalPower = 0;
-    for (let f = 2.0; f <= 12.0 + 1e-6; f += 0.1) {
+    // (4) Apply Hann window in-place. Coherent gain = 0.5 → amplitude correction below.
+    for (let i = 0; i < N; i++) {
+        const w = 0.5 * (1 - Math.cos(2 * Math.PI * i / (N - 1)));
+        cents[i] *= w;
+    }
+
+    // Goertzel scan 2–12 Hz at 0.1 Hz steps, store powers for parabolic interpolation
+    const F_LO = 2.0, F_HI = 12.0, F_STEP = 0.1;
+    const nBins = Math.round((F_HI - F_LO) / F_STEP) + 1;
+    const powers = new Float64Array(nBins);
+    let peakIdx = 0, peakPower = 0, totalPower = 0;
+    for (let k = 0; k < nBins; k++) {
+        const f = F_LO + k * F_STEP;
         const omega = 2 * Math.PI * f / sampleRate;
         const cosW = Math.cos(omega);
         const sinW = Math.sin(omega);
@@ -1817,13 +1873,26 @@ function analyzeVibrato() {
         const real = q1 - q2 * cosW;
         const imag = q2 * sinW;
         const power = real * real + imag * imag;
+        powers[k] = power;
         totalPower += power;
-        if (power > peakPower) {
-            peakPower = power;
-            peakFreq = f;
-            peakAmp = 2 * Math.sqrt(power) / N;
+        if (power > peakPower) { peakPower = power; peakIdx = k; }
+    }
+
+    // (5) Parabolic peak interpolation
+    let peakFreq = F_LO + peakIdx * F_STEP;
+    let peakPowerInterp = peakPower;
+    if (peakIdx > 0 && peakIdx < nBins - 1) {
+        const yL = powers[peakIdx - 1], yC = powers[peakIdx], yR = powers[peakIdx + 1];
+        const denomP = (yL - 2 * yC + yR);
+        if (Math.abs(denomP) > 1e-12) {
+            const delta = 0.5 * (yL - yR) / denomP; // in bin units, in (-1, 1)
+            peakFreq += delta * F_STEP;
+            peakPowerInterp = yC - 0.25 * (yL - yR) * delta;
         }
     }
+
+    // Hann window coherent gain = 0.5, so amplitude estimate = 4*|X|/N (vs 2*|X|/N for rect)
+    const peakAmp = 4 * Math.sqrt(Math.max(0, peakPowerInterp)) / N;
 
     const regularity = totalPower > 0 ? Math.min(1, peakPower / totalPower * 8) : 0;
 
@@ -1838,13 +1907,21 @@ function analyzeVibrato() {
     va.extent = peakAmp;
     va.regularity = regularity;
     va.verdict = verdict;
-    va.lastAnalysisAt = now;
-    va.traceCents = slice.map(s => ({ t: s.t, cents: s.hz != null ? 1200 * Math.log2(s.hz / median) - mean : null }));
+    // Trace data for drawing: raw hz + cents-relative-to-median (without window/detrend, for honesty)
+    va.trace = slice.map((s, i) => {
+        const validHz = gated[i];
+        return {
+            t: s.t,
+            hz: validHz,
+            cents: validHz != null ? 1200 * Math.log2(validHz / median) : null,
+        };
+    });
 
     if (els.vibRate) els.vibRate.textContent = peakFreq.toFixed(1);
     if (els.vibExtent) els.vibExtent.textContent = Math.round(peakAmp);
     if (els.vibRegularity) els.vibRegularity.textContent = Math.round(regularity * 100);
     if (els.vibVerdict) els.vibVerdict.textContent = verdict;
+    if (els.vibF0) els.vibF0.textContent = Math.round(median);
     if (els.vibVerdictBox) {
         els.vibVerdictBox.classList.remove('is-good', 'is-warn');
         if (verdictClass) els.vibVerdictBox.classList.add(verdictClass);
@@ -1872,50 +1949,121 @@ function drawVibratoTrace() {
     ctx.fillStyle = '#fdfcf6';
     ctx.fillRect(0, 0, w, h);
 
-    const Y_RANGE = 150;
-    const yFor = (cents) => h / 2 - (cents / Y_RANGE) * (h / 2 - 4);
+    const va = state.vibratoAnalysis;
+    const series = va.trace;
+    const showF0 = !!va.showF0;
+    const showCents = !!va.showCents;
 
-    ctx.strokeStyle = 'rgba(0,0,0,0.08)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (const c0 of [-100, -50, 50, 100]) {
-        const y = yFor(c0);
-        ctx.moveTo(0, y); ctx.lineTo(w, y);
+    // Background grid + center line (cents reference)
+    const Y_RANGE = 150; // ± cents
+    const yForCents = (cents) => h / 2 - (cents / Y_RANGE) * (h / 2 - 4);
+
+    if (showCents) {
+        ctx.strokeStyle = 'rgba(0,0,0,0.08)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (const c0 of [-100, -50, 50, 100]) {
+            const y = yForCents(c0);
+            ctx.moveTo(0, y); ctx.lineTo(w, y);
+        }
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(0,0,0,0.22)';
+        ctx.beginPath();
+        ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2);
+        ctx.stroke();
     }
-    ctx.stroke();
 
-    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
-    ctx.beginPath();
-    ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2);
-    ctx.stroke();
-
-    ctx.fillStyle = 'rgba(0,0,0,0.4)';
-    ctx.font = '9px Inter, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    for (const c0 of [-100, 0, 100]) {
-        ctx.fillText(`${c0 > 0 ? '+' : ''}${c0}¢`, 4, yFor(c0));
+    if (!series || series.length < 2) {
+        // Hint text when empty
+        ctx.fillStyle = 'rgba(0,0,0,0.25)';
+        ctx.font = '11px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('発声するとピッチ曲線がここに描画されます', w / 2, h / 2);
+        return;
     }
 
-    const series = state.vibratoAnalysis.traceCents;
-    if (!series || series.length < 2) return;
     const t0 = series[0].t;
     const tN = series[series.length - 1].t;
     const tSpan = Math.max(1, tN - t0);
+    const xFor = (t) => ((t - t0) / tSpan) * w;
 
-    ctx.beginPath();
-    ctx.strokeStyle = '#1e88e5';
-    ctx.lineWidth = 1.5;
-    let started = false;
+    // Compute f₀ auto-scale (median ± 30%) for the right Y axis
+    let hzMin = Infinity, hzMax = -Infinity;
     for (const s of series) {
-        if (s.cents == null) { started = false; continue; }
-        const x = ((s.t - t0) / tSpan) * w;
-        const y = yFor(Math.max(-Y_RANGE, Math.min(Y_RANGE, s.cents)));
-        if (!started) { ctx.moveTo(x, y); started = true; }
-        else ctx.lineTo(x, y);
+        if (s.hz == null) continue;
+        if (s.hz < hzMin) hzMin = s.hz;
+        if (s.hz > hzMax) hzMax = s.hz;
     }
-    ctx.stroke();
+    const f0Med = va.f0Median || ((hzMin + hzMax) / 2);
+    const pad = Math.max(8, f0Med * 0.06);
+    const yHzLo = Math.min(hzMin - pad, f0Med * 0.94);
+    const yHzHi = Math.max(hzMax + pad, f0Med * 1.06);
+    const hzRange = Math.max(1, yHzHi - yHzLo);
+    const yForHz = (hz) => h - 4 - ((hz - yHzLo) / hzRange) * (h - 8);
 
+    // f₀ curve (orange) — drawn first as background reference
+    if (showF0 && isFinite(hzMin)) {
+        ctx.strokeStyle = '#ef6c00';
+        ctx.lineWidth = 1.5;
+        ctx.globalAlpha = 0.85;
+        ctx.beginPath();
+        let started = false;
+        for (const s of series) {
+            if (s.hz == null) { started = false; continue; }
+            const x = xFor(s.t);
+            const y = yForHz(s.hz);
+            if (!started) { ctx.moveTo(x, y); started = true; }
+            else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        // Median Hz reference (dashed horizontal line)
+        if (va.f0Median > 0) {
+            ctx.setLineDash([3, 3]);
+            ctx.strokeStyle = 'rgba(239, 108, 0, 0.35)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            const yMed = yForHz(va.f0Median);
+            ctx.moveTo(0, yMed); ctx.lineTo(w, yMed);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+        ctx.globalAlpha = 1;
+        // Right-side Hz labels
+        ctx.fillStyle = 'rgba(239, 108, 0, 0.85)';
+        ctx.font = '9px Inter, sans-serif';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`${Math.round(yHzHi)}Hz`, w - 4, yForHz(yHzHi) + 5);
+        ctx.fillText(`${Math.round(yHzLo)}Hz`, w - 4, yForHz(yHzLo) - 5);
+        if (va.f0Median > 0) ctx.fillText(`${Math.round(va.f0Median)}`, w - 4, yForHz(va.f0Median) - 5);
+    }
+
+    // Cents curve (blue) — drawn on top for vibrato readout
+    if (showCents) {
+        ctx.strokeStyle = '#1e88e5';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        let started = false;
+        for (const s of series) {
+            if (s.cents == null) { started = false; continue; }
+            const x = xFor(s.t);
+            const y = yForCents(Math.max(-Y_RANGE, Math.min(Y_RANGE, s.cents)));
+            if (!started) { ctx.moveTo(x, y); started = true; }
+            else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        // Left-side cents labels
+        ctx.fillStyle = 'rgba(30, 136, 229, 0.85)';
+        ctx.font = '9px Inter, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        for (const c0 of [-100, 0, 100]) {
+            ctx.fillText(`${c0 > 0 ? '+' : ''}${c0}¢`, 4, yForCents(c0));
+        }
+    }
+
+    // Time-span footer
     ctx.fillStyle = 'rgba(0,0,0,0.4)';
     ctx.font = '9px Inter, sans-serif';
     ctx.textAlign = 'right';
@@ -4294,6 +4442,22 @@ if (els.viewTabs) {
         applyViewMode(btn.dataset.view);
     });
     applyViewMode(state.viewMode);
+}
+
+// Vibrato curve toggles (f₀ / Cents)
+if (els.vibShowF0) {
+    state.vibratoAnalysis.showF0 = els.vibShowF0.checked;
+    els.vibShowF0.addEventListener('change', () => {
+        state.vibratoAnalysis.showF0 = els.vibShowF0.checked;
+        drawVibratoTrace();
+    });
+}
+if (els.vibShowCents) {
+    state.vibratoAnalysis.showCents = els.vibShowCents.checked;
+    els.vibShowCents.addEventListener('change', () => {
+        state.vibratoAnalysis.showCents = els.vibShowCents.checked;
+        drawVibratoTrace();
+    });
 }
 
 // Log/Linear Frequency Scale Toggle

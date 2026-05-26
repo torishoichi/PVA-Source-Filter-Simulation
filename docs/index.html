@@ -483,13 +483,30 @@
                 <div id="vibrato-panel" class="vib-analysis-panel" style="display:none;">
                     <div class="vib-analysis-head">
                         <span class="vib-analysis-title">Vibrato</span>
+                        <div class="vib-analysis-toggles">
+                            <label class="vib-toggle" title="f₀ 絶対値 (Hz) の時系列線を表示">
+                                <input type="checkbox" id="vib-show-f0" checked>
+                                <span class="vib-toggle-swatch vib-swatch-f0"></span>
+                                <span class="vib-toggle-label">f₀ Hz</span>
+                            </label>
+                            <label class="vib-toggle" title="セント偏差 (中央値からのズレ) の時系列線を表示">
+                                <input type="checkbox" id="vib-show-cents" checked>
+                                <span class="vib-toggle-swatch vib-swatch-cents"></span>
+                                <span class="vib-toggle-label">Cents</span>
+                            </label>
+                        </div>
                         <div class="vib-analysis-stats">
+                            <div class="vstat" title="ビブラートの中心周波数 (中央値)">
+                                <span class="vstat-label">f₀</span>
+                                <span class="vstat-val" id="vib-f0">—</span>
+                                <span class="vstat-unit">Hz</span>
+                            </div>
                             <div class="vstat" title="ビブラートの速さ (5–7Hz が一般的)">
                                 <span class="vstat-label">Rate</span>
                                 <span class="vstat-val" id="vib-rate">—</span>
                                 <span class="vstat-unit">Hz</span>
                             </div>
-                            <div class="vstat" title="ビブラートの深さ (片振幅 cents)">
+                            <div class="vstat" title="ビブラートの深さ (片振幅 cents、Hann窓補正済)">
                                 <span class="vstat-label">Extent</span>
                                 <span class="vstat-val" id="vib-extent">—</span>
                                 <span class="vstat-unit">±¢</span>
