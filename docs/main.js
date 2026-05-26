@@ -217,6 +217,12 @@ const els = {
     recordingsList: document.getElementById('recordings-list'),
     recordingsMeta: document.getElementById('recordings-meta'),
     recordingsEmpty: document.getElementById('recordings-empty'),
+    playbackControls: document.getElementById('playback-controls'),
+    pbSeek: document.getElementById('pb-seek'),
+    pbRate: document.getElementById('pb-rate'),
+    pbRateVal: document.getElementById('pb-rate-val'),
+    pbCurTime: document.getElementById('pb-cur-time'),
+    pbTotalTime: document.getElementById('pb-total-time'),
     btnSlopeLine: document.getElementById('slope-line-toggle'),
     btnLogScale: document.getElementById('log-scale-toggle'),
     btnRoughness: document.getElementById('roughness-toggle'),
@@ -3020,6 +3026,12 @@ let recAutoStopId = null;
 
 let playbackSource = null;   // AudioBufferSourceNode currently playing a saved recording
 let playbackRecId = null;    // id of recording being played back
+let playbackBuffer = null;   // cached AudioBuffer for the active recording
+let playbackOffset = 0;      // seconds — seek offset (audio time)
+let playbackStartedAt = 0;   // audioCtx.currentTime when source.start() called
+let playbackRate = 1.0;
+let playbackGainNode = null; // audible output for saved recordings
+let playbackUiRaf = null;
 let micWasActiveBeforePlayback = false;
 
 function fmtDuration(ms) {
@@ -3128,48 +3140,103 @@ async function ensureAnalysisPipeline() {
     }
 }
 
+function ensurePlaybackGain() {
+    if (!audioCtx) return;
+    if (!playbackGainNode) {
+        playbackGainNode = audioCtx.createGain();
+        playbackGainNode.gain.value = 1.0;
+        playbackGainNode.connect(audioCtx.destination);
+    }
+}
+
+function getPlaybackPosition() {
+    if (!playbackBuffer) return 0;
+    if (!playbackSource) return playbackOffset;
+    const elapsed = (audioCtx.currentTime - playbackStartedAt) * playbackRate;
+    return Math.min(playbackBuffer.duration, playbackOffset + elapsed);
+}
+
+function startPlaybackSource(fromSeconds) {
+    if (!playbackBuffer || !audioCtx) return;
+    // Tear down any existing source first
+    if (playbackSource) {
+        try { playbackSource.onended = null; playbackSource.stop(); playbackSource.disconnect(); } catch (_) {}
+        playbackSource = null;
+    }
+    const src = audioCtx.createBufferSource();
+    src.buffer = playbackBuffer;
+    src.playbackRate.value = playbackRate;
+    src.connect(micGainNode);           // for analysis pipeline
+    src.connect(playbackGainNode);      // audible output
+    src.onended = () => {
+        // Only treat as natural end if we reach the actual buffer end
+        if (getPlaybackPosition() >= playbackBuffer.duration - 0.05) {
+            stopPlayback();
+        }
+    };
+    playbackSource = src;
+    playbackOffset = Math.max(0, Math.min(playbackBuffer.duration, fromSeconds));
+    playbackStartedAt = audioCtx.currentTime;
+    src.start(0, playbackOffset);
+}
+
+function updatePlaybackUi() {
+    if (!playbackBuffer || !els.pbSeek) {
+        playbackUiRaf = null;
+        return;
+    }
+    const pos = getPlaybackPosition();
+    const ratio = playbackBuffer.duration > 0 ? pos / playbackBuffer.duration : 0;
+    if (document.activeElement !== els.pbSeek) {
+        els.pbSeek.value = String(Math.round(ratio * 1000));
+    }
+    if (els.pbCurTime) els.pbCurTime.textContent = pos.toFixed(1) + 's';
+    playbackUiRaf = requestAnimationFrame(updatePlaybackUi);
+}
+
 async function playRecording(id) {
-    // Stop any current playback first
     if (playbackSource) stopPlayback();
 
     const rec = await RecordingsDB.get(id);
     if (!rec) return;
 
     await ensureAnalysisPipeline();
+    ensurePlaybackGain();
 
-    // If live mic is currently feeding micGainNode, disconnect it
+    // Detach live mic from analysis path while playing back
     micWasActiveBeforePlayback = !!(micSource && state.isMicActive);
     if (micWasActiveBeforePlayback && micSource) {
         try { micSource.disconnect(micGainNode); } catch (_) {}
     }
 
     const arrayBuf = await rec.blob.arrayBuffer();
-    let audioBuf;
     try {
-        audioBuf = await audioCtx.decodeAudioData(arrayBuf.slice(0));
+        playbackBuffer = await audioCtx.decodeAudioData(arrayBuf.slice(0));
     } catch (err) {
         console.error('decodeAudioData failed:', err);
         alert('録音の再生に失敗しました');
-        // Restore mic connection if we disconnected it
         if (micWasActiveBeforePlayback && micSource) {
             try { micSource.connect(micGainNode); } catch (_) {}
         }
         return;
     }
 
-    playbackSource = audioCtx.createBufferSource();
-    playbackSource.buffer = audioBuf;
-    playbackSource.connect(micGainNode);
-
     playbackRecId = id;
-    state.isMicActive = true; // reuse visualizer path
+    state.isMicActive = true;
     state.isMicPaused = false;
     if (els.btnMic) els.btnMic.classList.add('mic-active');
 
-    playbackSource.onended = () => {
-        cleanupPlayback();
-    };
-    playbackSource.start();
+    // Initial seek/rate UI sync
+    if (els.pbRate) {
+        els.pbRate.value = String(playbackRate);
+        if (els.pbRateVal) els.pbRateVal.textContent = playbackRate.toFixed(2) + 'x';
+    }
+    if (els.pbTotalTime) els.pbTotalTime.textContent = playbackBuffer.duration.toFixed(1) + 's';
+    if (els.playbackControls) els.playbackControls.style.display = 'flex';
+
+    startPlaybackSource(0);
+    if (playbackUiRaf) cancelAnimationFrame(playbackUiRaf);
+    playbackUiRaf = requestAnimationFrame(updatePlaybackUi);
 
     if (!isPlaying) {
         cancelAnimationFrame(animationId);
@@ -3183,23 +3250,170 @@ function stopPlayback() {
         try { playbackSource.onended = null; playbackSource.stop(); } catch (_) {}
         try { playbackSource.disconnect(); } catch (_) {}
     }
+    playbackSource = null;
+    playbackBuffer = null;
+    playbackOffset = 0;
+    if (playbackUiRaf) { cancelAnimationFrame(playbackUiRaf); playbackUiRaf = null; }
+    if (els.playbackControls) els.playbackControls.style.display = 'none';
     cleanupPlayback();
 }
 
 function cleanupPlayback() {
-    playbackSource = null;
     playbackRecId = null;
     if (micWasActiveBeforePlayback && micSource && micGainNode) {
         try { micSource.connect(micGainNode); } catch (_) {}
         micWasActiveBeforePlayback = false;
     } else {
-        // No live mic — turn off the visualizer mic-active flag
         state.isMicActive = false;
         if (els.btnMic) els.btnMic.classList.remove('mic-active');
         state.cachedMicData = null;
         state.cachedMicFormants = null;
     }
     renderRecordingsList();
+}
+
+// Seek bar handler
+if (els.pbSeek) {
+    const seekHandler = () => {
+        if (!playbackBuffer) return;
+        const ratio = Number(els.pbSeek.value) / 1000;
+        const pos = ratio * playbackBuffer.duration;
+        if (els.pbCurTime) els.pbCurTime.textContent = pos.toFixed(1) + 's';
+        startPlaybackSource(pos);
+    };
+    els.pbSeek.addEventListener('change', seekHandler);
+}
+
+// Rate handler
+if (els.pbRate) {
+    els.pbRate.addEventListener('input', () => {
+        const r = Number(els.pbRate.value);
+        if (els.pbRateVal) els.pbRateVal.textContent = r.toFixed(2) + 'x';
+        if (playbackSource && playbackBuffer) {
+            const pos = getPlaybackPosition();
+            playbackOffset = pos;
+            playbackStartedAt = audioCtx.currentTime;
+            playbackSource.playbackRate.value = r;
+        }
+        playbackRate = r;
+    });
+}
+
+// ============================================================
+// Export utilities — WAV (built-in) and MP3 (lamejs CDN)
+// ============================================================
+function _writeStr(view, offset, str) {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+}
+
+function audioBufferToWav(buffer) {
+    const numCh = buffer.numberOfChannels;
+    const sr = buffer.sampleRate;
+    const samples = buffer.length;
+    const bps = 2;
+    const dataSize = samples * numCh * bps;
+    const ab = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(ab);
+    _writeStr(view, 0, 'RIFF');
+    view.setUint32(4, 36 + dataSize, true);
+    _writeStr(view, 8, 'WAVE');
+    _writeStr(view, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, numCh, true);
+    view.setUint32(24, sr, true);
+    view.setUint32(28, sr * numCh * bps, true);
+    view.setUint16(32, numCh * bps, true);
+    view.setUint16(34, 16, true);
+    _writeStr(view, 36, 'data');
+    view.setUint32(40, dataSize, true);
+    let off = 44;
+    const channels = [];
+    for (let c = 0; c < numCh; c++) channels.push(buffer.getChannelData(c));
+    for (let i = 0; i < samples; i++) {
+        for (let c = 0; c < numCh; c++) {
+            let s = Math.max(-1, Math.min(1, channels[c][i]));
+            view.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+            off += 2;
+        }
+    }
+    return new Blob([ab], { type: 'audio/wav' });
+}
+
+function audioBufferToMp3(buffer, kbps = 128) {
+    if (typeof lamejs === 'undefined') throw new Error('lamejs not loaded');
+    const sr = buffer.sampleRate;
+    const numCh = Math.min(2, buffer.numberOfChannels);
+    const encoder = new lamejs.Mp3Encoder(numCh, sr, kbps);
+    const samples = buffer.length;
+    const leftF = buffer.getChannelData(0);
+    const rightF = numCh > 1 ? buffer.getChannelData(1) : null;
+    const leftI = new Int16Array(samples);
+    const rightI = rightF ? new Int16Array(samples) : null;
+    for (let i = 0; i < samples; i++) {
+        leftI[i] = Math.max(-32768, Math.min(32767, Math.round(leftF[i] * 32768)));
+        if (rightI) rightI[i] = Math.max(-32768, Math.min(32767, Math.round(rightF[i] * 32768)));
+    }
+    const blockSize = 1152;
+    const parts = [];
+    for (let i = 0; i < samples; i += blockSize) {
+        const l = leftI.subarray(i, i + blockSize);
+        const r = rightI ? rightI.subarray(i, i + blockSize) : null;
+        const enc = r ? encoder.encodeBuffer(l, r) : encoder.encodeBuffer(l);
+        if (enc.length > 0) parts.push(enc);
+    }
+    const flush = encoder.flush();
+    if (flush.length > 0) parts.push(flush);
+    return new Blob(parts, { type: 'audio/mp3' });
+}
+
+function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+}
+
+async function exportRecording(id, format) {
+    const rec = await RecordingsDB.get(id);
+    if (!rec) return;
+    // Need an AudioContext to decode (reuse global if available, else temporary)
+    let ctx = audioCtx;
+    let tempCtx = false;
+    if (!ctx) {
+        ctx = new (window.AudioContext || window.webkitAudioContext)();
+        tempCtx = true;
+    }
+    const arrayBuf = await rec.blob.arrayBuffer();
+    let buf;
+    try {
+        buf = await ctx.decodeAudioData(arrayBuf.slice(0));
+    } catch (err) {
+        alert('音声データのデコードに失敗しました');
+        if (tempCtx) ctx.close();
+        return;
+    }
+    const baseName = `sourcefilter-${new Date(rec.createdAt).toISOString().replace(/[:.]/g, '-').slice(0, 19)}`;
+    let outBlob, ext;
+    try {
+        if (format === 'mp3') {
+            outBlob = audioBufferToMp3(buf, 128);
+            ext = 'mp3';
+        } else {
+            outBlob = audioBufferToWav(buf);
+            ext = 'wav';
+        }
+    } catch (err) {
+        console.error('Export failed:', err);
+        alert(`${format.toUpperCase()} エクスポートに失敗: ${err.message}`);
+        if (tempCtx) ctx.close();
+        return;
+    }
+    downloadBlob(outBlob, `${baseName}.${ext}`);
+    if (tempCtx) ctx.close();
 }
 
 async function deleteRecording(id) {
@@ -3244,16 +3458,54 @@ function renderRecordingsList() {
             else playRecording(rec.id);
         });
 
+        // Export menu (WAV / MP3)
+        const expWrap = document.createElement('span');
+        expWrap.className = 'rec-export-wrap';
+        const expBtn = document.createElement('button');
+        expBtn.className = 'rec-btn';
+        expBtn.type = 'button';
+        expBtn.textContent = '⇩';
+        expBtn.title = 'Export';
+        const expMenu = document.createElement('div');
+        expMenu.className = 'rec-export-menu';
+        const wavBtn = document.createElement('button');
+        wavBtn.type = 'button';
+        wavBtn.textContent = 'WAV';
+        const mp3Btn = document.createElement('button');
+        mp3Btn.type = 'button';
+        mp3Btn.textContent = 'MP3';
+        const runExport = async (btn, fmt) => {
+            btn.disabled = true;
+            const orig = btn.textContent;
+            btn.textContent = '…';
+            try { await exportRecording(rec.id, fmt); }
+            finally { btn.disabled = false; btn.textContent = orig; expMenu.classList.remove('is-open'); }
+        };
+        wavBtn.addEventListener('click', (e) => { e.stopPropagation(); runExport(wavBtn, 'wav'); });
+        mp3Btn.addEventListener('click', (e) => { e.stopPropagation(); runExport(mp3Btn, 'mp3'); });
+        expMenu.append(wavBtn, mp3Btn);
+        expBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            document.querySelectorAll('.rec-export-menu.is-open').forEach(m => { if (m !== expMenu) m.classList.remove('is-open'); });
+            expMenu.classList.toggle('is-open');
+        });
+        expWrap.append(expBtn, expMenu);
+
         const delBtn = document.createElement('button');
         delBtn.className = 'rec-btn danger';
         delBtn.type = 'button';
         delBtn.textContent = 'Del';
         delBtn.addEventListener('click', () => deleteRecording(rec.id));
 
-        li.append(timeEl, durEl, playBtn, delBtn);
+        li.append(timeEl, durEl, playBtn, expWrap, delBtn);
         els.recordingsList.appendChild(li);
     }
 }
+
+// Close any open export menu when clicking elsewhere
+document.addEventListener('click', () => {
+    document.querySelectorAll('.rec-export-menu.is-open').forEach(m => m.classList.remove('is-open'));
+});
 
 if (els.btnMicRecord) {
     els.btnMicRecord.addEventListener('click', () => {

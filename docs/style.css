@@ -2616,3 +2616,75 @@ body.learn-drawer-open { overflow: hidden; }
     font-variant-numeric: tabular-nums;
     opacity: 0.85;
 }
+
+/* Playback controls (seek + speed) */
+.playback-controls {
+    margin-top: 8px;
+    padding: 8px 10px;
+    border: 1px solid rgba(79, 150, 80, 0.4);
+    border-radius: 6px;
+    background: rgba(79, 150, 80, 0.06);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.pb-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.pb-time {
+    font-size: 0.74rem;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+    min-width: 40px;
+}
+.pb-seek, .pb-rate {
+    flex: 1 1 auto;
+    height: 4px;
+    cursor: pointer;
+}
+.pb-label {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    min-width: 40px;
+}
+.pb-val {
+    font-size: 0.74rem;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+    min-width: 48px;
+    text-align: right;
+}
+
+/* Export menu inside recording row */
+.rec-export-wrap { position: relative; }
+.rec-export-menu {
+    position: absolute;
+    right: 0;
+    top: 100%;
+    margin-top: 2px;
+    background: #1c2024;
+    border: 1px solid var(--glass-border);
+    border-radius: 4px;
+    padding: 4px;
+    z-index: 10;
+    display: none;
+    min-width: 88px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+.rec-export-menu.is-open { display: block; }
+.rec-export-menu button {
+    display: block;
+    width: 100%;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    text-align: left;
+    padding: 5px 8px;
+    font-size: 0.76rem;
+    cursor: pointer;
+    border-radius: 3px;
+}
+.rec-export-menu button:hover { background: rgba(255, 255, 255, 0.08); }
+.rec-export-menu button:disabled { opacity: 0.4; cursor: wait; }

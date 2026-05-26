@@ -569,6 +569,18 @@
                     <div class="recordings-empty" id="recordings-empty">
                         マイクをONにして Rec ボタンで録音（最大15秒・端末内のみに保存）
                     </div>
+                    <div id="playback-controls" class="playback-controls" style="display:none;">
+                        <div class="pb-row pb-seek-row">
+                            <span class="pb-time" id="pb-cur-time">0.0s</span>
+                            <input type="range" id="pb-seek" min="0" max="1000" value="0" step="1" class="pb-seek" aria-label="Playback position">
+                            <span class="pb-time" id="pb-total-time">0.0s</span>
+                        </div>
+                        <div class="pb-row pb-rate-row">
+                            <label for="pb-rate" class="pb-label">Speed</label>
+                            <input type="range" id="pb-rate" min="0.25" max="2" value="1" step="0.05" class="pb-rate" aria-label="Playback rate">
+                            <span class="pb-val" id="pb-rate-val">1.00x</span>
+                        </div>
+                    </div>
                 </div>
 
             </section>
@@ -1129,6 +1141,7 @@
         </div><!-- /.learn-drawer-body -->
     </aside>
 
+    <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
     <script src="recordings-db.js"></script>
     <script src="main.js"></script>
     <script>
