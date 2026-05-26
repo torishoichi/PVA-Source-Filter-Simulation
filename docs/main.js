@@ -2483,15 +2483,6 @@ function drawVisualizer() {
                 }
 
                 canvasCtx.fillText(HARMONIC_LABEL(h), x, y - 8);
-
-                // Cent deviation of n·f₀ from nearest equal-tempered semitone
-                const centsDev = freqToCents(expectedFreq);
-                const centsTxt = `${centsDev > 0 ? '+' : (centsDev < 0 ? '' : '±')}${centsDev}¢`;
-                canvasCtx.save();
-                canvasCtx.font = '9px monospace';
-                canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.45)';
-                canvasCtx.fillText(centsTxt, x, y - 20);
-                canvasCtx.restore();
             }
         }
     }
@@ -2507,6 +2498,58 @@ function drawVisualizer() {
         }
 
         drawSpectrum(micAnalyser, 'rgba(79, 150, 80, 0.95)', null, 1.2, state.cachedMicData);
+
+        // --- Mic harmonic cent overlay ---
+        // For each detected harmonic peak n·f₀ (f₀ from pitch detector), show
+        // its cent deviation from the nearest equal-tempered semitone.
+        const micF0 = state.cachedMicPitch;
+        if (micF0 > 0 && state.cachedMicData) {
+            const micBufLen = state.cachedMicData.length;
+            const micNyq = audioCtx.sampleRate / 2;
+            const micMaxDb = micAnalyser.maxDecibels;
+            const micMinDb = micAnalyser.minDecibels;
+            const micDbRange = micMaxDb - micMinDb;
+            const micSearchHz = micF0 * 0.15;
+            const micMaxH = Math.min(MAX_HARMONICS_ON_SPECTRUM, Math.floor(MAX_FREQ_DISPLAY / micF0));
+
+            canvasCtx.save();
+            canvasCtx.textAlign = 'center';
+            canvasCtx.font = '9px monospace';
+            for (let h = 1; h <= micMaxH; h++) {
+                const expF = micF0 * h;
+                const minF = expF - micSearchHz;
+                const maxF = expF + micSearchHz;
+                let peakVal = -Infinity;
+                let peakFreq = expF;
+                for (let i = 0; i < micBufLen; i++) {
+                    const f = (i * micNyq) / micBufLen;
+                    if (f < minF) continue;
+                    if (f > maxF) break;
+                    if (state.cachedMicData[i] > peakVal) {
+                        peakVal = state.cachedMicData[i];
+                        peakFreq = f;
+                    }
+                }
+                if (peakVal <= micMinDb + (micDbRange * 0.15)) continue;
+
+                const normVal = Math.max(0, (peakVal - micMinDb) / micDbRange);
+                const displayVal = Math.pow(normVal, 1.5);
+                const y = height - (displayVal * height * 0.9);
+                const x = freqToX(peakFreq, width);
+
+                const centsDev = freqToCents(peakFreq);
+                const sign = centsDev > 0 ? '+' : (centsDev < 0 ? '' : '±');
+                const centsTxt = `${sign}${centsDev}¢`;
+
+                // White-backed pill for legibility over green mic spectrum
+                const txtW = canvasCtx.measureText(centsTxt).width;
+                canvasCtx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+                canvasCtx.fillRect(x - txtW / 2 - 3, y - 22, txtW + 6, 12);
+                canvasCtx.fillStyle = 'rgba(40, 100, 40, 0.95)';
+                canvasCtx.fillText(centsTxt, x, y - 13);
+            }
+            canvasCtx.restore();
+        }
 
         // --- Real-time Formant Tracking (Mic F1 / F2) ---
         const maxDb = micAnalyser.maxDecibels;
