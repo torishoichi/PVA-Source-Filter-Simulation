@@ -2483,6 +2483,15 @@ function drawVisualizer() {
                 }
 
                 canvasCtx.fillText(HARMONIC_LABEL(h), x, y - 8);
+
+                // Cent deviation of n·f₀ from nearest equal-tempered semitone
+                const centsDev = freqToCents(expectedFreq);
+                const centsTxt = `${centsDev > 0 ? '+' : (centsDev < 0 ? '' : '±')}${centsDev}¢`;
+                canvasCtx.save();
+                canvasCtx.font = '9px monospace';
+                canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+                canvasCtx.fillText(centsTxt, x, y - 20);
+                canvasCtx.restore();
             }
         }
     }
