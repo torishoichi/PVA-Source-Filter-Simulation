@@ -480,9 +480,14 @@
                 </div>
 
                 <!-- Vibrato analysis panel (visible when mic active) -->
-                <div id="vibrato-panel" class="vib-analysis-panel" style="display:none;">
-                    <div class="vib-analysis-head">
+                <details id="vibrato-panel" class="vib-analysis-panel" open>
+                    <summary class="vib-analysis-summary">
+                        <span class="vib-analysis-disclosure" aria-hidden="true">▸</span>
                         <span class="vib-analysis-title">Vibrato</span>
+                        <span class="vib-analysis-summary-hint" id="vib-summary-hint">マイクONで f₀ / セント偏差 / ビブラート分析</span>
+                    </summary>
+                    <div class="vib-analysis-body">
+                    <div class="vib-analysis-head">
                         <div class="vib-analysis-toggles">
                             <label class="vib-toggle" title="f₀ 絶対値 (Hz) の時系列線を表示">
                                 <input type="checkbox" id="vib-show-f0" checked>
@@ -525,7 +530,8 @@
                     <div class="vib-analysis-canvas-wrap">
                         <canvas id="vibrato-canvas"></canvas>
                     </div>
-                </div>
+                    </div>
+                </details>
 
                 <!-- Roughness educational legend (visible when Roughness toggle is ON) -->
                 <div id="roughness-legend" class="roughness-legend" style="display:none;">

@@ -344,16 +344,58 @@ input[type=range]::-moz-range-track {
 /* Vibrato analysis panel */
 .vib-analysis-panel {
     margin-top: 10px;
-    padding: 10px 12px;
     background: rgba(255, 255, 255, 0.65);
     border: 1px solid var(--glass-border);
     border-radius: 8px;
 }
 
+.vib-analysis-summary {
+    list-style: none;
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 8px;
+}
+
+.vib-analysis-summary::-webkit-details-marker { display: none; }
+.vib-analysis-summary::marker { display: none; content: ''; }
+
+.vib-analysis-summary:hover {
+    background: rgba(33, 150, 243, 0.05);
+}
+
+.vib-analysis-disclosure {
+    display: inline-block;
+    font-size: 10px;
+    color: var(--text-secondary, #777);
+    transition: transform 0.15s;
+}
+
+#vibrato-panel[open] > .vib-analysis-summary .vib-analysis-disclosure {
+    transform: rotate(90deg);
+}
+
+.vib-analysis-summary-hint {
+    font-size: 11px;
+    color: var(--text-secondary, #888);
+    font-weight: 400;
+}
+
+#vibrato-panel[open] > .vib-analysis-summary .vib-analysis-summary-hint {
+    display: none;
+}
+
+.vib-analysis-body {
+    padding: 4px 12px 10px 12px;
+}
+
 .vib-analysis-head {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: 12px;
     margin-bottom: 8px;
     flex-wrap: wrap;

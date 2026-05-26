@@ -2071,14 +2071,16 @@ function drawVibratoTrace() {
     ctx.fillText(`${(tSpan / 1000).toFixed(1)}s`, w - 4, h - 2);
 }
 
-let lastVibPanelVisible = null;
+let lastVibPanelMicState = null;
 function updateVibratoPanelVisibility() {
-    if (!els.vibratoPanel) return;
-    const visible = !!state.isMicActive;
-    if (visible !== lastVibPanelVisible) {
-        els.vibratoPanel.style.display = visible ? 'block' : 'none';
-        lastVibPanelVisible = visible;
-        if (!visible) resetVibratoUi();
+    // Panel is a collapsible <details> that is always present in the DOM.
+    // We only need to clear the UI / trace when mic transitions off.
+    if (state.isMicActive !== lastVibPanelMicState) {
+        if (!state.isMicActive) {
+            resetVibratoUi();
+            drawVibratoTrace(); // repaint hint
+        }
+        lastVibPanelMicState = state.isMicActive;
     }
 }
 
@@ -4458,6 +4460,15 @@ if (els.vibShowCents) {
         state.vibratoAnalysis.showCents = els.vibShowCents.checked;
         drawVibratoTrace();
     });
+}
+// Repaint vibrato canvas when the <details> panel is expanded
+// (collapsed state has 0 layout, so the canvas needs a re-fit on open)
+if (els.vibratoPanel) {
+    els.vibratoPanel.addEventListener('toggle', () => {
+        if (els.vibratoPanel.open) drawVibratoTrace();
+    });
+    // Initial paint to show the empty-state hint without needing mic
+    setTimeout(() => { if (els.vibratoPanel.open) drawVibratoTrace(); }, 0);
 }
 
 // Log/Linear Frequency Scale Toggle
