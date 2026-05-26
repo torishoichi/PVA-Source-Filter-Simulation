@@ -220,7 +220,6 @@ const els = {
     playbackControls: document.getElementById('playback-controls'),
     pbSeek: document.getElementById('pb-seek'),
     pbRate: document.getElementById('pb-rate'),
-    pbRateVal: document.getElementById('pb-rate-val'),
     pbCurTime: document.getElementById('pb-cur-time'),
     pbTotalTime: document.getElementById('pb-total-time'),
     btnSlopeLine: document.getElementById('slope-line-toggle'),
@@ -3024,13 +3023,15 @@ let recStartTs = 0;
 let recTimerId = null;
 let recAutoStopId = null;
 
-let playbackSource = null;   // AudioBufferSourceNode currently playing a saved recording
-let playbackRecId = null;    // id of recording being played back
-let playbackBuffer = null;   // cached AudioBuffer for the active recording
-let playbackOffset = 0;      // seconds — seek offset (audio time)
-let playbackStartedAt = 0;   // audioCtx.currentTime when source.start() called
+// Playback uses HTMLAudioElement so we get native pitch-preserving rate
+// changes and free seeking. The element is piped into the Web Audio graph
+// via createMediaElementSource so existing spectrum/formant analysis works.
+let playbackAudio = null;       // HTMLAudioElement
+let playbackMediaSrc = null;    // MediaElementAudioSourceNode
+let playbackObjectUrl = null;
+let playbackRecId = null;
 let playbackRate = 1.0;
-let playbackGainNode = null; // audible output for saved recordings
+let playbackGainNode = null;    // audible output branch
 let playbackUiRaf = null;
 let micWasActiveBeforePlayback = false;
 
@@ -3149,53 +3150,19 @@ function ensurePlaybackGain() {
     }
 }
 
-function getPlaybackPosition() {
-    if (!playbackBuffer) return 0;
-    if (!playbackSource) return playbackOffset;
-    const elapsed = (audioCtx.currentTime - playbackStartedAt) * playbackRate;
-    return Math.min(playbackBuffer.duration, playbackOffset + elapsed);
-}
-
-function startPlaybackSource(fromSeconds) {
-    if (!playbackBuffer || !audioCtx) return;
-    // Tear down any existing source first
-    if (playbackSource) {
-        try { playbackSource.onended = null; playbackSource.stop(); playbackSource.disconnect(); } catch (_) {}
-        playbackSource = null;
-    }
-    const src = audioCtx.createBufferSource();
-    src.buffer = playbackBuffer;
-    src.playbackRate.value = playbackRate;
-    src.connect(micGainNode);           // for analysis pipeline
-    src.connect(playbackGainNode);      // audible output
-    src.onended = () => {
-        // Only treat as natural end if we reach the actual buffer end
-        if (getPlaybackPosition() >= playbackBuffer.duration - 0.05) {
-            stopPlayback();
-        }
-    };
-    playbackSource = src;
-    playbackOffset = Math.max(0, Math.min(playbackBuffer.duration, fromSeconds));
-    playbackStartedAt = audioCtx.currentTime;
-    src.start(0, playbackOffset);
-}
-
 function updatePlaybackUi() {
-    if (!playbackBuffer || !els.pbSeek) {
-        playbackUiRaf = null;
-        return;
+    if (!playbackAudio) { playbackUiRaf = null; return; }
+    const dur = playbackAudio.duration || 0;
+    const cur = playbackAudio.currentTime || 0;
+    if (els.pbSeek && document.activeElement !== els.pbSeek) {
+        els.pbSeek.value = String(dur > 0 ? Math.round((cur / dur) * 1000) : 0);
     }
-    const pos = getPlaybackPosition();
-    const ratio = playbackBuffer.duration > 0 ? pos / playbackBuffer.duration : 0;
-    if (document.activeElement !== els.pbSeek) {
-        els.pbSeek.value = String(Math.round(ratio * 1000));
-    }
-    if (els.pbCurTime) els.pbCurTime.textContent = pos.toFixed(1) + 's';
+    if (els.pbCurTime) els.pbCurTime.textContent = cur.toFixed(1) + 's';
     playbackUiRaf = requestAnimationFrame(updatePlaybackUi);
 }
 
 async function playRecording(id) {
-    if (playbackSource) stopPlayback();
+    if (playbackAudio) stopPlayback();
 
     const rec = await RecordingsDB.get(id);
     if (!rec) return;
@@ -3203,38 +3170,53 @@ async function playRecording(id) {
     await ensureAnalysisPipeline();
     ensurePlaybackGain();
 
-    // Detach live mic from analysis path while playing back
+    // Detach live mic from analysis path during playback
     micWasActiveBeforePlayback = !!(micSource && state.isMicActive);
     if (micWasActiveBeforePlayback && micSource) {
         try { micSource.disconnect(micGainNode); } catch (_) {}
     }
 
-    const arrayBuf = await rec.blob.arrayBuffer();
+    playbackObjectUrl = URL.createObjectURL(rec.blob);
+    playbackAudio = new Audio();
+    playbackAudio.src = playbackObjectUrl;
+    playbackAudio.preservesPitch = true;
+    playbackAudio.mozPreservesPitch = true;
+    playbackAudio.webkitPreservesPitch = true;
+    playbackAudio.playbackRate = playbackRate;
+    playbackAudio.crossOrigin = 'anonymous';
+
     try {
-        playbackBuffer = await audioCtx.decodeAudioData(arrayBuf.slice(0));
+        playbackMediaSrc = audioCtx.createMediaElementSource(playbackAudio);
     } catch (err) {
-        console.error('decodeAudioData failed:', err);
-        alert('録音の再生に失敗しました');
-        if (micWasActiveBeforePlayback && micSource) {
-            try { micSource.connect(micGainNode); } catch (_) {}
-        }
+        console.error('createMediaElementSource failed:', err);
+        alert('再生エンジンの初期化に失敗しました');
+        cleanupPlayback();
         return;
     }
+    playbackMediaSrc.connect(micGainNode);
+    playbackMediaSrc.connect(playbackGainNode);
+
+    playbackAudio.addEventListener('loadedmetadata', () => {
+        if (els.pbTotalTime) els.pbTotalTime.textContent = (playbackAudio.duration || 0).toFixed(1) + 's';
+    });
+    playbackAudio.addEventListener('ended', () => stopPlayback());
 
     playbackRecId = id;
     state.isMicActive = true;
     state.isMicPaused = false;
     if (els.btnMic) els.btnMic.classList.add('mic-active');
 
-    // Initial seek/rate UI sync
-    if (els.pbRate) {
-        els.pbRate.value = String(playbackRate);
-        if (els.pbRateVal) els.pbRateVal.textContent = playbackRate.toFixed(2) + 'x';
-    }
-    if (els.pbTotalTime) els.pbTotalTime.textContent = playbackBuffer.duration.toFixed(1) + 's';
+    if (els.pbRate) els.pbRate.value = String(playbackRate);
     if (els.playbackControls) els.playbackControls.style.display = 'flex';
 
-    startPlaybackSource(0);
+    try {
+        await playbackAudio.play();
+    } catch (err) {
+        console.error('audio.play() failed:', err);
+        stopPlayback();
+        return;
+    }
+
     if (playbackUiRaf) cancelAnimationFrame(playbackUiRaf);
     playbackUiRaf = requestAnimationFrame(updatePlaybackUi);
 
@@ -3246,13 +3228,21 @@ async function playRecording(id) {
 }
 
 function stopPlayback() {
-    if (playbackSource) {
-        try { playbackSource.onended = null; playbackSource.stop(); } catch (_) {}
-        try { playbackSource.disconnect(); } catch (_) {}
+    if (playbackAudio) {
+        try { playbackAudio.pause(); } catch (_) {}
+        playbackAudio.src = '';
+        playbackAudio.removeAttribute('src');
+        playbackAudio.load();
     }
-    playbackSource = null;
-    playbackBuffer = null;
-    playbackOffset = 0;
+    if (playbackMediaSrc) {
+        try { playbackMediaSrc.disconnect(); } catch (_) {}
+    }
+    if (playbackObjectUrl) {
+        URL.revokeObjectURL(playbackObjectUrl);
+        playbackObjectUrl = null;
+    }
+    playbackAudio = null;
+    playbackMediaSrc = null;
     if (playbackUiRaf) { cancelAnimationFrame(playbackUiRaf); playbackUiRaf = null; }
     if (els.playbackControls) els.playbackControls.style.display = 'none';
     cleanupPlayback();
@@ -3272,30 +3262,23 @@ function cleanupPlayback() {
     renderRecordingsList();
 }
 
-// Seek bar handler
+// Seek handler — HTMLAudioElement supports currentTime directly
 if (els.pbSeek) {
-    const seekHandler = () => {
-        if (!playbackBuffer) return;
+    els.pbSeek.addEventListener('input', () => {
+        if (!playbackAudio || !playbackAudio.duration) return;
         const ratio = Number(els.pbSeek.value) / 1000;
-        const pos = ratio * playbackBuffer.duration;
+        const pos = ratio * playbackAudio.duration;
+        playbackAudio.currentTime = pos;
         if (els.pbCurTime) els.pbCurTime.textContent = pos.toFixed(1) + 's';
-        startPlaybackSource(pos);
-    };
-    els.pbSeek.addEventListener('change', seekHandler);
+    });
 }
 
-// Rate handler
+// Speed handler — preservesPitch keeps pitch constant
 if (els.pbRate) {
-    els.pbRate.addEventListener('input', () => {
+    els.pbRate.addEventListener('change', () => {
         const r = Number(els.pbRate.value);
-        if (els.pbRateVal) els.pbRateVal.textContent = r.toFixed(2) + 'x';
-        if (playbackSource && playbackBuffer) {
-            const pos = getPlaybackPosition();
-            playbackOffset = pos;
-            playbackStartedAt = audioCtx.currentTime;
-            playbackSource.playbackRate.value = r;
-        }
         playbackRate = r;
+        if (playbackAudio) playbackAudio.playbackRate = r;
     });
 }
 

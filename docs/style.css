@@ -2617,44 +2617,38 @@ body.learn-drawer-open { overflow: hidden; }
     opacity: 0.85;
 }
 
-/* Playback controls (seek + speed) */
+/* Playback controls (compact one-row: time | seek | time | speed) */
 .playback-controls {
-    margin-top: 8px;
-    padding: 8px 10px;
-    border: 1px solid rgba(79, 150, 80, 0.4);
-    border-radius: 6px;
-    background: rgba(79, 150, 80, 0.06);
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-.pb-row {
+    margin-top: 6px;
+    padding: 4px 8px;
+    border: 1px solid rgba(79, 150, 80, 0.35);
+    border-radius: 4px;
+    background: rgba(79, 150, 80, 0.05);
     display: flex;
     align-items: center;
     gap: 8px;
 }
 .pb-time {
-    font-size: 0.74rem;
+    font-size: 0.7rem;
     color: var(--text-secondary);
     font-variant-numeric: tabular-nums;
-    min-width: 40px;
+    min-width: 32px;
+    text-align: center;
 }
-.pb-seek, .pb-rate {
+.pb-seek {
     flex: 1 1 auto;
-    height: 4px;
+    height: 3px;
     cursor: pointer;
 }
-.pb-label {
-    font-size: 0.78rem;
-    color: var(--text-secondary);
-    min-width: 40px;
-}
-.pb-val {
-    font-size: 0.74rem;
+.pb-rate-select {
+    flex: 0 0 auto;
+    background: transparent;
     color: var(--text-primary);
-    font-variant-numeric: tabular-nums;
-    min-width: 48px;
-    text-align: right;
+    border: 1px solid var(--glass-border);
+    border-radius: 3px;
+    padding: 1px 4px;
+    font-size: 0.72rem;
+    cursor: pointer;
 }
 
 /* Export menu inside recording row */
