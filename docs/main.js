@@ -205,6 +205,7 @@ const state = {
         trail: [],       // [{t, f1, f2}], rolling ~1.5s
         language: 'jp',  // 'jp' | 'en'
         mode: 'basic',   // 'basic' | 'advanced'
+        voiceType: 'male', // 'male' | 'female' | 'child' — scales reference formants
         nearest: null,
     },
     vibratoAnalysis: {
@@ -281,6 +282,7 @@ const els = {
     vowelSpaceCanvas: document.getElementById('vowel-space-canvas'),
     vsBody: document.getElementById('vs-body'),
     vsLangTabs: document.getElementById('vs-lang-tabs'),
+    vsVoiceTabs: document.getElementById('vs-voice-tabs'),
     vsModeTabs: document.getElementById('vs-mode-tabs'),
     vsNearest: document.getElementById('vs-nearest'),
     vsF1: document.getElementById('vs-f1'),
@@ -2136,35 +2138,68 @@ function drawVibratoTrace() {
 // =====================================================================
 // Vowel Space (F1 × F2 chart, uses LPC v3 cached formant data)
 // =====================================================================
-// Cardinal vowel reference values (adult-male average / IPA convention).
-// JP: 日本標準語5母音 (NHK放送ハンドブック / 杉藤・神山 1990 系)
+// Cardinal vowel reference values, adult-male baseline (IPA convention).
+// JP: 日本標準語5母音 (杉藤・神山 1990 系)
 // EN: Peterson & Barney 1952 (male)
-const VOWEL_PRESETS = {
+// Voice scaling (Fant 1966 / Nordström 1977 系の比率): female ≈ +18%, child ≈ +40%
+const VOWEL_PRESETS_BASE = {
     jp: [
-        { ipa: 'a', label: 'あ', f1: 800, f2: 1300, color: '#e53935' },
-        { ipa: 'i', label: 'い', f1: 280, f2: 2300, color: '#1e88e5' },
-        { ipa: 'u', label: 'う', f1: 350, f2: 1300, color: '#43a047' },
-        { ipa: 'e', label: 'え', f1: 450, f2: 2000, color: '#fb8c00' },
-        { ipa: 'o', label: 'お', f1: 480, f2: 900,  color: '#8e24aa' },
+        { ipa: '/a/', label: '/a/', f1: 800, f2: 1300 },
+        { ipa: '/i/', label: '/i/', f1: 280, f2: 2300 },
+        { ipa: '/ɯ/', label: '/ɯ/', f1: 350, f2: 1300 },
+        { ipa: '/e/', label: '/e/', f1: 450, f2: 2000 },
+        { ipa: '/o/', label: '/o/', f1: 480, f2: 900 },
     ],
     en: [
-        { ipa: 'i',  label: 'i (heed)',  f1: 270, f2: 2290, color: '#1e88e5' },
-        { ipa: 'ɪ',  label: 'ɪ (hid)',   f1: 390, f2: 1990, color: '#42a5f5' },
-        { ipa: 'e',  label: 'e (head)',  f1: 530, f2: 1840, color: '#7e57c2' },
-        { ipa: 'æ',  label: 'æ (had)',   f1: 660, f2: 1720, color: '#ec407a' },
-        { ipa: 'ɑ',  label: 'ɑ (hot)',   f1: 730, f2: 1090, color: '#e53935' },
-        { ipa: 'ʌ',  label: 'ʌ (hud)',   f1: 640, f2: 1190, color: '#d84315' },
-        { ipa: 'ɔ',  label: 'ɔ (hawed)', f1: 570, f2: 840,  color: '#8e24aa' },
-        { ipa: 'o',  label: 'o (hoed)',  f1: 440, f2: 1020, color: '#6a1b9a' },
-        { ipa: 'ʊ',  label: 'ʊ (hood)',  f1: 440, f2: 1020, color: '#5e35b1' },
-        { ipa: 'u',  label: 'u (whod)',  f1: 300, f2: 870,  color: '#43a047' },
-        { ipa: 'ɝ',  label: 'ɝ (heard)', f1: 490, f2: 1350, color: '#00897b' },
+        { ipa: '/i/', label: '/i/', f1: 270, f2: 2290 },
+        { ipa: '/ɪ/', label: '/ɪ/', f1: 390, f2: 1990 },
+        { ipa: '/e/', label: '/e/', f1: 530, f2: 1840 },
+        { ipa: '/æ/', label: '/æ/', f1: 660, f2: 1720 },
+        { ipa: '/ɑ/', label: '/ɑ/', f1: 730, f2: 1090 },
+        { ipa: '/ʌ/', label: '/ʌ/', f1: 640, f2: 1190 },
+        { ipa: '/ɔ/', label: '/ɔ/', f1: 570, f2: 840 },
+        { ipa: '/o/', label: '/o/', f1: 440, f2: 1020 },
+        { ipa: '/ʊ/', label: '/ʊ/', f1: 440, f2: 1020 },
+        { ipa: '/u/', label: '/u/', f1: 300, f2: 870 },
+        { ipa: '/ɝ/', label: '/ɝ/', f1: 490, f2: 1350 },
     ],
 };
 
-const VS_F1_RANGE = [180, 1100];   // Hz, drawn axis
-const VS_F2_RANGE = [600, 3200];   // Hz, drawn axis
-const VS_TRAIL_MS = 1500;          // trail duration
+const VOICE_TYPE_SCALE = {
+    male:   { f1: 1.0,  f2: 1.0  },
+    female: { f1: 1.18, f2: 1.17 },
+    child:  { f1: 1.40, f2: 1.35 },
+};
+
+// Muted palette aligned with the app's calm tone — distinguishable but not gaudy
+const VOWEL_PALETTE = [
+    '#7c6f8a', // dusty mauve
+    '#5b7a9a', // muted slate-blue
+    '#6e8e7c', // soft sage
+    '#a07b62', // warm taupe
+    '#7d8794', // cool gray
+    '#9b7e8a', // dusty rose
+    '#6f8d8c', // muted teal
+    '#8a8264', // olive khaki
+    '#7e6f8e', // smoky lavender
+    '#8d7766', // chestnut
+    '#677a6a', // forest sage
+];
+
+const VS_F1_RANGE = [180, 1400];   // Hz drawn axis (wide enough for child female /a/)
+const VS_F2_RANGE = [600, 3700];   // Hz
+const VS_TRAIL_MS = 1500;
+
+function vowelPresets() {
+    const base = VOWEL_PRESETS_BASE[state.vowelSpace.language] || VOWEL_PRESETS_BASE.jp;
+    const sc = VOICE_TYPE_SCALE[state.vowelSpace.voiceType] || VOICE_TYPE_SCALE.male;
+    return base.map((v, i) => ({
+        ...v,
+        f1: v.f1 * sc.f1,
+        f2: v.f2 * sc.f2,
+        color: VOWEL_PALETTE[i % VOWEL_PALETTE.length],
+    }));
+}
 
 let vowelSpaceCtx = null;
 function getVowelSpaceCtx() {
@@ -2183,7 +2218,7 @@ function vsLogDist(a, b) {
 }
 
 function vsNearestVowel(f1, f2) {
-    const presets = VOWEL_PRESETS[state.vowelSpace.language] || VOWEL_PRESETS.jp;
+    const presets = vowelPresets();
     let best = null, bestD = Infinity;
     for (const v of presets) {
         const d = vsLogDist({ f1, f2 }, v);
@@ -2291,7 +2326,7 @@ function drawVowelSpace() {
     ctx.restore();
 
     // Draw vowel polygon (connecting cardinal vowels in IPA order)
-    const presets = VOWEL_PRESETS[state.vowelSpace.language] || VOWEL_PRESETS.jp;
+    const presets = vowelPresets();
     if (presets.length >= 3) {
         ctx.save();
         ctx.strokeStyle = 'rgba(0,0,0,0.08)';
@@ -2311,24 +2346,25 @@ function drawVowelSpace() {
         ctx.restore();
     }
 
-    // Draw vowel targets (filled circle + label)
+    // Draw vowel targets (muted halo + small dot + IPA label)
     for (const v of presets) {
         const x = xFor(v.f2), y = yFor(v.f1);
-        ctx.beginPath();
+        ctx.globalAlpha = 0.12;
         ctx.fillStyle = v.color;
-        ctx.globalAlpha = 0.18;
-        ctx.arc(x, y, 18, 0, Math.PI * 2);
+        ctx.beginPath();
+        ctx.arc(x, y, 14, 0, Math.PI * 2);
         ctx.fill();
         ctx.globalAlpha = 1;
         ctx.fillStyle = v.color;
         ctx.beginPath();
-        ctx.arc(x, y, 5, 0, Math.PI * 2);
+        ctx.arc(x, y, 3.5, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = '#222';
-        ctx.font = 'bold 13px "Hiragino Sans", "Yu Gothic", sans-serif';
+        // IPA label — fonts that render IPA well across platforms
+        ctx.fillStyle = 'rgba(40, 40, 40, 0.85)';
+        ctx.font = '600 12px "Charis SIL", "Doulos SIL", "Lucida Sans Unicode", "Helvetica Neue", system-ui, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(v.label, x, y - 14);
+        ctx.fillText(v.label, x, y - 13);
     }
 
     // Draw trail
@@ -2414,6 +2450,19 @@ function applyVowelSpaceLanguage(lang) {
     if (els.vsLangTabs) {
         els.vsLangTabs.querySelectorAll('.vs-lang-tab').forEach(btn => {
             const active = btn.dataset.lang === state.vowelSpace.language;
+            btn.classList.toggle('is-active', active);
+            btn.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+    }
+    drawVowelSpace();
+}
+
+function applyVowelSpaceVoice(voice) {
+    const v = ['male', 'female', 'child'].includes(voice) ? voice : 'male';
+    state.vowelSpace.voiceType = v;
+    if (els.vsVoiceTabs) {
+        els.vsVoiceTabs.querySelectorAll('.vs-lang-tab').forEach(btn => {
+            const active = btn.dataset.voice === v;
             btn.classList.toggle('is-active', active);
             btn.setAttribute('aria-selected', active ? 'true' : 'false');
         });
@@ -4793,8 +4842,16 @@ if (els.vsModeTabs) {
         applyVowelSpaceMode(btn.dataset.mode);
     });
 }
+if (els.vsVoiceTabs) {
+    els.vsVoiceTabs.addEventListener('click', (e) => {
+        const btn = e.target.closest('.vs-lang-tab');
+        if (!btn) return;
+        applyVowelSpaceVoice(btn.dataset.voice);
+    });
+}
 applyVowelSpaceMode('basic');
 applyVowelSpaceLanguage('jp');
+applyVowelSpaceVoice('male');
 if (els.vowelSpacePanel) {
     els.vowelSpacePanel.addEventListener('toggle', () => {
         if (els.vowelSpacePanel.open) drawVowelSpace();
