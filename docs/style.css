@@ -351,11 +351,12 @@ input[type=range]::-moz-range-track {
     color: #fff;
 }
 
-/* Spectrum view-tabs are positioned over the canvas — override with absolute */
+/* Spectrum view-tabs are positioned over the canvas — top-right corner.
+   Roughness legend renders below the canvas so no overlap there. */
 .view-tabs {
     position: absolute;
     top: 6px;
-    left: 6px;
+    right: 6px;
     background: rgba(255, 255, 255, 0.88);
     z-index: 5;
     backdrop-filter: blur(4px);
