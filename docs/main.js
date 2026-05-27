@@ -2303,11 +2303,13 @@ const VS_TRAIL_MS = 1500;
 
 // IPA trapezoid corners in normalized canvas coords [0,1]
 // Slanted left edge (front-bottom indented to match articulatory chart)
+// Right margin (after the trapezoid) reserved for High/Mid/Low + F1 Hz axis
+// Bottom margin reserved for F2 Hz axis
 const VS_TRAP = {
-    tl: { sx: 0.10, sy: 0.10 },   // High Front  — /i/ corner
-    tr: { sx: 0.92, sy: 0.10 },   // High Back   — /u/ corner
-    br: { sx: 0.92, sy: 0.88 },   // Low  Back   — /ɑ/ corner
-    bl: { sx: 0.34, sy: 0.88 },   // Low  Front  — /a/ corner (indented inward)
+    tl: { sx: 0.08, sy: 0.12 },   // High Front  — /i/ corner
+    tr: { sx: 0.82, sy: 0.12 },   // High Back   — /u/ corner
+    br: { sx: 0.82, sy: 0.80 },   // Low  Back   — /ɑ/ corner
+    bl: { sx: 0.30, sy: 0.80 },   // Low  Front  — /a/ corner (indented inward)
 };
 
 // Map IPA (s, t) coords → canvas pixel coords.
@@ -2665,23 +2667,71 @@ function drawVowelSpace() {
     ctx.fillText('Central', centralCx, colLabelY);
     ctx.fillText('Back', backCx, colLabelY);
 
-    // Row labels: High / Mid / Low — outside both edges
+    // Row labels: High / Mid / Low — right side only (IPA chart convention)
     ctx.textBaseline = 'middle';
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
     ctx.font = '600 10px Inter, sans-serif';
     const rowMidTs = [0.16, 0.5, 0.83];
     const rowLabels = ['High', 'Mid', 'Low'];
     for (let i = 0; i < 3; i++) {
-        const t = rowMidTs[i];
-        // Left side (outside the slanted edge)
-        const leftEdge = vsSTtoXY(1, t, w, h);
-        ctx.textAlign = 'right';
-        ctx.fillText(rowLabels[i], leftEdge.x - 6, leftEdge.y);
-        // Right side
-        const rightEdge = vsSTtoXY(0, t, w, h);
+        const rightEdge = vsSTtoXY(0, rowMidTs[i], w, h);
         ctx.textAlign = 'left';
         ctx.fillText(rowLabels[i], rightEdge.x + 6, rightEdge.y);
     }
+
+    // --- Hz axis scales (voice-type aware) ---
+    const sc = VOICE_TYPE_SCALE[state.vowelSpace.voiceType] || VOICE_TYPE_SCALE.male;
+    const F1_HI = 250 * sc.f1, F1_LO = 900 * sc.f1;
+    const F2_BK = 800 * sc.f2, F2_FR = 2300 * sc.f2;
+
+    // F1 Hz scale — right side, further out than High/Mid/Low
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)';
+    ctx.font = '9px Inter, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    const f1Ticks = [300, 400, 500, 700, 900].map(v => Math.round(v * sc.f1));
+    for (const f1 of f1Ticks) {
+        const t = (Math.log2(f1) - Math.log2(F1_HI)) / (Math.log2(F1_LO) - Math.log2(F1_HI));
+        if (t < -0.02 || t > 1.02) continue;
+        const pt = vsSTtoXY(0, t, w, h);
+        ctx.beginPath();
+        ctx.moveTo(pt.x, pt.y);
+        ctx.lineTo(pt.x + 3, pt.y);
+        ctx.stroke();
+        ctx.fillText(`${f1}`, pt.x + 38, pt.y);
+    }
+    // "F1 (Hz)" axis title — vertical, far right
+    ctx.save();
+    ctx.translate(corners.tr.x + 64, (corners.tr.y + corners.br.y) / 2);
+    ctx.rotate(Math.PI / 2);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.font = '600 9px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('F1 (Hz)', 0, 0);
+    ctx.restore();
+
+    // F2 Hz scale — below the bottom edge
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    ctx.font = '9px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    const f2Ticks = [800, 1000, 1500, 2000, 2300].map(v => Math.round(v * sc.f2));
+    for (const f2 of f2Ticks) {
+        const s = (Math.log2(f2) - Math.log2(F2_BK)) / (Math.log2(F2_FR) - Math.log2(F2_BK));
+        if (s < -0.02 || s > 1.02) continue;
+        const pt = vsSTtoXY(s, 1, w, h);
+        ctx.beginPath();
+        ctx.moveTo(pt.x, pt.y);
+        ctx.lineTo(pt.x, pt.y + 3);
+        ctx.stroke();
+        ctx.fillText(`${f2}`, pt.x, pt.y + 6);
+    }
+    // "F2 (Hz)" axis title — below ticks
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.font = '600 9px Inter, sans-serif';
+    ctx.fillText('F2 (Hz)', (corners.bl.x + corners.br.x) / 2, h - 12);
 
     // --- Vowel reference labels (canonical IPA positions) ---
     const presets = vowelPresets();
