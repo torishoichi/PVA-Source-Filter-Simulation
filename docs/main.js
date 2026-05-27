@@ -173,6 +173,8 @@ const state = {
     cachedMicFormants: null, // Per-formant snapshot (preserved during pause and brief live dropouts)
     cachedMicFormantsTime: null, // Per-formant last-update timestamp (ms)
     micGain: 1.0,
+    micDeviceId: null,         // null = browser default
+    micDevices: [],            // populated after first permission grant
     micFormantMethod: 'lpc-v3', // 'peak' | 'lpc' | 'lpc-v2' | 'lpc-v3'
     spectrumSlope: -12, // dB/octave attenuation
     showSlopeLine: true, // Toggle for slope approximation line (default ON)
@@ -301,6 +303,7 @@ const els = {
     vsRatio: document.getElementById('vs-ratio'),
     masterVolume: document.getElementById('master-volume'),
     micGainSlider: document.getElementById('mic-gain'),
+    micDeviceSelect: document.getElementById('mic-device-select'),
     spectrumSlopeSlider: document.getElementById('spectrum-slope'),
     volumeVal: document.getElementById('volume-val'),
     slopeVal: document.getElementById('slope-val'),
@@ -1591,61 +1594,142 @@ function drawDerivativeCanvas(canvas, derivative, params) {
     ctx.fillText(`EE ${EE.toFixed(2)}`, w - 6, badgeY);
 }
 
-// --- Pitch Detection (Autocorrelation) ---
+// --- Pitch Detection (YIN, de Cheveigné & Kawahara 2002) ---
+// YIN's cumulative-mean-normalized difference function (CMNDF) is far more
+// robust to octave errors than plain autocorrelation. Buffers are reused
+// across calls to avoid per-frame allocation (called at ~60 Hz).
+
+let _yinDp = null;       // Float32Array, CMNDF values
+let _yinTime = null;     // Float32Array, time-domain input buffer
+const YIN_THRESHOLD = 0.12; // de Cheveigné recommended 0.10–0.15
+
+function detectPitchYIN(timeBuf, sampleRate) {
+    const N = timeBuf.length;
+
+    // RMS gate — skip silent / near-silent frames
+    let rms = 0;
+    for (let i = 0; i < N; i++) rms += timeBuf[i] * timeBuf[i];
+    rms = Math.sqrt(rms / N);
+    if (rms < 0.01) return -1;
+
+    const minPeriod = Math.max(2, Math.floor(sampleRate / 1000)); // 1000 Hz ceiling
+    const maxPeriod = Math.min(Math.floor(sampleRate / 60), Math.floor(N / 2)); // 60 Hz floor
+    if (maxPeriod <= minPeriod) return -1;
+
+    if (!_yinDp || _yinDp.length < maxPeriod + 1) _yinDp = new Float32Array(maxPeriod + 1);
+    const dp = _yinDp;
+    dp[0] = 1;
+    let runningSum = 0;
+
+    // Steps 1+2: difference function d(τ) and cumulative-mean-normalized d'(τ) in one pass
+    for (let tau = 1; tau <= maxPeriod; tau++) {
+        let dsum = 0;
+        const W = N - tau;
+        for (let j = 0; j < W; j++) {
+            const delta = timeBuf[j] - timeBuf[j + tau];
+            dsum += delta * delta;
+        }
+        runningSum += dsum;
+        dp[tau] = (runningSum > 0) ? (dsum * tau) / runningSum : 1;
+    }
+
+    // Step 3: absolute threshold — first local minimum where d'(τ) < threshold
+    let bestTau = -1;
+    for (let tau = minPeriod; tau <= maxPeriod - 1; tau++) {
+        if (dp[tau] < YIN_THRESHOLD) {
+            while (tau + 1 <= maxPeriod && dp[tau + 1] < dp[tau]) tau++;
+            bestTau = tau;
+            break;
+        }
+    }
+    // Fallback: argmin in vocal range (and bail if even argmin is poor)
+    if (bestTau < 0) {
+        let minVal = Infinity;
+        for (let tau = minPeriod; tau <= maxPeriod; tau++) {
+            if (dp[tau] < minVal) { minVal = dp[tau]; bestTau = tau; }
+        }
+        if (bestTau < 0 || dp[bestTau] > 0.5) return -1;
+    }
+
+    // Step 4: parabolic interpolation around the chosen lag for sub-sample accuracy
+    let refined = bestTau;
+    if (bestTau > minPeriod && bestTau < maxPeriod) {
+        const y0 = dp[bestTau - 1], y1 = dp[bestTau], y2 = dp[bestTau + 1];
+        const denom = (y0 - 2 * y1 + y2);
+        if (Math.abs(denom) > 1e-12) {
+            const delta = 0.5 * (y0 - y2) / denom;
+            if (delta > -1 && delta < 1) refined = bestTau + delta;
+        }
+    }
+
+    return sampleRate / refined;
+}
 
 function detectPitchFromMic() {
     if (!micAnalyser || !audioCtx) return -1;
-
     const bufLen = micAnalyser.fftSize;
-    const buf = new Float32Array(bufLen);
-    micAnalyser.getFloatTimeDomainData(buf);
-
-    // Check if there's enough signal (RMS threshold)
-    let rms = 0;
-    for (let i = 0; i < bufLen; i++) rms += buf[i] * buf[i];
-    rms = Math.sqrt(rms / bufLen);
-    if (rms < 0.01) return -1; // Too quiet
-
-    // Autocorrelation
-    const sampleRate = audioCtx.sampleRate;
-    const minPeriod = Math.floor(sampleRate / 1000); // ~1000 Hz max
-    const maxPeriod = Math.floor(sampleRate / 60);   // ~60 Hz min
-
-    let bestCorrelation = 0;
-    let bestPeriod = -1;
-
-    for (let period = minPeriod; period <= maxPeriod; period++) {
-        let correlation = 0;
-        for (let i = 0; i < bufLen - period; i++) {
-            correlation += buf[i] * buf[i + period];
-        }
-        correlation /= (bufLen - period);
-
-        if (correlation > bestCorrelation) {
-            bestCorrelation = correlation;
-            bestPeriod = period;
-        }
-    }
-
-    if (bestPeriod <= 0 || bestCorrelation < 0.01) return -1;
-
-    // Parabolic interpolation for sub-sample accuracy
-    const y1 = bestPeriod > minPeriod ? autocorr(buf, bestPeriod - 1) : 0;
-    const y2 = autocorr(buf, bestPeriod);
-    const y3 = bestPeriod < maxPeriod ? autocorr(buf, bestPeriod + 1) : 0;
-
-    const shift = (y3 - y1) / (2 * (2 * y2 - y1 - y3));
-    const refinedPeriod = bestPeriod + (isFinite(shift) ? shift : 0);
-
-    return sampleRate / refinedPeriod;
+    if (!_yinTime || _yinTime.length !== bufLen) _yinTime = new Float32Array(bufLen);
+    micAnalyser.getFloatTimeDomainData(_yinTime);
+    return detectPitchYIN(_yinTime, audioCtx.sampleRate);
 }
 
-function autocorr(buf, period) {
-    let sum = 0;
-    for (let i = 0; i < buf.length - period; i++) {
-        sum += buf[i] * buf[i + period];
+// --- Mic device picker ---
+// Browsers only return real device labels AFTER mic permission has been granted,
+// so we re-enumerate on every successful mic acquisition.
+async function refreshMicDevices() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+    try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        state.micDevices = devices.filter(d => d.kind === 'audioinput');
+        if (!els.micDeviceSelect) return;
+        const cur = state.micDeviceId || '';
+        const opts = ['<option value="">既定のマイク</option>'].concat(
+            state.micDevices.map(d => {
+                const label = d.label || `マイク (${(d.deviceId || '').substring(0, 6)})`;
+                const safe = label.replace(/</g, '&lt;');
+                return `<option value="${d.deviceId}">${safe}</option>`;
+            })
+        );
+        els.micDeviceSelect.innerHTML = opts.join('');
+        els.micDeviceSelect.value = cur;
+        els.micDeviceSelect.style.display = state.micDevices.length > 0 ? '' : 'none';
+    } catch (e) {
+        console.warn('enumerateDevices failed', e);
     }
-    return sum / (buf.length - period);
+}
+
+// Switch mic device without going through full Mic toggle UI flow.
+// Stops current stream, re-acquires with the new deviceId, reconnects to the
+// existing micGainNode (which is still wired to the analyser chain).
+async function setMicDevice(deviceId) {
+    state.micDeviceId = deviceId || null;
+    if (!state.isMicActive) return; // applied on next mic-on
+
+    if (micStream) {
+        try { micStream.getTracks().forEach(t => t.stop()); } catch (_) {}
+        micStream = null;
+    }
+    if (micSource) {
+        try { micSource.disconnect(); } catch (_) {}
+        micSource = null;
+    }
+
+    const audioConstraints = {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+    };
+    if (state.micDeviceId) audioConstraints.deviceId = { exact: state.micDeviceId };
+    try {
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+    } catch (e) {
+        alert('マイク切替に失敗しました: ' + (e && e.message ? e.message : e));
+        return;
+    }
+    if (!audioCtx) return;
+    micSource = audioCtx.createMediaStreamSource(micStream);
+    if (micGainNode) micSource.connect(micGainNode);
+    refreshMicDevices();
 }
 
 // =====================================================================
@@ -4111,13 +4195,15 @@ els.btnMic.addEventListener('click', async () => {
     } else {
         // Request permissions and start
         try {
-            micStream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    echoCancellation: false,
-                    noiseSuppression: false,
-                    autoGainControl: false
-                }
-            });
+            const audioConstraints = {
+                echoCancellation: false,
+                noiseSuppression: false,
+                autoGainControl: false,
+            };
+            if (state.micDeviceId) audioConstraints.deviceId = { exact: state.micDeviceId };
+            micStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+            // After permission granted, enumerateDevices returns real labels — refresh the picker
+            refreshMicDevices();
 
             // Ensure full audio infrastructure is initialized (filters, gain, analyser)
             initAudio();
@@ -5079,6 +5165,19 @@ if (els.vsCalibrateBtn) {
         }
     });
 }
+// Mic device picker
+if (els.micDeviceSelect) {
+    els.micDeviceSelect.addEventListener('change', (e) => {
+        setMicDevice(e.target.value || null);
+    });
+}
+// Refresh device list when the OS announces a change (USB mic plugged etc.)
+if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+    navigator.mediaDevices.addEventListener('devicechange', () => refreshMicDevices());
+}
+// Initial enumerate — labels will be blank pre-permission, but we surface the picker afterwards anyway
+refreshMicDevices();
+
 // Load saved per-user calibration from localStorage
 state.vowelSpace.calibration.saved = loadCalibrationFromStorage();
 applyVowelSpaceMode('basic');
