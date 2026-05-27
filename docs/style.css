@@ -2422,6 +2422,15 @@ canvas {
     background: #fff;
     color: var(--text-primary);
 }
+
+/* Mic device picker — full label is shown in the dropdown menu; keep the */
+/* selected display narrow so the header bar stays on one line */
+.mic-device-select {
+    max-width: 90px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
+}
 /* =================================================================
    Learn Drawer (PC) — right-side slide-in lesson panel
    Coexists with the existing inline #roughness-legend (brief ref)
