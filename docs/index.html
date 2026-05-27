@@ -579,6 +579,57 @@
                     </div>
                 </details>
 
+                <!-- Vowel Space — F1×F2 map (uses LPC v3 formant data) -->
+                <details id="vowel-space-panel" class="vib-analysis-panel">
+                    <summary class="vib-analysis-summary">
+                        <span class="vib-analysis-disclosure" aria-hidden="true">▸</span>
+                        <span class="vib-analysis-title">Vowel Space</span>
+                        <span class="vib-analysis-summary-hint">マイクONで母音空間を表示 (F1×F2)</span>
+                    </summary>
+                    <div class="vib-analysis-body is-basic" id="vs-body">
+                        <div class="vib-analysis-controls vs-controls">
+                            <div class="vs-lang-tabs" id="vs-lang-tabs" role="tablist" aria-label="参照母音">
+                                <button class="vs-lang-tab is-active" data-lang="jp" type="button" role="tab" aria-selected="true">日本語 5</button>
+                                <button class="vs-lang-tab" data-lang="en" type="button" role="tab" aria-selected="false">English / IPA</button>
+                            </div>
+                            <div class="vib-mode-tabs" id="vs-mode-tabs" role="tablist" aria-label="表示モード">
+                                <button class="vib-mode-tab is-active" data-mode="basic" type="button" role="tab" aria-selected="true">Basic</button>
+                                <button class="vib-mode-tab" data-mode="advanced" type="button" role="tab" aria-selected="false">Advanced</button>
+                            </div>
+                        </div>
+
+                        <div class="vs-readout-row">
+                            <div class="vstat">
+                                <span class="vstat-label">Nearest <span class="tooltip" data-tooltip="現在の (F1, F2) に最も近い参照母音 (log Hz 距離)。括弧内は距離 (cents-like スケール)。">[?]</span></span>
+                                <span class="vstat-val" id="vs-nearest">—</span>
+                            </div>
+                            <div class="vstat">
+                                <span class="vstat-label">F1 <span class="tooltip" data-tooltip="第1フォルマント (Hz)。口の開き / 顎の落とし方を反映。高い = 開いた音 (/a/)、低い = 閉じた音 (/i/, /u/)。">[?]</span></span>
+                                <span class="vstat-val" id="vs-f1">—</span>
+                                <span class="vstat-unit">Hz</span>
+                            </div>
+                            <div class="vstat">
+                                <span class="vstat-label">F2 <span class="tooltip" data-tooltip="第2フォルマント (Hz)。舌の前後位置を反映。高い = 前舌 (/i/, /e/)、低い = 後舌 (/u/, /o/)。">[?]</span></span>
+                                <span class="vstat-val" id="vs-f2">—</span>
+                                <span class="vstat-unit">Hz</span>
+                            </div>
+                            <div class="vstat vib-advanced-only">
+                                <span class="vstat-label">F2/F1 <span class="tooltip" data-tooltip="第2/第1フォルマント比。明るさ・前舌度の代理指標。≧4 で前舌（明）、≦2 で後舌（暗）。">[?]</span></span>
+                                <span class="vstat-val" id="vs-ratio">—</span>
+                            </div>
+                            <div class="vstat vib-advanced-only">
+                                <span class="vstat-label">F3 <span class="tooltip" data-tooltip="第3フォルマント (Hz)。/r/ 系の判別、Singer's Formant cluster の下限。">[?]</span></span>
+                                <span class="vstat-val" id="vs-f3">—</span>
+                                <span class="vstat-unit">Hz</span>
+                            </div>
+                        </div>
+
+                        <div class="vs-canvas-wrap">
+                            <canvas id="vowel-space-canvas"></canvas>
+                        </div>
+                    </div>
+                </details>
+
                 <!-- Roughness educational legend (visible when Roughness toggle is ON) -->
                 <div id="roughness-legend" class="roughness-legend" style="display:none;">
                     <div class="rl-header">

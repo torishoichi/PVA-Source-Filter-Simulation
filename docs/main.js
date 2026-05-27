@@ -201,6 +201,12 @@ const state = {
         waveform: 'sine'  // 'sine' | 'triangle' | 'sawtooth'
     },
     viewMode: 'spectrum', // 'spectrum' | 'spectrogram'
+    vowelSpace: {
+        trail: [],       // [{t, f1, f2}], rolling ~1.5s
+        language: 'jp',  // 'jp' | 'en'
+        mode: 'basic',   // 'basic' | 'advanced'
+        nearest: null,
+    },
     vibratoAnalysis: {
         pitchBuf: [],     // [{t: ms, hz: number|null}], rolling 5s
         rate: 0,          // Hz
@@ -271,6 +277,16 @@ const els = {
     vibSynthAm: document.getElementById('vib-synth-am'),
     vibSynthWave: document.getElementById('vib-synth-wave'),
     vibSynthStatus: document.getElementById('vib-synth-status'),
+    vowelSpacePanel: document.getElementById('vowel-space-panel'),
+    vowelSpaceCanvas: document.getElementById('vowel-space-canvas'),
+    vsBody: document.getElementById('vs-body'),
+    vsLangTabs: document.getElementById('vs-lang-tabs'),
+    vsModeTabs: document.getElementById('vs-mode-tabs'),
+    vsNearest: document.getElementById('vs-nearest'),
+    vsF1: document.getElementById('vs-f1'),
+    vsF2: document.getElementById('vs-f2'),
+    vsF3: document.getElementById('vs-f3'),
+    vsRatio: document.getElementById('vs-ratio'),
     masterVolume: document.getElementById('master-volume'),
     micGainSlider: document.getElementById('mic-gain'),
     spectrumSlopeSlider: document.getElementById('spectrum-slope'),
@@ -2117,6 +2133,282 @@ function drawVibratoTrace() {
     ctx.fillText(`${(tSpan / 1000).toFixed(1)}s`, w - 4, h - 2);
 }
 
+// =====================================================================
+// Vowel Space (F1 × F2 chart, uses LPC v3 cached formant data)
+// =====================================================================
+// Cardinal vowel reference values (adult-male average / IPA convention).
+// JP: 日本標準語5母音 (NHK放送ハンドブック / 杉藤・神山 1990 系)
+// EN: Peterson & Barney 1952 (male)
+const VOWEL_PRESETS = {
+    jp: [
+        { ipa: 'a', label: 'あ', f1: 800, f2: 1300, color: '#e53935' },
+        { ipa: 'i', label: 'い', f1: 280, f2: 2300, color: '#1e88e5' },
+        { ipa: 'u', label: 'う', f1: 350, f2: 1300, color: '#43a047' },
+        { ipa: 'e', label: 'え', f1: 450, f2: 2000, color: '#fb8c00' },
+        { ipa: 'o', label: 'お', f1: 480, f2: 900,  color: '#8e24aa' },
+    ],
+    en: [
+        { ipa: 'i',  label: 'i (heed)',  f1: 270, f2: 2290, color: '#1e88e5' },
+        { ipa: 'ɪ',  label: 'ɪ (hid)',   f1: 390, f2: 1990, color: '#42a5f5' },
+        { ipa: 'e',  label: 'e (head)',  f1: 530, f2: 1840, color: '#7e57c2' },
+        { ipa: 'æ',  label: 'æ (had)',   f1: 660, f2: 1720, color: '#ec407a' },
+        { ipa: 'ɑ',  label: 'ɑ (hot)',   f1: 730, f2: 1090, color: '#e53935' },
+        { ipa: 'ʌ',  label: 'ʌ (hud)',   f1: 640, f2: 1190, color: '#d84315' },
+        { ipa: 'ɔ',  label: 'ɔ (hawed)', f1: 570, f2: 840,  color: '#8e24aa' },
+        { ipa: 'o',  label: 'o (hoed)',  f1: 440, f2: 1020, color: '#6a1b9a' },
+        { ipa: 'ʊ',  label: 'ʊ (hood)',  f1: 440, f2: 1020, color: '#5e35b1' },
+        { ipa: 'u',  label: 'u (whod)',  f1: 300, f2: 870,  color: '#43a047' },
+        { ipa: 'ɝ',  label: 'ɝ (heard)', f1: 490, f2: 1350, color: '#00897b' },
+    ],
+};
+
+const VS_F1_RANGE = [180, 1100];   // Hz, drawn axis
+const VS_F2_RANGE = [600, 3200];   // Hz, drawn axis
+const VS_TRAIL_MS = 1500;          // trail duration
+
+let vowelSpaceCtx = null;
+function getVowelSpaceCtx() {
+    if (!vowelSpaceCtx && els.vowelSpaceCanvas) {
+        vowelSpaceCtx = els.vowelSpaceCanvas.getContext('2d');
+    }
+    return vowelSpaceCtx;
+}
+
+function vsLog(v) { return Math.log10(Math.max(1, v)); }
+function vsLogDist(a, b) {
+    // Perceptual distance in log Hz, scaled to a cents-like number for readability
+    const d1 = (vsLog(a.f1) - vsLog(b.f1));
+    const d2 = (vsLog(a.f2) - vsLog(b.f2));
+    return Math.sqrt(d1 * d1 + d2 * d2) * 1200 / Math.log10(2);
+}
+
+function vsNearestVowel(f1, f2) {
+    const presets = VOWEL_PRESETS[state.vowelSpace.language] || VOWEL_PRESETS.jp;
+    let best = null, bestD = Infinity;
+    for (const v of presets) {
+        const d = vsLogDist({ f1, f2 }, v);
+        if (d < bestD) { bestD = d; best = v; }
+    }
+    return best ? { vowel: best, dist: bestD } : null;
+}
+
+function pushVowelSample() {
+    if (!state.isMicActive || !state.cachedMicFormants) return;
+    const f1 = state.cachedMicFormants.f1;
+    const f2 = state.cachedMicFormants.f2;
+    if (f1 == null || f2 == null || f1 <= 0 || f2 <= 0) return;
+    const t = performance.now();
+    const trail = state.vowelSpace.trail;
+    trail.push({ t, f1, f2 });
+    const cutoff = t - VS_TRAIL_MS;
+    while (trail.length > 0 && trail[0].t < cutoff) trail.shift();
+}
+
+function drawVowelSpace() {
+    const c = els.vowelSpaceCanvas;
+    const ctx = getVowelSpaceCtx();
+    if (!c || !ctx) return;
+    const w = c.clientWidth || 600;
+    const h = c.clientHeight || 320;
+    if (c.width !== w) c.width = w;
+    if (c.height !== h) c.height = h;
+
+    // Background
+    ctx.fillStyle = '#fdfcf6';
+    ctx.fillRect(0, 0, w, h);
+
+    const pad = { left: 42, right: 14, top: 16, bottom: 28 };
+    const plotW = w - pad.left - pad.right;
+    const plotH = h - pad.top - pad.bottom;
+
+    // F2 axis: log Hz, HIGH F2 on the LEFT (IPA convention)
+    const f2LogLo = vsLog(VS_F2_RANGE[0]);
+    const f2LogHi = vsLog(VS_F2_RANGE[1]);
+    const xFor = (f2) => pad.left + plotW - ((vsLog(f2) - f2LogLo) / (f2LogHi - f2LogLo)) * plotW;
+    // F1 axis: log Hz, LOW F1 at TOP
+    const f1LogLo = vsLog(VS_F1_RANGE[0]);
+    const f1LogHi = vsLog(VS_F1_RANGE[1]);
+    const yFor = (f1) => pad.top + ((vsLog(f1) - f1LogLo) / (f1LogHi - f1LogLo)) * plotH;
+
+    // Plot area border
+    ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(pad.left + 0.5, pad.top + 0.5, plotW - 1, plotH - 1);
+
+    // Gridlines + tick labels
+    ctx.strokeStyle = 'rgba(0,0,0,0.07)';
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.font = '10px Inter, sans-serif';
+    ctx.lineWidth = 1;
+    // F2 gridlines (vertical) — IPA chart has high F2 on left
+    const f2Ticks = [800, 1000, 1500, 2000, 2500, 3000];
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    for (const tF2 of f2Ticks) {
+        if (tF2 < VS_F2_RANGE[0] || tF2 > VS_F2_RANGE[1]) continue;
+        const x = xFor(tF2);
+        ctx.beginPath();
+        ctx.moveTo(x, pad.top);
+        ctx.lineTo(x, pad.top + plotH);
+        ctx.stroke();
+        ctx.fillText(`${tF2}`, x, pad.top + plotH + 3);
+    }
+    // F1 gridlines (horizontal)
+    const f1Ticks = [200, 300, 500, 700, 1000];
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    for (const tF1 of f1Ticks) {
+        if (tF1 < VS_F1_RANGE[0] || tF1 > VS_F1_RANGE[1]) continue;
+        const y = yFor(tF1);
+        ctx.beginPath();
+        ctx.moveTo(pad.left, y);
+        ctx.lineTo(pad.left + plotW, y);
+        ctx.stroke();
+        ctx.fillText(`${tF1}`, pad.left - 4, y);
+    }
+    // Axis titles
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.font = 'bold 10px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('F2 (Hz)  ←前舌 / 後舌→', pad.left + plotW / 2, h - 2);
+    ctx.save();
+    ctx.translate(10, pad.top + plotH / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.textBaseline = 'top';
+    ctx.fillText('F1 (Hz)  ↑閉 / 開↓', 0, 0);
+    ctx.restore();
+
+    // Draw vowel polygon (connecting cardinal vowels in IPA order)
+    const presets = VOWEL_PRESETS[state.vowelSpace.language] || VOWEL_PRESETS.jp;
+    if (presets.length >= 3) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(0,0,0,0.08)';
+        ctx.fillStyle = 'rgba(33, 150, 243, 0.04)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        // Convex hull-ish: sort by angle around centroid for the polygon
+        const centroid = presets.reduce((a, v) => ({ x: a.x + xFor(v.f2), y: a.y + yFor(v.f1) }), { x: 0, y: 0 });
+        centroid.x /= presets.length; centroid.y /= presets.length;
+        const sorted = presets.map(v => ({ ...v, x: xFor(v.f2), y: yFor(v.f1), ang: Math.atan2(yFor(v.f1) - centroid.y, xFor(v.f2) - centroid.x) }))
+                              .sort((a, b) => a.ang - b.ang);
+        ctx.moveTo(sorted[0].x, sorted[0].y);
+        for (let i = 1; i < sorted.length; i++) ctx.lineTo(sorted[i].x, sorted[i].y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    // Draw vowel targets (filled circle + label)
+    for (const v of presets) {
+        const x = xFor(v.f2), y = yFor(v.f1);
+        ctx.beginPath();
+        ctx.fillStyle = v.color;
+        ctx.globalAlpha = 0.18;
+        ctx.arc(x, y, 18, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = v.color;
+        ctx.beginPath();
+        ctx.arc(x, y, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#222';
+        ctx.font = 'bold 13px "Hiragino Sans", "Yu Gothic", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(v.label, x, y - 14);
+    }
+
+    // Draw trail
+    const trail = state.vowelSpace.trail;
+    if (trail.length > 0) {
+        const now = performance.now();
+        // Connecting line
+        ctx.strokeStyle = 'rgba(30, 136, 229, 0.5)';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        let started = false;
+        for (const p of trail) {
+            const x = xFor(p.f2), y = yFor(p.f1);
+            if (!started) { ctx.moveTo(x, y); started = true; }
+            else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        // Fading dots
+        for (const p of trail) {
+            const age = (now - p.t) / VS_TRAIL_MS;
+            const alpha = Math.max(0.05, 1 - age);
+            ctx.fillStyle = `rgba(30, 136, 229, ${alpha * 0.4})`;
+            ctx.beginPath();
+            ctx.arc(xFor(p.f2), yFor(p.f1), 2.5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        // Current point (last)
+        const cur = trail[trail.length - 1];
+        const cx = xFor(cur.f2), cy = yFor(cur.f1);
+        ctx.fillStyle = '#1e88e5';
+        ctx.beginPath();
+        ctx.arc(cx, cy, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Update readouts
+        const nearest = vsNearestVowel(cur.f1, cur.f2);
+        state.vowelSpace.nearest = nearest;
+        if (els.vsNearest) els.vsNearest.textContent = nearest ? `${nearest.vowel.label} (${Math.round(nearest.dist)}¢)` : '—';
+        if (els.vsF1) els.vsF1.textContent = Math.round(cur.f1);
+        if (els.vsF2) els.vsF2.textContent = Math.round(cur.f2);
+        if (els.vsF3 && state.cachedMicFormants && state.cachedMicFormants.f3 != null) {
+            els.vsF3.textContent = Math.round(state.cachedMicFormants.f3);
+        }
+        if (els.vsRatio) els.vsRatio.textContent = (cur.f2 / cur.f1).toFixed(2);
+    } else {
+        // Empty hint
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.font = '11px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('マイクをON → 母音を発声すると位置がここにプロットされます',
+                     pad.left + plotW / 2, pad.top + plotH / 2);
+        if (els.vsNearest) els.vsNearest.textContent = '—';
+        if (els.vsF1) els.vsF1.textContent = '—';
+        if (els.vsF2) els.vsF2.textContent = '—';
+        if (els.vsF3) els.vsF3.textContent = '—';
+        if (els.vsRatio) els.vsRatio.textContent = '—';
+    }
+}
+
+function applyVowelSpaceMode(mode) {
+    const m = mode === 'advanced' ? 'advanced' : 'basic';
+    state.vowelSpace.mode = m;
+    if (els.vsBody) {
+        els.vsBody.classList.toggle('is-basic', m === 'basic');
+        els.vsBody.classList.toggle('is-advanced', m === 'advanced');
+    }
+    if (els.vsModeTabs) {
+        els.vsModeTabs.querySelectorAll('.vib-mode-tab').forEach(btn => {
+            const active = btn.dataset.mode === m;
+            btn.classList.toggle('is-active', active);
+            btn.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+    }
+}
+
+function applyVowelSpaceLanguage(lang) {
+    state.vowelSpace.language = lang === 'en' ? 'en' : 'jp';
+    if (els.vsLangTabs) {
+        els.vsLangTabs.querySelectorAll('.vs-lang-tab').forEach(btn => {
+            const active = btn.dataset.lang === state.vowelSpace.language;
+            btn.classList.toggle('is-active', active);
+            btn.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+    }
+    drawVowelSpace();
+}
+
 function updateSynthVibratoDisplay() {
     const v = state.vibrato;
     if (!v) return;
@@ -2191,6 +2483,15 @@ function drawVisualizer() {
         drawVibratoTrace();
     }
     updateVibratoPanelVisibility();
+
+    // Vowel Space: push F1/F2 sample every frame, redraw if panel open (~30fps)
+    if (state.isMicActive) pushVowelSample();
+    if (els.vowelSpacePanel && els.vowelSpacePanel.open) {
+        if (!drawVisualizer._lastVsDraw || nowT - drawVisualizer._lastVsDraw > 33) {
+            drawVowelSpace();
+            drawVisualizer._lastVsDraw = nowT;
+        }
+    }
 
     // Spectrogram view: replace spectrum drawing entirely
     if (state.viewMode === 'spectrogram') {
@@ -4464,6 +4765,30 @@ if (els.vibModeTabs) {
 }
 // Initial synth values
 updateSynthVibratoDisplay();
+
+// Vowel Space: language + mode tabs, repaint on open
+if (els.vsLangTabs) {
+    els.vsLangTabs.addEventListener('click', (e) => {
+        const btn = e.target.closest('.vs-lang-tab');
+        if (!btn) return;
+        applyVowelSpaceLanguage(btn.dataset.lang);
+    });
+}
+if (els.vsModeTabs) {
+    els.vsModeTabs.addEventListener('click', (e) => {
+        const btn = e.target.closest('.vib-mode-tab');
+        if (!btn) return;
+        applyVowelSpaceMode(btn.dataset.mode);
+    });
+}
+applyVowelSpaceMode('basic');
+applyVowelSpaceLanguage('jp');
+if (els.vowelSpacePanel) {
+    els.vowelSpacePanel.addEventListener('toggle', () => {
+        if (els.vowelSpacePanel.open) drawVowelSpace();
+    });
+    setTimeout(() => { if (els.vowelSpacePanel.open) drawVowelSpace(); }, 0);
+}
 
 // Slope Line Toggle
 els.btnSlopeLine.addEventListener('click', () => {
