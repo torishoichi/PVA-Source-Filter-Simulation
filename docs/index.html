@@ -591,11 +591,11 @@
                     </summary>
                     <div class="vib-analysis-body is-basic" id="vs-body">
                         <div class="vib-analysis-controls">
-                            <div class="vs-lang-tabs" id="vs-voice-tabs" role="tablist" aria-label="声の種類 (キャリブレーション)" title="男性/女性/子供で参照フォルマント値をスケール / Me = 個人キャリブレーション結果">
-                                <button class="vs-lang-tab is-active" data-voice="male" type="button" role="tab" aria-selected="true">♂ M</button>
-                                <button class="vs-lang-tab" data-voice="female" type="button" role="tab" aria-selected="false">♀ F</button>
-                                <button class="vs-lang-tab" data-voice="child" type="button" role="tab" aria-selected="false">Child</button>
-                                <button class="vs-lang-tab" data-voice="me" type="button" role="tab" aria-selected="false" disabled style="opacity:0.4;cursor:not-allowed;">Me</button>
+                            <div class="vs-lang-tabs" id="vs-voice-tabs" role="tablist" aria-label="声道長プロファイル (キャリブレーション)" title="AMAB (Assigned Male at Birth) / AFAB (Assigned Female at Birth) / Child で参照フォルマント値をスケール (声道長の典型差を反映, Fant 1966 比率) / Me = 個人キャリブレーション結果">
+                                <button class="vs-lang-tab is-active" data-voice="male" type="button" role="tab" aria-selected="true" title="AMAB — Assigned Male at Birth (出生時に男性と割り当てられた、平均的な声道長プロファイル)">AMAB</button>
+                                <button class="vs-lang-tab" data-voice="female" type="button" role="tab" aria-selected="false" title="AFAB — Assigned Female at Birth (出生時に女性と割り当てられた、平均的な声道長プロファイル)">AFAB</button>
+                                <button class="vs-lang-tab" data-voice="child" type="button" role="tab" aria-selected="false" title="子供 (声道長 ~40% 短い)">Child</button>
+                                <button class="vs-lang-tab" data-voice="me" type="button" role="tab" aria-selected="false" disabled style="opacity:0.4;cursor:not-allowed;" title="個人キャリブレーション結果 (Calibrate ボタンで作成)">Me</button>
                             </div>
                             <button id="vs-calibrate-btn" class="vs-calibrate-btn" type="button" title="自分の発声で参照値を測定 (各母音 2 秒ずつ)">🎯 Calibrate</button>
                             <div class="vs-lang-tabs" id="vs-lang-tabs" role="tablist" aria-label="参照母音">
