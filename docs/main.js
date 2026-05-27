@@ -262,6 +262,15 @@ const els = {
     vibVerdict: document.getElementById('vib-verdict'),
     vibVerdictBox: document.getElementById('vib-verdict-box'),
     vibF0: document.getElementById('vib-f0'),
+    vibAnalysisBody: document.getElementById('vib-analysis-body'),
+    vibModeTabs: document.getElementById('vib-mode-tabs'),
+    vibSynthRate: document.getElementById('vib-synth-rate'),
+    vibSynthExtent: document.getElementById('vib-synth-extent'),
+    vibSynthDelay: document.getElementById('vib-synth-delay'),
+    vibSynthRamp: document.getElementById('vib-synth-ramp'),
+    vibSynthAm: document.getElementById('vib-synth-am'),
+    vibSynthWave: document.getElementById('vib-synth-wave'),
+    vibSynthStatus: document.getElementById('vib-synth-status'),
     masterVolume: document.getElementById('master-volume'),
     micGainSlider: document.getElementById('mic-gain'),
     spectrumSlopeSlider: document.getElementById('spectrum-slope'),
@@ -2108,6 +2117,38 @@ function drawVibratoTrace() {
     ctx.fillText(`${(tSpan / 1000).toFixed(1)}s`, w - 4, h - 2);
 }
 
+function updateSynthVibratoDisplay() {
+    const v = state.vibrato;
+    if (!v) return;
+    const fmt = (n, d = 1) => Number.isFinite(n) ? n.toFixed(d) : '—';
+    if (els.vibSynthRate) els.vibSynthRate.textContent = fmt(v.rate, 1);
+    if (els.vibSynthExtent) els.vibSynthExtent.textContent = Math.round(v.extent ?? 0);
+    if (els.vibSynthDelay) els.vibSynthDelay.textContent = Math.round(v.onsetDelay ?? 0);
+    if (els.vibSynthRamp) els.vibSynthRamp.textContent = Math.round(v.onsetRamp ?? 0);
+    if (els.vibSynthAm) els.vibSynthAm.textContent = Math.round(v.amDepth ?? 0);
+    if (els.vibSynthWave) els.vibSynthWave.textContent = v.waveform || '—';
+    if (els.vibSynthStatus) {
+        const playing = isPlaying;
+        const off = !v.enabled || (v.extent ?? 0) === 0;
+        els.vibSynthStatus.textContent = !playing ? '(停止中)' : (off ? '(Off)' : '');
+    }
+}
+
+function applyVibAnalysisMode(mode) {
+    const m = mode === 'advanced' ? 'advanced' : 'basic';
+    if (els.vibAnalysisBody) {
+        els.vibAnalysisBody.classList.toggle('is-basic', m === 'basic');
+        els.vibAnalysisBody.classList.toggle('is-advanced', m === 'advanced');
+    }
+    if (els.vibModeTabs) {
+        els.vibModeTabs.querySelectorAll('.vib-mode-tab').forEach(btn => {
+            const active = btn.dataset.mode === m;
+            btn.classList.toggle('is-active', active);
+            btn.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+    }
+}
+
 let lastVibPanelMicState = null;
 function updateVibratoPanelVisibility() {
     // Panel is a collapsible <details> that is always present in the DOM.
@@ -3454,6 +3495,7 @@ function drawVisualizer() {
 els.btnPlay.addEventListener('click', () => {
     if (isPlaying) stopAudio();
     else startAudio();
+    updateSynthVibratoDisplay();
 });
 
 // Mic Toggle
@@ -4370,6 +4412,7 @@ if (els.vibratoRate) {
         state.vibrato.rate = parseFloat(e.target.value);
         els.vibratoRateVal.textContent = state.vibrato.rate.toFixed(1);
         applyVibratoLive();
+        updateSynthVibratoDisplay();
     });
 }
 if (els.vibratoExtent) {
@@ -4377,18 +4420,21 @@ if (els.vibratoExtent) {
         state.vibrato.extent = parseFloat(e.target.value);
         els.vibratoExtentVal.textContent = state.vibrato.extent;
         applyVibratoLive();
+        updateSynthVibratoDisplay();
     });
 }
 if (els.vibratoDelay) {
     els.vibratoDelay.addEventListener('input', (e) => {
         state.vibrato.onsetDelay = parseFloat(e.target.value);
         els.vibratoDelayVal.textContent = state.vibrato.onsetDelay;
+        updateSynthVibratoDisplay();
     });
 }
 if (els.vibratoRamp) {
     els.vibratoRamp.addEventListener('input', (e) => {
         state.vibrato.onsetRamp = parseFloat(e.target.value);
         els.vibratoRampVal.textContent = state.vibrato.onsetRamp;
+        updateSynthVibratoDisplay();
     });
 }
 if (els.vibratoAm) {
@@ -4396,14 +4442,28 @@ if (els.vibratoAm) {
         state.vibrato.amDepth = parseFloat(e.target.value);
         els.vibratoAmVal.textContent = state.vibrato.amDepth;
         applyVibratoLive();
+        updateSynthVibratoDisplay();
     });
 }
 if (els.vibratoWave) {
     els.vibratoWave.addEventListener('change', (e) => {
         state.vibrato.waveform = e.target.value;
         if (vibratoLFO) vibratoLFO.type = state.vibrato.waveform;
+        updateSynthVibratoDisplay();
     });
 }
+
+// Vibrato analysis Basic/Advanced mode
+if (els.vibModeTabs) {
+    els.vibModeTabs.addEventListener('click', (e) => {
+        const btn = e.target.closest('.vib-mode-tab');
+        if (!btn) return;
+        applyVibAnalysisMode(btn.dataset.mode);
+    });
+    applyVibAnalysisMode('basic');
+}
+// Initial synth values
+updateSynthVibratoDisplay();
 
 // Slope Line Toggle
 els.btnSlopeLine.addEventListener('click', () => {

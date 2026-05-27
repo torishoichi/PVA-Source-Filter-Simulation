@@ -392,6 +392,95 @@ input[type=range]::-moz-range-track {
     padding: 4px 12px 10px 12px;
 }
 
+.vib-analysis-controls {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 6px;
+}
+
+.vib-mode-tabs {
+    display: inline-flex;
+    background: rgba(0, 0, 0, 0.04);
+    border: 1px solid var(--glass-border);
+    border-radius: 999px;
+    padding: 2px;
+    gap: 2px;
+}
+
+.vib-mode-tab {
+    appearance: none;
+    background: transparent;
+    border: none;
+    padding: 3px 12px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-secondary, #666);
+    cursor: pointer;
+    border-radius: 999px;
+    line-height: 1.2;
+    transition: background 0.12s, color 0.12s;
+}
+
+.vib-mode-tab:hover {
+    background: rgba(33, 150, 243, 0.08);
+}
+
+.vib-mode-tab.is-active {
+    background: var(--accent-color, #2196F3);
+    color: #fff;
+}
+
+.vib-section {
+    margin-bottom: 8px;
+}
+
+.vib-section-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+    padding: 2px 0;
+}
+
+.vib-section-icon {
+    font-size: 11px;
+    opacity: 0.7;
+}
+
+.vib-section-title {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-secondary, #666);
+}
+
+.vib-section-meta {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--text-secondary, #888);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Basic / Advanced visibility */
+.vib-analysis-body.is-basic .vib-advanced-only {
+    display: none !important;
+}
+
+.vib-wave-val {
+    font-size: 13px;
+    text-transform: capitalize;
+    min-width: 48px;
+}
+
+/* Compact vstat labels (tooltip [?] is inline) */
+.vstat-label .tooltip {
+    font-size: 9px;
+    margin-left: 2px;
+}
+
 .vib-analysis-head {
     display: flex;
     align-items: center;
