@@ -303,42 +303,62 @@ input[type=range]::-moz-range-track {
     background: #0a0a14;
 }
 
-/* Spectrum / Spectrogram view tabs (top-left of canvas) */
+/* ============================================================
+   Unified segmented control (pill tabs)
+   Used across: Spectrum/Spectrogram (view-tabs), Vibrato Basic/Advanced
+   (vib-mode-tabs), Vowel Space lang/mode tabs (vs-lang-tabs, vs-mode-tabs).
+   ============================================================ */
+.view-tabs,
+.vib-mode-tabs,
+.vs-lang-tabs {
+    display: inline-flex;
+    background: rgba(0, 0, 0, 0.04);
+    border: 1px solid var(--glass-border);
+    border-radius: 999px;
+    padding: 2px;
+    gap: 2px;
+}
+
+.view-tab,
+.vib-mode-tab,
+.vs-lang-tab {
+    appearance: none;
+    background: transparent;
+    border: none;
+    padding: 3px 11px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--text-secondary, #666);
+    cursor: pointer;
+    border-radius: 999px;
+    line-height: 1.2;
+    text-transform: uppercase;
+    transition: background 0.12s, color 0.12s;
+}
+
+.view-tab:hover,
+.vib-mode-tab:hover,
+.vs-lang-tab:hover {
+    background: rgba(33, 150, 243, 0.08);
+    color: var(--text-primary, #222);
+}
+
+.view-tab.is-active,
+.vib-mode-tab.is-active,
+.vs-lang-tab.is-active {
+    background: var(--accent-color, #2196F3);
+    color: #fff;
+}
+
+/* Spectrum view-tabs are positioned over the canvas — override with absolute */
 .view-tabs {
     position: absolute;
     top: 6px;
     left: 6px;
-    display: inline-flex;
-    background: rgba(255, 255, 255, 0.85);
-    border: 1px solid var(--glass-border);
-    border-radius: 6px;
-    padding: 2px;
-    gap: 2px;
+    background: rgba(255, 255, 255, 0.88);
     z-index: 5;
     backdrop-filter: blur(4px);
-}
-
-.view-tab {
-    appearance: none;
-    background: transparent;
-    border: none;
-    padding: 3px 10px;
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--text-secondary, #555);
-    cursor: pointer;
-    border-radius: 4px;
-    line-height: 1.2;
-    transition: background 0.15s, color 0.15s;
-}
-
-.view-tab:hover {
-    background: rgba(33, 150, 243, 0.08);
-}
-
-.view-tab.is-active {
-    background: var(--accent-color, #2196F3);
-    color: #fff;
 }
 
 /* Vibrato analysis panel */
@@ -374,7 +394,7 @@ input[type=range]::-moz-range-track {
     transition: transform 0.15s ease;
 }
 
-#vibrato-panel[open] > .vib-analysis-summary .vib-analysis-disclosure {
+.vib-analysis-panel[open] > .vib-analysis-summary .vib-analysis-disclosure {
     transform: rotate(90deg);
 }
 
@@ -393,7 +413,7 @@ input[type=range]::-moz-range-track {
     font-weight: 400;
 }
 
-#vibrato-panel[open] > .vib-analysis-summary .vib-analysis-summary-hint {
+.vib-analysis-panel[open] > .vib-analysis-summary .vib-analysis-summary-hint {
     display: none;
 }
 
@@ -404,72 +424,41 @@ input[type=range]::-moz-range-track {
 .vib-analysis-controls {
     display: flex;
     justify-content: flex-end;
-    margin-bottom: 6px;
-}
-
-.vib-mode-tabs {
-    display: inline-flex;
-    background: rgba(0, 0, 0, 0.04);
-    border: 1px solid var(--glass-border);
-    border-radius: 999px;
-    padding: 2px;
-    gap: 2px;
-}
-
-.vib-mode-tab {
-    appearance: none;
-    background: transparent;
-    border: none;
-    padding: 3px 12px;
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    color: var(--text-secondary, #666);
-    cursor: pointer;
-    border-radius: 999px;
-    line-height: 1.2;
-    transition: background 0.12s, color 0.12s;
-}
-
-.vib-mode-tab:hover {
-    background: rgba(33, 150, 243, 0.08);
-}
-
-.vib-mode-tab.is-active {
-    background: var(--accent-color, #2196F3);
-    color: #fff;
+    gap: 6px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
 }
 
 .vib-section {
-    margin-bottom: 8px;
+    margin-bottom: 10px;
 }
 
 .vib-section-head {
     display: flex;
-    align-items: center;
+    align-items: baseline;
     gap: 6px;
-    margin-bottom: 4px;
-    padding: 2px 0;
+    margin-bottom: 6px;
+    padding-bottom: 4px;
+    border-bottom: 1px dashed rgba(0, 0, 0, 0.08);
 }
 
+/* Decorative emoji icon disabled — keeps tonality more professional */
 .vib-section-icon {
-    font-size: 11px;
-    opacity: 0.7;
+    display: none;
 }
 
 .vib-section-title {
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.06em;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: var(--text-secondary, #666);
+    color: var(--text-secondary, #777);
 }
 
 .vib-section-meta {
     margin-left: auto;
-    font-size: 10px;
-    color: var(--text-secondary, #888);
+    font-size: 0.7rem;
+    color: var(--text-secondary, #999);
     font-variant-numeric: tabular-nums;
 }
 
@@ -491,53 +480,13 @@ input[type=range]::-moz-range-track {
 }
 
 /* ============================================================
-   Vowel Space panel
+   Vowel Space panel — inherits unified tab/stat styles
    ============================================================ */
-.vs-controls {
-    display: flex;
-    gap: 8px;
-    justify-content: flex-end;
-    flex-wrap: wrap;
-}
-
-.vs-lang-tabs {
-    display: inline-flex;
-    background: rgba(0, 0, 0, 0.04);
-    border: 1px solid var(--glass-border);
-    border-radius: 999px;
-    padding: 2px;
-    gap: 2px;
-}
-
-.vs-lang-tab {
-    appearance: none;
-    background: transparent;
-    border: none;
-    padding: 3px 12px;
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    color: var(--text-secondary, #666);
-    cursor: pointer;
-    border-radius: 999px;
-    line-height: 1.2;
-    transition: background 0.12s, color 0.12s;
-}
-
-.vs-lang-tab:hover {
-    background: rgba(33, 150, 243, 0.08);
-}
-
-.vs-lang-tab.is-active {
-    background: var(--accent-color, #2196F3);
-    color: #fff;
-}
-
 .vs-readout-row {
     display: flex;
-    gap: 10px;
+    gap: 8px;
     flex-wrap: wrap;
-    margin: 6px 0;
+    margin-bottom: 8px;
 }
 
 .vs-canvas-wrap {
@@ -547,7 +496,6 @@ input[type=range]::-moz-range-track {
     border: 1px solid var(--glass-border);
     border-radius: 6px;
     overflow: hidden;
-    margin-top: 6px;
 }
 
 #vowel-space-canvas {
@@ -636,41 +584,45 @@ input[type=range]::-moz-range-track {
 .vstat {
     display: inline-flex;
     align-items: baseline;
-    gap: 4px;
-    padding: 4px 10px;
-    background: rgba(255, 255, 255, 0.7);
+    gap: 6px;
+    padding: 5px 10px;
+    background: rgba(255, 255, 255, 0.55);
     border: 1px solid var(--glass-border);
     border-radius: 6px;
     font-variant-numeric: tabular-nums;
+    line-height: 1.2;
 }
 
 .vstat-label {
-    font-size: 10px;
+    font-size: 0.65rem;
     font-weight: 600;
-    color: var(--text-secondary, #666);
+    color: var(--text-secondary, #777);
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.06em;
 }
 
 .vstat-val {
-    font-size: 16px;
+    font-size: 0.95rem;
     font-weight: 700;
-    color: #1a1a1a;
-    min-width: 28px;
+    color: var(--text-primary, #1a1a1a);
+    min-width: 24px;
     text-align: right;
+    font-feature-settings: "tnum" 1;
 }
 
 .vstat-unit {
-    font-size: 10px;
-    color: var(--text-secondary, #888);
+    font-size: 0.65rem;
+    color: var(--text-secondary, #999);
+    margin-left: -2px;
 }
 
 .vstat-verdict .vstat-val {
-    font-size: 13px;
+    font-size: 0.8rem;
     padding: 2px 8px;
     background: rgba(33, 150, 243, 0.12);
     color: var(--accent-color, #2196F3);
     border-radius: 4px;
+    min-width: 48px;
 }
 
 .vstat-verdict.is-good .vstat-val {

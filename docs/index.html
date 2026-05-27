@@ -587,10 +587,10 @@
                         <span class="vib-analysis-summary-hint">マイクONで母音空間を表示 (F1×F2)</span>
                     </summary>
                     <div class="vib-analysis-body is-basic" id="vs-body">
-                        <div class="vib-analysis-controls vs-controls">
+                        <div class="vib-analysis-controls">
                             <div class="vs-lang-tabs" id="vs-lang-tabs" role="tablist" aria-label="参照母音">
-                                <button class="vs-lang-tab is-active" data-lang="jp" type="button" role="tab" aria-selected="true">日本語 5</button>
-                                <button class="vs-lang-tab" data-lang="en" type="button" role="tab" aria-selected="false">English / IPA</button>
+                                <button class="vs-lang-tab is-active" data-lang="jp" type="button" role="tab" aria-selected="true">JP 5</button>
+                                <button class="vs-lang-tab" data-lang="en" type="button" role="tab" aria-selected="false">IPA EN</button>
                             </div>
                             <div class="vib-mode-tabs" id="vs-mode-tabs" role="tablist" aria-label="表示モード">
                                 <button class="vib-mode-tab is-active" data-mode="basic" type="button" role="tab" aria-selected="true">Basic</button>
@@ -598,6 +598,10 @@
                             </div>
                         </div>
 
+                        <div class="vib-section">
+                            <div class="vib-section-head">
+                                <span class="vib-section-title">Detected — mic input</span>
+                            </div>
                         <div class="vs-readout-row">
                             <div class="vstat">
                                 <span class="vstat-label">Nearest <span class="tooltip" data-tooltip="現在の (F1, F2) に最も近い参照母音 (log Hz 距離)。括弧内は距離 (cents-like スケール)。">[?]</span></span>
@@ -622,6 +626,8 @@
                                 <span class="vstat-val" id="vs-f3">—</span>
                                 <span class="vstat-unit">Hz</span>
                             </div>
+                        </div>
+
                         </div>
 
                         <div class="vs-canvas-wrap">
