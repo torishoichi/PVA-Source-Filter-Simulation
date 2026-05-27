@@ -461,15 +461,15 @@
                                 </button>
                             </div>
                         </div>
+                        <div class="view-tabs" id="view-tabs" role="tablist" aria-label="View mode">
+                            <button class="view-tab is-active" data-view="spectrum" type="button" role="tab" aria-selected="true">Spectrum</button>
+                            <button class="view-tab" data-view="spectrogram" type="button" role="tab" aria-selected="false">Spectrogram</button>
+                        </div>
                     </div>
                 </div>
                 <div class="canvas-container">
                     <canvas id="spectrum-canvas"></canvas>
                     <canvas id="spectrogram-canvas" style="display:none;"></canvas>
-                    <div class="view-tabs" id="view-tabs" role="tablist" aria-label="View mode">
-                        <button class="view-tab is-active" data-view="spectrum" type="button" role="tab" aria-selected="true">Spectrum</button>
-                        <button class="view-tab" data-view="spectrogram" type="button" role="tab" aria-selected="false">Spectrogram</button>
-                    </div>
                     <button id="log-scale-toggle" class="axis-scale-btn"
                         title="Toggle Log/Linear frequency scale">Log</button>
                     <div class="axis-labels x-axis">

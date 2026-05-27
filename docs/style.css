@@ -351,15 +351,13 @@ input[type=range]::-moz-range-track {
     color: #fff;
 }
 
-/* Spectrum view-tabs are positioned over the canvas — top-right corner.
-   Roughness legend renders below the canvas so no overlap there. */
-.view-tabs {
-    position: absolute;
-    top: 6px;
-    right: 6px;
-    background: rgba(255, 255, 255, 0.88);
-    z-index: 5;
-    backdrop-filter: blur(4px);
+/* Spectrum view-tabs live in the canvas header bar (above the canvas frame),
+   pushed to the right edge so it doesn't crowd the Volume/Slope/Roughness
+   controls and doesn't overlap the Roughness band labels inside the canvas. */
+.canvas-header-bottom .view-tabs {
+    margin-left: auto;
+    align-self: center;
+    background: rgba(0, 0, 0, 0.04);
 }
 
 /* Vibrato analysis panel */
