@@ -2246,29 +2246,35 @@ function drawVibratoTrace() {
 // Vowel Space (F1 × F2 chart, uses LPC v3 cached formant data)
 // =====================================================================
 // Cardinal vowel reference values, adult-male baseline (IPA convention).
-// JP: 日本標準語5母音 (杉藤・神山 1990 系)
-// EN: Peterson & Barney 1952 (male)
-// Voice scaling (Fant 1966 / Nordström 1977 系の比率): female ≈ +18%, child ≈ +40%
+// Each entry has acoustic (f1, f2) for nearest-vowel matching AND canonical
+// chart position (sCanon, tCanon) for IPA trapezoid layout where
+//   s in [0, 1]: 0 = back, 1 = front
+//   t in [0, 1]: 0 = high (close), 1 = low (open)
+// JP: 日本標準語5母音 (杉藤・神山 1990 系) / EN: Peterson & Barney 1952 (male)
+// Voice scaling (Fant 1966 / Nordström 1977 系): female ≈ +18%, child ≈ +40%
 const VOWEL_PRESETS_BASE = {
     jp: [
-        { ipa: '/a/', label: '/a/', f1: 800, f2: 1300 },
-        { ipa: '/i/', label: '/i/', f1: 280, f2: 2300 },
-        { ipa: '/ɯ/', label: '/ɯ/', f1: 350, f2: 1300 },
-        { ipa: '/e/', label: '/e/', f1: 450, f2: 2000 },
-        { ipa: '/o/', label: '/o/', f1: 480, f2: 900 },
+        { ipa: '/a/', label: '/a/', f1: 800, f2: 1300, sCanon: 0.55, tCanon: 0.94 },
+        { ipa: '/i/', label: '/i/', f1: 280, f2: 2300, sCanon: 0.95, tCanon: 0.05 },
+        { ipa: '/ɯ/', label: '/ɯ/', f1: 350, f2: 1300, sCanon: 0.18, tCanon: 0.10 },
+        { ipa: '/e/', label: '/e/', f1: 450, f2: 2000, sCanon: 0.92, tCanon: 0.48 },
+        { ipa: '/o/', label: '/o/', f1: 480, f2: 900,  sCanon: 0.07, tCanon: 0.42 },
     ],
     en: [
-        { ipa: '/i/', label: '/i/', f1: 270, f2: 2290 },
-        { ipa: '/ɪ/', label: '/ɪ/', f1: 390, f2: 1990 },
-        { ipa: '/e/', label: '/e/', f1: 530, f2: 1840 },
-        { ipa: '/æ/', label: '/æ/', f1: 660, f2: 1720 },
-        { ipa: '/ɑ/', label: '/ɑ/', f1: 730, f2: 1090 },
-        { ipa: '/ʌ/', label: '/ʌ/', f1: 640, f2: 1190 },
-        { ipa: '/ɔ/', label: '/ɔ/', f1: 570, f2: 840 },
-        { ipa: '/o/', label: '/o/', f1: 440, f2: 1020 },
-        { ipa: '/ʊ/', label: '/ʊ/', f1: 440, f2: 1020 },
-        { ipa: '/u/', label: '/u/', f1: 300, f2: 870 },
-        { ipa: '/ɝ/', label: '/ɝ/', f1: 490, f2: 1350 },
+        { ipa: '/i/', label: '/i/', f1: 270, f2: 2290, sCanon: 0.95, tCanon: 0.05 },
+        { ipa: '/ɪ/', label: '/ɪ/', f1: 390, f2: 1990, sCanon: 0.85, tCanon: 0.18 },
+        { ipa: '/e/', label: '/e/', f1: 530, f2: 1840, sCanon: 0.92, tCanon: 0.45 },
+        { ipa: '/ɛ/', label: '/ɛ/', f1: 610, f2: 1900, sCanon: 0.88, tCanon: 0.58 },
+        { ipa: '/æ/', label: '/æ/', f1: 660, f2: 1720, sCanon: 0.82, tCanon: 0.85 },
+        { ipa: '/a/', label: '/a/', f1: 850, f2: 1610, sCanon: 0.68, tCanon: 0.97 },
+        { ipa: '/ɑ/', label: '/ɑ/', f1: 730, f2: 1090, sCanon: 0.05, tCanon: 0.95 },
+        { ipa: '/ɔ/', label: '/ɔ/', f1: 570, f2: 840,  sCanon: 0.06, tCanon: 0.65 },
+        { ipa: '/o/', label: '/o/', f1: 440, f2: 1020, sCanon: 0.05, tCanon: 0.40 },
+        { ipa: '/ʊ/', label: '/ʊ/', f1: 440, f2: 1020, sCanon: 0.12, tCanon: 0.18 },
+        { ipa: '/u/', label: '/u/', f1: 300, f2: 870,  sCanon: 0.05, tCanon: 0.05 },
+        { ipa: '/ʌ/', label: '/ʌ/', f1: 640, f2: 1190, sCanon: 0.48, tCanon: 0.58 },
+        { ipa: '/ə/', label: '/ə/', f1: 500, f2: 1500, sCanon: 0.48, tCanon: 0.45 },
+        { ipa: '/ɚ/', label: '/ɚ/', f1: 470, f2: 1400, sCanon: 0.48, tCanon: 0.30 },
     ],
 };
 
@@ -2293,9 +2299,43 @@ const VOWEL_PALETTE = [
     '#677a6a', // forest sage
 ];
 
-const VS_F1_RANGE = [180, 1400];   // Hz drawn axis (wide enough for child female /a/)
-const VS_F2_RANGE = [600, 3700];   // Hz
 const VS_TRAIL_MS = 1500;
+
+// IPA trapezoid corners in normalized canvas coords [0,1]
+// Slanted left edge (front-bottom indented to match articulatory chart)
+const VS_TRAP = {
+    tl: { sx: 0.10, sy: 0.10 },   // High Front  — /i/ corner
+    tr: { sx: 0.92, sy: 0.10 },   // High Back   — /u/ corner
+    br: { sx: 0.92, sy: 0.88 },   // Low  Back   — /ɑ/ corner
+    bl: { sx: 0.34, sy: 0.88 },   // Low  Front  — /a/ corner (indented inward)
+};
+
+// Map IPA (s, t) coords → canvas pixel coords.
+// s: 0 = back, 1 = front;  t: 0 = high, 1 = low
+function vsSTtoXY(s, t, w, h) {
+    const tl = VS_TRAP.tl, tr = VS_TRAP.tr, br = VS_TRAP.br, bl = VS_TRAP.bl;
+    const frontX = tl.sx + t * (bl.sx - tl.sx);
+    const backX  = tr.sx + t * (br.sx - tr.sx);
+    const y      = tl.sy + t * (bl.sy - tl.sy);
+    const x      = backX + s * (frontX - backX);
+    return { x: x * w, y: y * h };
+}
+
+// Map measured (F1, F2) Hz → IPA (s, t). Voice-scaled so a female /i/ still
+// lands at the top-front corner, etc.
+function vsF1F2toST(f1, f2) {
+    const sc = VOICE_TYPE_SCALE[state.vowelSpace.voiceType] || VOICE_TYPE_SCALE.male;
+    const F1_HI = 250 * sc.f1;    // /i/, /u/ (high vowels)
+    const F1_LO = 900 * sc.f1;    // /a/, /ɑ/ (low vowels)
+    const F2_BK = 800 * sc.f2;    // /u/, /ɑ/ (back vowels)
+    const F2_FR = 2300 * sc.f2;   // /i/, /e/ (front vowels)
+    const t = (Math.log2(f1) - Math.log2(F1_HI)) / (Math.log2(F1_LO) - Math.log2(F1_HI));
+    const s = (Math.log2(f2) - Math.log2(F2_BK)) / (Math.log2(F2_FR) - Math.log2(F2_BK));
+    return {
+        s: Math.max(-0.08, Math.min(1.08, s)),
+        t: Math.max(-0.08, Math.min(1.08, t)),
+    };
+}
 
 function vowelPresets() {
     const lang = state.vowelSpace.language;
@@ -2558,111 +2598,113 @@ function drawVowelSpace() {
     ctx.fillStyle = '#fdfcf6';
     ctx.fillRect(0, 0, w, h);
 
-    const pad = { left: 42, right: 14, top: 16, bottom: 28 };
-    const plotW = w - pad.left - pad.right;
-    const plotH = h - pad.top - pad.bottom;
+    // --- IPA trapezoid frame ---
+    // Compute corner pixels from VS_TRAP
+    const corners = {
+        tl: { x: VS_TRAP.tl.sx * w, y: VS_TRAP.tl.sy * h },
+        tr: { x: VS_TRAP.tr.sx * w, y: VS_TRAP.tr.sy * h },
+        br: { x: VS_TRAP.br.sx * w, y: VS_TRAP.br.sy * h },
+        bl: { x: VS_TRAP.bl.sx * w, y: VS_TRAP.bl.sy * h },
+    };
 
-    // F2 axis: log Hz, HIGH F2 on the LEFT (IPA convention)
-    const f2LogLo = vsLog(VS_F2_RANGE[0]);
-    const f2LogHi = vsLog(VS_F2_RANGE[1]);
-    const xFor = (f2) => pad.left + plotW - ((vsLog(f2) - f2LogLo) / (f2LogHi - f2LogLo)) * plotW;
-    // F1 axis: log Hz, LOW F1 at TOP
-    const f1LogLo = vsLog(VS_F1_RANGE[0]);
-    const f1LogHi = vsLog(VS_F1_RANGE[1]);
-    const yFor = (f1) => pad.top + ((vsLog(f1) - f1LogLo) / (f1LogHi - f1LogLo)) * plotH;
+    // Light fill inside the trapezoid
+    ctx.beginPath();
+    ctx.moveTo(corners.tl.x, corners.tl.y);
+    ctx.lineTo(corners.tr.x, corners.tr.y);
+    ctx.lineTo(corners.br.x, corners.br.y);
+    ctx.lineTo(corners.bl.x, corners.bl.y);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(33, 150, 243, 0.025)';
+    ctx.fill();
 
-    // Plot area border
-    ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+    // Row dividers (High / Mid / Low) — horizontal lines following the trapezoid slant
+    ctx.strokeStyle = 'rgba(0,0,0,0.12)';
     ctx.lineWidth = 1;
-    ctx.strokeRect(pad.left + 0.5, pad.top + 0.5, plotW - 1, plotH - 1);
+    const rowTs = [0.33, 0.67];
+    for (const tRow of rowTs) {
+        const fL = vsSTtoXY(1, tRow, w, h);
+        const fR = vsSTtoXY(0, tRow, w, h);
+        ctx.beginPath();
+        ctx.moveTo(fL.x, fL.y);
+        ctx.lineTo(fR.x, fR.y);
+        ctx.stroke();
+    }
 
-    // Gridlines + tick labels
-    ctx.strokeStyle = 'rgba(0,0,0,0.07)';
-    ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    ctx.font = '10px Inter, sans-serif';
-    ctx.lineWidth = 1;
-    // F2 gridlines (vertical) — IPA chart has high F2 on left
-    const f2Ticks = [800, 1000, 1500, 2000, 2500, 3000];
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    for (const tF2 of f2Ticks) {
-        if (tF2 < VS_F2_RANGE[0] || tF2 > VS_F2_RANGE[1]) continue;
-        const x = xFor(tF2);
+    // Column dividers (Front | Central | Back) — vertical lines at s=0.66, s=0.33
+    const colSs = [0.66, 0.33];
+    for (const sCol of colSs) {
+        const top = vsSTtoXY(sCol, 0, w, h);
+        const bot = vsSTtoXY(sCol, 1, w, h);
         ctx.beginPath();
-        ctx.moveTo(x, pad.top);
-        ctx.lineTo(x, pad.top + plotH);
+        ctx.moveTo(top.x, top.y);
+        ctx.lineTo(bot.x, bot.y);
         ctx.stroke();
-        ctx.fillText(`${tF2}`, x, pad.top + plotH + 3);
     }
-    // F1 gridlines (horizontal)
-    const f1Ticks = [200, 300, 500, 700, 1000];
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'middle';
-    for (const tF1 of f1Ticks) {
-        if (tF1 < VS_F1_RANGE[0] || tF1 > VS_F1_RANGE[1]) continue;
-        const y = yFor(tF1);
-        ctx.beginPath();
-        ctx.moveTo(pad.left, y);
-        ctx.lineTo(pad.left + plotW, y);
-        ctx.stroke();
-        ctx.fillText(`${tF1}`, pad.left - 4, y);
-    }
-    // Axis titles
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.font = 'bold 10px Inter, sans-serif';
+
+    // Trapezoid outline (drawn on top of dividers)
+    ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(corners.tl.x, corners.tl.y);
+    ctx.lineTo(corners.tr.x, corners.tr.y);
+    ctx.lineTo(corners.br.x, corners.br.y);
+    ctx.lineTo(corners.bl.x, corners.bl.y);
+    ctx.closePath();
+    ctx.stroke();
+
+    // Column labels: Front / Central / Back — above the trapezoid top edge
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.font = '600 11px Inter, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
-    ctx.fillText('F2 (Hz)  ←前舌 / 後舌→', pad.left + plotW / 2, h - 2);
-    ctx.save();
-    ctx.translate(10, pad.top + plotH / 2);
-    ctx.rotate(-Math.PI / 2);
-    ctx.textBaseline = 'top';
-    ctx.fillText('F1 (Hz)  ↑閉 / 開↓', 0, 0);
-    ctx.restore();
+    const colLabelY = corners.tl.y - 6;
+    const frontCx = vsSTtoXY(0.83, 0, w, h).x;
+    const centralCx = vsSTtoXY(0.5, 0, w, h).x;
+    const backCx = vsSTtoXY(0.17, 0, w, h).x;
+    ctx.fillText('Front', frontCx, colLabelY);
+    ctx.fillText('Central', centralCx, colLabelY);
+    ctx.fillText('Back', backCx, colLabelY);
 
-    // Draw vowel polygon (connecting cardinal vowels in IPA order)
-    const presets = vowelPresets();
-    if (presets.length >= 3) {
-        ctx.save();
-        ctx.strokeStyle = 'rgba(0,0,0,0.08)';
-        ctx.fillStyle = 'rgba(33, 150, 243, 0.04)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        // Convex hull-ish: sort by angle around centroid for the polygon
-        const centroid = presets.reduce((a, v) => ({ x: a.x + xFor(v.f2), y: a.y + yFor(v.f1) }), { x: 0, y: 0 });
-        centroid.x /= presets.length; centroid.y /= presets.length;
-        const sorted = presets.map(v => ({ ...v, x: xFor(v.f2), y: yFor(v.f1), ang: Math.atan2(yFor(v.f1) - centroid.y, xFor(v.f2) - centroid.x) }))
-                              .sort((a, b) => a.ang - b.ang);
-        ctx.moveTo(sorted[0].x, sorted[0].y);
-        for (let i = 1; i < sorted.length; i++) ctx.lineTo(sorted[i].x, sorted[i].y);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-        ctx.restore();
+    // Row labels: High / Mid / Low — outside both edges
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.font = '600 10px Inter, sans-serif';
+    const rowMidTs = [0.16, 0.5, 0.83];
+    const rowLabels = ['High', 'Mid', 'Low'];
+    for (let i = 0; i < 3; i++) {
+        const t = rowMidTs[i];
+        // Left side (outside the slanted edge)
+        const leftEdge = vsSTtoXY(1, t, w, h);
+        ctx.textAlign = 'right';
+        ctx.fillText(rowLabels[i], leftEdge.x - 6, leftEdge.y);
+        // Right side
+        const rightEdge = vsSTtoXY(0, t, w, h);
+        ctx.textAlign = 'left';
+        ctx.fillText(rowLabels[i], rightEdge.x + 6, rightEdge.y);
     }
 
-    // Draw vowel targets (muted halo + small dot + IPA label)
+    // --- Vowel reference labels (canonical IPA positions) ---
+    const presets = vowelPresets();
     for (const v of presets) {
-        const x = xFor(v.f2), y = yFor(v.f1);
-        ctx.globalAlpha = 0.12;
+        const pt = vsSTtoXY(v.sCanon ?? 0.5, v.tCanon ?? 0.5, w, h);
+        // Subtle halo
+        ctx.globalAlpha = 0.10;
         ctx.fillStyle = v.color;
         ctx.beginPath();
-        ctx.arc(x, y, 14, 0, Math.PI * 2);
+        ctx.arc(pt.x, pt.y, 11, 0, Math.PI * 2);
         ctx.fill();
         ctx.globalAlpha = 1;
-        ctx.fillStyle = v.color;
-        ctx.beginPath();
-        ctx.arc(x, y, 3.5, 0, Math.PI * 2);
-        ctx.fill();
-        // IPA label — fonts that render IPA well across platforms
-        ctx.fillStyle = 'rgba(40, 40, 40, 0.85)';
-        ctx.font = '600 12px "Charis SIL", "Doulos SIL", "Lucida Sans Unicode", "Helvetica Neue", system-ui, sans-serif';
+        // Label — large IPA glyph, no marker dot needed
+        ctx.fillStyle = 'rgba(30, 30, 30, 0.85)';
+        ctx.font = '600 15px "Charis SIL", "Doulos SIL", "Lucida Sans Unicode", "Helvetica Neue", system-ui, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(v.label, x, y - 13);
+        // Strip slashes for IPA chart aesthetics ('/a/' → 'a')
+        const glyph = v.label.replace(/^\/|\/$/g, '');
+        ctx.fillText(glyph, pt.x, pt.y);
     }
 
-    // Draw trail
+    // --- Trail of measured points ---
     const trail = state.vowelSpace.trail;
     if (trail.length > 0) {
         const now = performance.now();
@@ -2672,26 +2714,30 @@ function drawVowelSpace() {
         ctx.beginPath();
         let started = false;
         for (const p of trail) {
-            const x = xFor(p.f2), y = yFor(p.f1);
-            if (!started) { ctx.moveTo(x, y); started = true; }
-            else ctx.lineTo(x, y);
+            const st = vsF1F2toST(p.f1, p.f2);
+            const pt = vsSTtoXY(st.s, st.t, w, h);
+            if (!started) { ctx.moveTo(pt.x, pt.y); started = true; }
+            else ctx.lineTo(pt.x, pt.y);
         }
         ctx.stroke();
         // Fading dots
         for (const p of trail) {
             const age = (now - p.t) / VS_TRAIL_MS;
             const alpha = Math.max(0.05, 1 - age);
+            const st = vsF1F2toST(p.f1, p.f2);
+            const pt = vsSTtoXY(st.s, st.t, w, h);
             ctx.fillStyle = `rgba(30, 136, 229, ${alpha * 0.4})`;
             ctx.beginPath();
-            ctx.arc(xFor(p.f2), yFor(p.f1), 2.5, 0, Math.PI * 2);
+            ctx.arc(pt.x, pt.y, 2.5, 0, Math.PI * 2);
             ctx.fill();
         }
         // Current point (last)
         const cur = trail[trail.length - 1];
-        const cx = xFor(cur.f2), cy = yFor(cur.f1);
+        const curST = vsF1F2toST(cur.f1, cur.f2);
+        const curPt = vsSTtoXY(curST.s, curST.t, w, h);
         ctx.fillStyle = '#1e88e5';
         ctx.beginPath();
-        ctx.arc(cx, cy, 6, 0, Math.PI * 2);
+        ctx.arc(curPt.x, curPt.y, 6, 0, Math.PI * 2);
         ctx.fill();
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 2;
@@ -2709,13 +2755,13 @@ function drawVowelSpace() {
         }
         if (els.vsRatio) els.vsRatio.textContent = (cur.f2 / cur.f1).toFixed(2);
     } else {
-        // Empty hint
+        // Empty hint — placed inside trapezoid
         ctx.fillStyle = 'rgba(0,0,0,0.3)';
         ctx.font = '11px Inter, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('マイクをON → 母音を発声すると位置がここにプロットされます',
-                     pad.left + plotW / 2, pad.top + plotH / 2);
+        const hint = vsSTtoXY(0.5, 0.5, w, h);
+        ctx.fillText('マイクON → 母音を発声するとここにプロットされます', hint.x, hint.y);
         if (els.vsNearest) els.vsNearest.textContent = '—';
         if (els.vsF1) els.vsF1.textContent = '—';
         if (els.vsF2) els.vsF2.textContent = '—';
@@ -2725,6 +2771,8 @@ function drawVowelSpace() {
 
     // Calibration overlay on top (if active)
     if (state.vowelSpace.calibration.active) {
+        // Pass a synthetic 'pad' for overlay positioning
+        const pad = { left: corners.tl.x, right: w - corners.tr.x, top: corners.tl.y, bottom: h - corners.bl.y };
         drawCalibrationOverlay(ctx, w, h, pad);
     }
 }
