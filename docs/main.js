@@ -204,14 +204,18 @@ const state = {
     vibratoAnalysis: {
         pitchBuf: [],     // [{t: ms, hz: number|null}], rolling 5s
         rate: 0,          // Hz
-        extent: 0,        // cents (single-side amplitude, Hann-corrected)
+        extent: 0,        // cents (single-side amplitude, LS-fit)
         regularity: 0,    // 0–1
+        confidence: 0,    // 0–1 (composite quality score)
         verdict: '—',
         f0Median: 0,      // Hz, median over analysis window
+        fitOmega: 0,      // rad/sample at sampleRate, for sine overlay
+        fitA: 0,          // cos coefficient
+        fitB: 0,          // sin coefficient
+        fitSampleRate: 0, // samples/sec for trace
+        fitT0: 0,         // anchor time (ms) for sine overlay
         lastAnalysisAt: 0,
-        trace: [],        // [{t, hz, cents}] — null where unvoiced/onset-gated
-        showF0: true,
-        showCents: true,
+        trace: [],        // [{t, cents}] — null cents where unvoiced
     }
 };
 
@@ -254,11 +258,10 @@ const els = {
     vibRate: document.getElementById('vib-rate'),
     vibExtent: document.getElementById('vib-extent'),
     vibRegularity: document.getElementById('vib-regularity'),
+    vibConfidence: document.getElementById('vib-confidence'),
     vibVerdict: document.getElementById('vib-verdict'),
     vibVerdictBox: document.getElementById('vib-verdict-box'),
     vibF0: document.getElementById('vib-f0'),
-    vibShowF0: document.getElementById('vib-show-f0'),
-    vibShowCents: document.getElementById('vib-show-cents'),
     masterVolume: document.getElementById('master-volume'),
     micGainSlider: document.getElementById('mic-gain'),
     spectrumSlopeSlider: document.getElementById('spectrum-slope'),
@@ -1760,101 +1763,109 @@ function pushPitchSample(hz) {
 
 function resetVibratoUi() {
     const va = state.vibratoAnalysis;
-    va.rate = 0; va.extent = 0; va.regularity = 0; va.verdict = '—'; va.f0Median = 0;
+    va.rate = 0; va.extent = 0; va.regularity = 0; va.confidence = 0;
+    va.verdict = '—'; va.f0Median = 0;
+    va.fitOmega = 0; va.fitA = 0; va.fitB = 0; va.fitSampleRate = 0; va.fitT0 = 0;
     va.trace = [];
     if (els.vibRate) els.vibRate.textContent = '—';
     if (els.vibExtent) els.vibExtent.textContent = '—';
     if (els.vibRegularity) els.vibRegularity.textContent = '—';
+    if (els.vibConfidence) els.vibConfidence.textContent = '—';
     if (els.vibVerdict) els.vibVerdict.textContent = '—';
     if (els.vibF0) els.vibF0.textContent = '—';
     if (els.vibVerdictBox) els.vibVerdictBox.classList.remove('is-good', 'is-warn');
 }
 
-// Vibrato analysis with several quality-improvement steps:
-//  (1) Outlier rejection vs. median (drops octave errors from upstream pitch detector)
-//  (2) Onset gating — skip first 250 ms of any voiced run (vibrato builds gradually)
-//  (3) Linear detrend (subtract least-squares line, not just mean)
-//  (4) Hann window before Goertzel (cuts spectral leakage → accurate extent)
-//  (5) Parabolic peak interpolation on the oversampled Goertzel grid (sub-bin Rate)
-const VIBRATO_ONSET_GATE_MS = 250;
-const VIBRATO_OUTLIER_CENTS = 700; // anything > ±700¢ from median is treated as unvoiced
+// Vibrato analysis pipeline:
+//  (1) 3-tap median filter on raw f0 — kills single-sample spikes from autocorr glitches
+//  (2) Outlier rejection vs. median (drops residual octave errors)
+//  (3) Linear detrend (least-squares — robust to slow drift / portamento)
+//  (4) Hann window before Goertzel — cuts spectral leakage for accurate extent
+//  (5) Parabolic peak interpolation on Goertzel grid — sub-bin Rate accuracy
+//  (6) Least-squares cos/sin fit at peak freq on the unwindowed signal — best amplitude & phase
+//  (7) Composite confidence: regularity × validity ratio × peak prominence
+const VIBRATO_OUTLIER_CENTS = 700;
 function analyzeVibrato() {
     const va = state.vibratoAnalysis;
     const now = performance.now();
     va.lastAnalysisAt = now;
 
     const buf = va.pitchBuf;
-    if (buf.length < 30) { resetVibratoUi(); return; }
+    if (buf.length < 24) { resetVibratoUi(); return; }
 
     const cutoff = now - VIBRATO_ANALYSIS_MS;
     let idx0 = 0;
     for (let i = 0; i < buf.length; i++) { if (buf[i].t >= cutoff) { idx0 = i; break; } }
     const slice = buf.slice(idx0);
-    if (slice.length < 25) { resetVibratoUi(); return; }
+    if (slice.length < 20) { resetVibratoUi(); return; }
 
-    const valid = slice.filter(s => s.hz != null);
-    if (valid.length < slice.length * 0.5 || valid.length < 20) { resetVibratoUi(); return; }
+    // (1) 3-tap median filter (preserves edges, removes 1-sample spikes)
+    const filtHz = new Array(slice.length);
+    for (let i = 0; i < slice.length; i++) {
+        const a = i > 0 ? slice[i - 1].hz : null;
+        const b = slice[i].hz;
+        const c = i < slice.length - 1 ? slice[i + 1].hz : null;
+        const v = [a, b, c].filter(x => x != null);
+        if (v.length === 0) { filtHz[i] = null; continue; }
+        v.sort((x, y) => x - y);
+        filtHz[i] = v[Math.floor(v.length / 2)];
+    }
+
+    const valid = filtHz.filter(h => h != null);
+    if (valid.length < slice.length * 0.4 || valid.length < 15) { resetVibratoUi(); return; }
 
     // Median pitch
-    const hzs = valid.map(s => s.hz).sort((a, b) => a - b);
-    const median = hzs[Math.floor(hzs.length / 2)];
+    const sortedHz = valid.slice().sort((a, b) => a - b);
+    const median = sortedHz[Math.floor(sortedHz.length / 2)];
     if (median <= 0) { resetVibratoUi(); return; }
     va.f0Median = median;
 
-    // (1) Outlier rejection: mark anything too far from median as unvoiced
-    const hzNorm = new Array(slice.length);
-    for (let i = 0; i < slice.length; i++) {
-        const s = slice[i];
-        if (s.hz == null) { hzNorm[i] = null; continue; }
-        const c = 1200 * Math.log2(s.hz / median);
-        hzNorm[i] = Math.abs(c) > VIBRATO_OUTLIER_CENTS ? null : s.hz;
-    }
-
-    // (2) Onset gating: walk through voiced runs, drop first 250 ms of each
-    const gated = hzNorm.slice();
-    let runStart = -1;
-    for (let i = 0; i <= slice.length; i++) {
-        const voiced = i < slice.length && gated[i] != null;
-        if (voiced && runStart < 0) { runStart = i; }
-        else if (!voiced && runStart >= 0) {
-            const t0 = slice[runStart].t;
-            for (let j = runStart; j < i; j++) {
-                if (slice[j].t - t0 < VIBRATO_ONSET_GATE_MS) gated[j] = null;
-            }
-            runStart = -1;
-        }
-    }
-
-    // Build cents series, holding last value through (now smaller) gaps so DFT input is continuous
-    const cents = new Array(slice.length);
-    let lastC = 0;
+    // (2) Outlier rejection
     let validCount = 0;
+    const hzClean = new Array(slice.length);
     for (let i = 0; i < slice.length; i++) {
-        if (gated[i] != null) { lastC = 1200 * Math.log2(gated[i] / median); validCount++; }
+        const h = filtHz[i];
+        if (h == null) { hzClean[i] = null; continue; }
+        const c = 1200 * Math.log2(h / median);
+        if (Math.abs(c) > VIBRATO_OUTLIER_CENTS) { hzClean[i] = null; continue; }
+        hzClean[i] = h;
+        validCount++;
+    }
+    if (validCount < 15) { resetVibratoUi(); return; }
+
+    // Build cents series, holding last value through gaps
+    const N = slice.length;
+    const cents = new Float64Array(N);
+    const centsRaw = new Float64Array(N); // pre-window, for LS fit and trace
+    let lastC = 0;
+    for (let i = 0; i < N; i++) {
+        if (hzClean[i] != null) lastC = 1200 * Math.log2(hzClean[i] / median);
         cents[i] = lastC;
     }
-    if (validCount < 20) { resetVibratoUi(); return; }
 
-    // (3) Linear detrend (least-squares on index)
-    const N = cents.length;
+    // (3) Linear detrend
     let sx = 0, sy = 0, sxx = 0, sxy = 0;
     for (let i = 0; i < N; i++) { sx += i; sy += cents[i]; sxx += i * i; sxy += i * cents[i]; }
-    const denom = N * sxx - sx * sx;
-    const slope = denom !== 0 ? (N * sxy - sx * sy) / denom : 0;
+    const den = N * sxx - sx * sx;
+    const slope = den !== 0 ? (N * sxy - sx * sy) / den : 0;
     const intercept = (sy - slope * sx) / N;
-    for (let i = 0; i < N; i++) cents[i] -= slope * i + intercept;
+    for (let i = 0; i < N; i++) {
+        const d = cents[i] - (slope * i + intercept);
+        cents[i] = d;
+        centsRaw[i] = d;
+    }
 
-    const durationSec = (slice[slice.length - 1].t - slice[0].t) / 1000;
-    if (durationSec < 0.8) { resetVibratoUi(); return; }
+    const durationSec = (slice[N - 1].t - slice[0].t) / 1000;
+    if (durationSec < 0.7) { resetVibratoUi(); return; }
     const sampleRate = (N - 1) / durationSec;
 
-    // (4) Apply Hann window in-place. Coherent gain = 0.5 → amplitude correction below.
+    // (4) Hann window in-place (only on `cents`, NOT on `centsRaw`)
     for (let i = 0; i < N; i++) {
         const w = 0.5 * (1 - Math.cos(2 * Math.PI * i / (N - 1)));
         cents[i] *= w;
     }
 
-    // Goertzel scan 2–12 Hz at 0.1 Hz steps, store powers for parabolic interpolation
+    // Goertzel scan 2–12 Hz at 0.1 Hz
     const F_LO = 2.0, F_HI = 12.0, F_STEP = 0.1;
     const nBins = Math.round((F_HI - F_LO) / F_STEP) + 1;
     const powers = new Float64Array(nBins);
@@ -1880,46 +1891,87 @@ function analyzeVibrato() {
 
     // (5) Parabolic peak interpolation
     let peakFreq = F_LO + peakIdx * F_STEP;
-    let peakPowerInterp = peakPower;
     if (peakIdx > 0 && peakIdx < nBins - 1) {
         const yL = powers[peakIdx - 1], yC = powers[peakIdx], yR = powers[peakIdx + 1];
-        const denomP = (yL - 2 * yC + yR);
-        if (Math.abs(denomP) > 1e-12) {
-            const delta = 0.5 * (yL - yR) / denomP; // in bin units, in (-1, 1)
+        const denP = (yL - 2 * yC + yR);
+        if (Math.abs(denP) > 1e-12) {
+            const delta = 0.5 * (yL - yR) / denP;
             peakFreq += delta * F_STEP;
-            peakPowerInterp = yC - 0.25 * (yL - yR) * delta;
         }
     }
 
-    // Hann window coherent gain = 0.5, so amplitude estimate = 4*|X|/N (vs 2*|X|/N for rect)
-    const peakAmp = 4 * Math.sqrt(Math.max(0, peakPowerInterp)) / N;
+    // (6) Least-squares cos/sin fit at peakFreq on the unwindowed detrended signal
+    //     y[i] ≈ A cos(ω i) + B sin(ω i), then Extent = sqrt(A²+B²)
+    const omegaPeak = 2 * Math.PI * peakFreq / sampleRate;
+    let sCC = 0, sSS = 0, sCS = 0, sYC = 0, sYS = 0;
+    for (let i = 0; i < N; i++) {
+        const c = Math.cos(omegaPeak * i);
+        const s = Math.sin(omegaPeak * i);
+        sCC += c * c; sSS += s * s; sCS += c * s;
+        sYC += centsRaw[i] * c; sYS += centsRaw[i] * s;
+    }
+    const detM = sCC * sSS - sCS * sCS;
+    let fitA = 0, fitB = 0;
+    if (Math.abs(detM) > 1e-10) {
+        fitA = (sSS * sYC - sCS * sYS) / detM;
+        fitB = (sCC * sYS - sCS * sYC) / detM;
+    }
+    const fitExtent = Math.sqrt(fitA * fitA + fitB * fitB);
 
-    const regularity = totalPower > 0 ? Math.min(1, peakPower / totalPower * 8) : 0;
+    // Residual SNR for regularity (compare fit energy to residual energy)
+    let resEnergy = 0, sigEnergy = 0;
+    for (let i = 0; i < N; i++) {
+        const fit = fitA * Math.cos(omegaPeak * i) + fitB * Math.sin(omegaPeak * i);
+        const resid = centsRaw[i] - fit;
+        resEnergy += resid * resid;
+        sigEnergy += centsRaw[i] * centsRaw[i];
+    }
+    const explainedVar = sigEnergy > 0 ? Math.max(0, 1 - resEnergy / sigEnergy) : 0; // R²-like
+
+    // Peak prominence (vs. average non-peak power)
+    let nonPeakSum = 0, nonPeakCount = 0;
+    for (let k = 0; k < nBins; k++) {
+        if (Math.abs(k - peakIdx) > 2) { nonPeakSum += powers[k]; nonPeakCount++; }
+    }
+    const meanNonPeak = nonPeakCount > 0 ? nonPeakSum / nonPeakCount : 1e-12;
+    const prominence = meanNonPeak > 0 ? Math.min(1, peakPower / (meanNonPeak * 30)) : 0;
+
+    // Regularity = explained variance of the dominant sine
+    const regularity = explainedVar;
+
+    // Composite confidence
+    const validityRatio = validCount / N;
+    const durationScore = Math.min(1, durationSec / 2);
+    const confidence = Math.max(0, Math.min(1,
+        0.45 * regularity + 0.20 * prominence + 0.20 * validityRatio + 0.15 * durationScore
+    ));
 
     let verdict = '—', verdictClass = '';
-    if (peakAmp < 15) { verdict = 'Straight'; verdictClass = 'is-warn'; }
-    else if (peakFreq < 4.5) { verdict = peakAmp > 25 ? 'Wobble' : 'Slow'; verdictClass = 'is-warn'; }
+    if (fitExtent < 12) { verdict = 'Straight'; verdictClass = 'is-warn'; }
+    else if (peakFreq < 4.5) { verdict = fitExtent > 25 ? 'Wobble' : 'Slow'; verdictClass = 'is-warn'; }
     else if (peakFreq > 7.5) { verdict = 'Tremor'; verdictClass = 'is-warn'; }
-    else if (regularity < 0.25) { verdict = 'Unsteady'; verdictClass = 'is-warn'; }
+    else if (regularity < 0.3) { verdict = 'Unsteady'; verdictClass = 'is-warn'; }
     else { verdict = 'Good'; verdictClass = 'is-good'; }
 
     va.rate = peakFreq;
-    va.extent = peakAmp;
+    va.extent = fitExtent;
     va.regularity = regularity;
+    va.confidence = confidence;
     va.verdict = verdict;
-    // Trace data for drawing: raw hz + cents-relative-to-median (without window/detrend, for honesty)
-    va.trace = slice.map((s, i) => {
-        const validHz = gated[i];
-        return {
-            t: s.t,
-            hz: validHz,
-            cents: validHz != null ? 1200 * Math.log2(validHz / median) : null,
-        };
-    });
+    va.fitOmega = omegaPeak;
+    va.fitA = fitA;
+    va.fitB = fitB;
+    va.fitSampleRate = sampleRate;
+    va.fitT0 = slice[0].t;
+    va.trace = slice.map((s, i) => ({
+        t: s.t,
+        cents: hzClean[i] != null ? 1200 * Math.log2(hzClean[i] / median) - (slope * i + intercept) : null,
+    }));
 
     if (els.vibRate) els.vibRate.textContent = peakFreq.toFixed(1);
-    if (els.vibExtent) els.vibExtent.textContent = Math.round(peakAmp);
+    if (els.vibExtent) els.vibExtent.textContent = Math.round(fitExtent);
     if (els.vibRegularity) els.vibRegularity.textContent = Math.round(regularity * 100);
+    if (els.vibConfidence) els.vibConfidence.textContent = Math.round(confidence * 100);
     if (els.vibVerdict) els.vibVerdict.textContent = verdict;
     if (els.vibF0) els.vibF0.textContent = Math.round(median);
     if (els.vibVerdictBox) {
@@ -1951,35 +2003,38 @@ function drawVibratoTrace() {
 
     const va = state.vibratoAnalysis;
     const series = va.trace;
-    const showF0 = !!va.showF0;
-    const showCents = !!va.showCents;
+    const Y_RANGE = 150;
+    const yForCents = (cents) => h / 2 - (cents / Y_RANGE) * (h / 2 - 6);
 
-    // Background grid + center line (cents reference)
-    const Y_RANGE = 150; // ± cents
-    const yForCents = (cents) => h / 2 - (cents / Y_RANGE) * (h / 2 - 4);
+    // Grid lines
+    ctx.strokeStyle = 'rgba(0,0,0,0.08)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (const c0 of [-100, -50, 50, 100]) {
+        const y = yForCents(c0);
+        ctx.moveTo(0, y); ctx.lineTo(w, y);
+    }
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(0,0,0,0.22)';
+    ctx.beginPath();
+    ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2);
+    ctx.stroke();
 
-    if (showCents) {
-        ctx.strokeStyle = 'rgba(0,0,0,0.08)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        for (const c0 of [-100, -50, 50, 100]) {
-            const y = yForCents(c0);
-            ctx.moveTo(0, y); ctx.lineTo(w, y);
-        }
-        ctx.stroke();
-        ctx.strokeStyle = 'rgba(0,0,0,0.22)';
-        ctx.beginPath();
-        ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2);
-        ctx.stroke();
+    // Left-side cents labels (always)
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.font = '9px Inter, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    for (const c0 of [-100, 0, 100]) {
+        ctx.fillText(`${c0 > 0 ? '+' : ''}${c0}¢`, 4, yForCents(c0));
     }
 
     if (!series || series.length < 2) {
-        // Hint text when empty
-        ctx.fillStyle = 'rgba(0,0,0,0.25)';
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
         ctx.font = '11px Inter, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('発声するとピッチ曲線がここに描画されます', w / 2, h / 2);
+        ctx.fillText('マイクをON → 持続音を発声するとビブラートを検出します', w / 2, h / 2);
         return;
     }
 
@@ -1988,86 +2043,68 @@ function drawVibratoTrace() {
     const tSpan = Math.max(1, tN - t0);
     const xFor = (t) => ((t - t0) / tSpan) * w;
 
-    // Compute f₀ auto-scale (median ± 30%) for the right Y axis
-    let hzMin = Infinity, hzMax = -Infinity;
+    // Extent band (shaded ±extent zone) — gives instant sense of how big the wobble is
+    if (va.extent > 0 && va.confidence > 0.2) {
+        const eClamped = Math.min(Y_RANGE, va.extent);
+        const yTop = yForCents(eClamped);
+        const yBot = yForCents(-eClamped);
+        ctx.fillStyle = 'rgba(76, 175, 80, 0.08)';
+        ctx.fillRect(0, yTop, w, yBot - yTop);
+        ctx.strokeStyle = 'rgba(76, 175, 80, 0.35)';
+        ctx.setLineDash([2, 3]);
+        ctx.beginPath();
+        ctx.moveTo(0, yTop); ctx.lineTo(w, yTop);
+        ctx.moveTo(0, yBot); ctx.lineTo(w, yBot);
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
+
+    // Detected sine overlay (LS fit) — visual proof that detection is locked
+    if (va.fitSampleRate > 0 && va.confidence > 0.2 && (va.fitA !== 0 || va.fitB !== 0)) {
+        ctx.strokeStyle = 'rgba(76, 175, 80, 0.85)';
+        ctx.lineWidth = 1.4;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        const samplesPerMs = va.fitSampleRate / 1000;
+        for (let px = 0; px <= w; px += 2) {
+            const tMs = t0 + (px / w) * tSpan;
+            const i = (tMs - va.fitT0) * samplesPerMs;
+            const yC = va.fitA * Math.cos(va.fitOmega * i) + va.fitB * Math.sin(va.fitOmega * i);
+            const y = yForCents(Math.max(-Y_RANGE, Math.min(Y_RANGE, yC)));
+            if (px === 0) ctx.moveTo(px, y);
+            else ctx.lineTo(px, y);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
+
+    // Cents curve (blue, primary) — drawn on top
+    ctx.strokeStyle = '#1e88e5';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    let started = false;
     for (const s of series) {
-        if (s.hz == null) continue;
-        if (s.hz < hzMin) hzMin = s.hz;
-        if (s.hz > hzMax) hzMax = s.hz;
+        if (s.cents == null) { started = false; continue; }
+        const x = xFor(s.t);
+        const y = yForCents(Math.max(-Y_RANGE, Math.min(Y_RANGE, s.cents)));
+        if (!started) { ctx.moveTo(x, y); started = true; }
+        else ctx.lineTo(x, y);
     }
-    const f0Med = va.f0Median || ((hzMin + hzMax) / 2);
-    const pad = Math.max(8, f0Med * 0.06);
-    const yHzLo = Math.min(hzMin - pad, f0Med * 0.94);
-    const yHzHi = Math.max(hzMax + pad, f0Med * 1.06);
-    const hzRange = Math.max(1, yHzHi - yHzLo);
-    const yForHz = (hz) => h - 4 - ((hz - yHzLo) / hzRange) * (h - 8);
+    ctx.stroke();
 
-    // f₀ curve (orange) — drawn first as background reference
-    if (showF0 && isFinite(hzMin)) {
-        ctx.strokeStyle = '#ef6c00';
-        ctx.lineWidth = 1.5;
-        ctx.globalAlpha = 0.85;
-        ctx.beginPath();
-        let started = false;
-        for (const s of series) {
-            if (s.hz == null) { started = false; continue; }
-            const x = xFor(s.t);
-            const y = yForHz(s.hz);
-            if (!started) { ctx.moveTo(x, y); started = true; }
-            else ctx.lineTo(x, y);
-        }
-        ctx.stroke();
-        // Median Hz reference (dashed horizontal line)
-        if (va.f0Median > 0) {
-            ctx.setLineDash([3, 3]);
-            ctx.strokeStyle = 'rgba(239, 108, 0, 0.35)';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            const yMed = yForHz(va.f0Median);
-            ctx.moveTo(0, yMed); ctx.lineTo(w, yMed);
-            ctx.stroke();
-            ctx.setLineDash([]);
-        }
-        ctx.globalAlpha = 1;
-        // Right-side Hz labels
-        ctx.fillStyle = 'rgba(239, 108, 0, 0.85)';
-        ctx.font = '9px Inter, sans-serif';
-        ctx.textAlign = 'right';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(`${Math.round(yHzHi)}Hz`, w - 4, yForHz(yHzHi) + 5);
-        ctx.fillText(`${Math.round(yHzLo)}Hz`, w - 4, yForHz(yHzLo) - 5);
-        if (va.f0Median > 0) ctx.fillText(`${Math.round(va.f0Median)}`, w - 4, yForHz(va.f0Median) - 5);
-    }
-
-    // Cents curve (blue) — drawn on top for vibrato readout
-    if (showCents) {
-        ctx.strokeStyle = '#1e88e5';
-        ctx.lineWidth = 1.6;
-        ctx.beginPath();
-        let started = false;
-        for (const s of series) {
-            if (s.cents == null) { started = false; continue; }
-            const x = xFor(s.t);
-            const y = yForCents(Math.max(-Y_RANGE, Math.min(Y_RANGE, s.cents)));
-            if (!started) { ctx.moveTo(x, y); started = true; }
-            else ctx.lineTo(x, y);
-        }
-        ctx.stroke();
-        // Left-side cents labels
-        ctx.fillStyle = 'rgba(30, 136, 229, 0.85)';
-        ctx.font = '9px Inter, sans-serif';
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
-        for (const c0 of [-100, 0, 100]) {
-            ctx.fillText(`${c0 > 0 ? '+' : ''}${c0}¢`, 4, yForCents(c0));
-        }
-    }
-
-    // Time-span footer
-    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    // Footer: time span + legend
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
     ctx.font = '9px Inter, sans-serif';
-    ctx.textAlign = 'right';
+    ctx.textAlign = 'left';
     ctx.textBaseline = 'bottom';
+    if (va.confidence > 0.2) {
+        ctx.fillStyle = 'rgba(30, 136, 229, 0.85)';
+        ctx.fillText('— 実測ピッチ偏差', 6, h - 2);
+        ctx.fillStyle = 'rgba(76, 175, 80, 0.85)';
+        ctx.fillText('-- 検出された正弦波', 96, h - 2);
+    }
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.textAlign = 'right';
     ctx.fillText(`${(tSpan / 1000).toFixed(1)}s`, w - 4, h - 2);
 }
 
@@ -4446,21 +4483,6 @@ if (els.viewTabs) {
     applyViewMode(state.viewMode);
 }
 
-// Vibrato curve toggles (f₀ / Cents)
-if (els.vibShowF0) {
-    state.vibratoAnalysis.showF0 = els.vibShowF0.checked;
-    els.vibShowF0.addEventListener('change', () => {
-        state.vibratoAnalysis.showF0 = els.vibShowF0.checked;
-        drawVibratoTrace();
-    });
-}
-if (els.vibShowCents) {
-    state.vibratoAnalysis.showCents = els.vibShowCents.checked;
-    els.vibShowCents.addEventListener('change', () => {
-        state.vibratoAnalysis.showCents = els.vibShowCents.checked;
-        drawVibratoTrace();
-    });
-}
 // Repaint vibrato canvas when the <details> panel is expanded
 // (collapsed state has 0 layout, so the canvas needs a re-fit on open)
 if (els.vibratoPanel) {
