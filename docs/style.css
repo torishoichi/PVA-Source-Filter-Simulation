@@ -489,6 +489,32 @@ input[type=range]::-moz-range-track {
     margin-bottom: 8px;
 }
 
+.vs-calibrate-btn {
+    appearance: none;
+    background: rgba(255, 255, 255, 0.7);
+    border: 1px solid var(--glass-border);
+    border-radius: 999px;
+    padding: 3px 12px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--text-primary, #333);
+    cursor: pointer;
+    line-height: 1.2;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.vs-calibrate-btn:hover {
+    background: rgba(33, 150, 243, 0.08);
+    border-color: var(--accent-color, #2196F3);
+}
+
+.vs-calibrate-btn.is-active {
+    background: #e53935;
+    color: #fff;
+    border-color: #c62828;
+}
+
 .vs-canvas-wrap {
     width: 100%;
     height: 320px;

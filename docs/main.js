@@ -205,8 +205,17 @@ const state = {
         trail: [],       // [{t, f1, f2}], rolling ~1.5s
         language: 'jp',  // 'jp' | 'en'
         mode: 'basic',   // 'basic' | 'advanced'
-        voiceType: 'male', // 'male' | 'female' | 'child' — scales reference formants
+        voiceType: 'male', // 'male' | 'female' | 'child' | 'me' (per-user)
         nearest: null,
+        calibration: {
+            active: false,
+            step: 0,
+            phase: 'prepare', // 'prepare' | 'record'
+            phaseStart: 0,
+            samples: [],
+            results: [],
+            saved: null,       // { jp: [{ipa, label, f1, f2}], en: [...] }
+        },
     },
     vibratoAnalysis: {
         pitchBuf: [],     // [{t: ms, hz: number|null}], rolling 5s
@@ -283,6 +292,7 @@ const els = {
     vsBody: document.getElementById('vs-body'),
     vsLangTabs: document.getElementById('vs-lang-tabs'),
     vsVoiceTabs: document.getElementById('vs-voice-tabs'),
+    vsCalibrateBtn: document.getElementById('vs-calibrate-btn'),
     vsModeTabs: document.getElementById('vs-mode-tabs'),
     vsNearest: document.getElementById('vs-nearest'),
     vsF1: document.getElementById('vs-f1'),
@@ -2191,7 +2201,17 @@ const VS_F2_RANGE = [600, 3700];   // Hz
 const VS_TRAIL_MS = 1500;
 
 function vowelPresets() {
-    const base = VOWEL_PRESETS_BASE[state.vowelSpace.language] || VOWEL_PRESETS_BASE.jp;
+    const lang = state.vowelSpace.language;
+    if (state.vowelSpace.voiceType === 'me') {
+        const personal = state.vowelSpace.calibration.saved?.[lang];
+        if (personal && personal.length > 0) {
+            return personal.map((p, i) => ({
+                ...p,
+                color: VOWEL_PALETTE[i % VOWEL_PALETTE.length],
+            }));
+        }
+    }
+    const base = VOWEL_PRESETS_BASE[lang] || VOWEL_PRESETS_BASE.jp;
     const sc = VOICE_TYPE_SCALE[state.vowelSpace.voiceType] || VOICE_TYPE_SCALE.male;
     return base.map((v, i) => ({
         ...v,
@@ -2199,6 +2219,184 @@ function vowelPresets() {
         f2: v.f2 * sc.f2,
         color: VOWEL_PALETTE[i % VOWEL_PALETTE.length],
     }));
+}
+
+// ---------- Per-user calibration ----------
+const CAL_STORAGE_KEY = 'sf_vowel_calibration_v1';
+const CAL_PREPARE_MS = 1500;
+const CAL_RECORD_MS = 2000;
+
+function loadCalibrationFromStorage() {
+    try {
+        const raw = localStorage.getItem(CAL_STORAGE_KEY);
+        if (!raw) return null;
+        const data = JSON.parse(raw);
+        return (data && typeof data === 'object') ? data : null;
+    } catch (_) { return null; }
+}
+
+function saveCalibrationToStorage(data) {
+    try { localStorage.setItem(CAL_STORAGE_KEY, JSON.stringify(data)); } catch (_) {}
+}
+
+function startCalibration() {
+    const cal = state.vowelSpace.calibration;
+    cal.active = true;
+    cal.step = 0;
+    cal.phase = 'prepare';
+    cal.phaseStart = performance.now();
+    cal.samples = [];
+    cal.results = [];
+    updateCalibrateButton();
+}
+
+function cancelCalibration() {
+    const cal = state.vowelSpace.calibration;
+    cal.active = false;
+    cal.samples = [];
+    cal.results = [];
+    updateCalibrateButton();
+    drawVowelSpace();
+}
+
+function finishCalibration() {
+    const cal = state.vowelSpace.calibration;
+    const lang = state.vowelSpace.language;
+    if (!cal.results || cal.results.length === 0) { cancelCalibration(); return; }
+    if (!cal.saved) cal.saved = {};
+    cal.saved[lang] = cal.results;
+    saveCalibrationToStorage(cal.saved);
+    cal.active = false;
+    updateCalibrateButton();
+    updateVoiceTypeTabs();
+    applyVowelSpaceVoice('me');
+}
+
+function advanceCalibration(now) {
+    const cal = state.vowelSpace.calibration;
+    if (!cal.active) return;
+    const base = VOWEL_PRESETS_BASE[state.vowelSpace.language] || VOWEL_PRESETS_BASE.jp;
+    if (cal.step >= base.length) { finishCalibration(); return; }
+    const elapsed = now - cal.phaseStart;
+    if (cal.phase === 'prepare') {
+        if (elapsed >= CAL_PREPARE_MS) {
+            cal.phase = 'record';
+            cal.phaseStart = now;
+            cal.samples = [];
+        }
+    } else if (cal.phase === 'record') {
+        // Sample current formants
+        if (state.cachedMicFormants) {
+            const f1 = vsFormantHz(state.cachedMicFormants.f1);
+            const f2 = vsFormantHz(state.cachedMicFormants.f2);
+            if (f1 != null && f2 != null) cal.samples.push({ f1, f2 });
+        }
+        if (elapsed >= CAL_RECORD_MS) {
+            const v = base[cal.step];
+            if (cal.samples.length >= 8) {
+                const f1s = cal.samples.map(s => s.f1).sort((a, b) => a - b);
+                const f2s = cal.samples.map(s => s.f2).sort((a, b) => a - b);
+                const f1med = f1s[Math.floor(f1s.length / 2)];
+                const f2med = f2s[Math.floor(f2s.length / 2)];
+                cal.results.push({ ipa: v.ipa, label: v.label, f1: f1med, f2: f2med });
+            } else {
+                // Not enough samples — fallback to default
+                cal.results.push({ ipa: v.ipa, label: v.label, f1: v.f1, f2: v.f2 });
+            }
+            cal.step++;
+            cal.phase = 'prepare';
+            cal.phaseStart = now;
+        }
+    }
+}
+
+function drawCalibrationOverlay(ctx, w, h, pad) {
+    const cal = state.vowelSpace.calibration;
+    const base = VOWEL_PRESETS_BASE[state.vowelSpace.language] || VOWEL_PRESETS_BASE.jp;
+    const total = base.length;
+    const step = Math.min(cal.step, total - 1);
+    const current = base[step];
+
+    // Semi-transparent overlay
+    ctx.fillStyle = 'rgba(253, 252, 246, 0.94)';
+    ctx.fillRect(0, 0, w, h);
+
+    // Progress bar at top
+    const barH = 4, barY = 12;
+    const barX = pad.left, barW = w - pad.left - pad.right;
+    ctx.fillStyle = 'rgba(0,0,0,0.08)';
+    ctx.fillRect(barX, barY, barW, barH);
+    ctx.fillStyle = 'var(--accent-color, #2196F3)';
+    const completed = cal.results.length / total;
+    ctx.fillStyle = '#2196F3';
+    ctx.fillRect(barX, barY, barW * completed, barH);
+
+    // Step counter
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.font = '11px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillText(`${cal.results.length} / ${total}`, w / 2, barY + barH + 6);
+
+    // Phase label
+    const elapsed = performance.now() - cal.phaseStart;
+    let phaseText, remaining, accentColor;
+    if (cal.phase === 'prepare') {
+        const left = Math.max(0, CAL_PREPARE_MS - elapsed) / 1000;
+        phaseText = `準備 — 次の母音`;
+        remaining = `${left.toFixed(1)}s`;
+        accentColor = '#888';
+    } else {
+        const left = Math.max(0, CAL_RECORD_MS - elapsed) / 1000;
+        phaseText = `発声してください`;
+        remaining = `録音中 ${left.toFixed(1)}s`;
+        accentColor = '#e53935';
+    }
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.font = '11px Inter, sans-serif';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(phaseText, w / 2, h / 2 - 60);
+
+    // Big IPA vowel
+    ctx.fillStyle = cal.phase === 'record' ? '#1a1a1a' : 'rgba(0,0,0,0.4)';
+    ctx.font = '600 64px "Charis SIL", "Doulos SIL", "Lucida Sans Unicode", system-ui, sans-serif';
+    ctx.fillText(current.label, w / 2, h / 2);
+
+    // Remaining time + sample count
+    ctx.fillStyle = accentColor;
+    ctx.font = '600 12px Inter, sans-serif';
+    ctx.fillText(remaining, w / 2, h / 2 + 50);
+
+    if (cal.phase === 'record') {
+        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+        ctx.font = '10px Inter, sans-serif';
+        ctx.fillText(`サンプル: ${cal.samples.length}`, w / 2, h / 2 + 70);
+    }
+
+    // Cancel hint
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.font = '10px Inter, sans-serif';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('Cancel ボタンで中断', w / 2, h - 10);
+}
+
+function updateCalibrateButton() {
+    if (!els.vsCalibrateBtn) return;
+    const active = state.vowelSpace.calibration.active;
+    els.vsCalibrateBtn.textContent = active ? 'Cancel' : '🎯 Calibrate';
+    els.vsCalibrateBtn.classList.toggle('is-active', active);
+}
+
+function updateVoiceTypeTabs() {
+    if (!els.vsVoiceTabs) return;
+    const hasPersonal = !!(state.vowelSpace.calibration.saved &&
+                          state.vowelSpace.calibration.saved[state.vowelSpace.language]);
+    const meBtn = els.vsVoiceTabs.querySelector('[data-voice="me"]');
+    if (meBtn) {
+        meBtn.disabled = !hasPersonal;
+        meBtn.style.opacity = hasPersonal ? '' : '0.4';
+        meBtn.style.cursor = hasPersonal ? 'pointer' : 'not-allowed';
+    }
 }
 
 let vowelSpaceCtx = null;
@@ -2427,6 +2625,11 @@ function drawVowelSpace() {
         if (els.vsF3) els.vsF3.textContent = '—';
         if (els.vsRatio) els.vsRatio.textContent = '—';
     }
+
+    // Calibration overlay on top (if active)
+    if (state.vowelSpace.calibration.active) {
+        drawCalibrationOverlay(ctx, w, h, pad);
+    }
 }
 
 function applyVowelSpaceMode(mode) {
@@ -2453,6 +2656,15 @@ function applyVowelSpaceLanguage(lang) {
             btn.classList.toggle('is-active', active);
             btn.setAttribute('aria-selected', active ? 'true' : 'false');
         });
+    }
+    // Personal calibration is per-language → enable/disable "Me" tab
+    if (typeof updateVoiceTypeTabs === 'function') updateVoiceTypeTabs();
+    // If user was on "me" but no personal data for this language, fall back to male
+    if (state.vowelSpace.voiceType === 'me') {
+        const personal = state.vowelSpace.calibration.saved?.[state.vowelSpace.language];
+        if (!personal || personal.length === 0) {
+            if (typeof applyVowelSpaceVoice === 'function') applyVowelSpaceVoice('male');
+        }
     }
     drawVowelSpace();
 }
@@ -2547,6 +2759,7 @@ function drawVisualizer() {
 
     // Vowel Space: push F1/F2 sample every frame, redraw if panel open (~30fps)
     if (state.isMicActive) pushVowelSample();
+    if (state.vowelSpace.calibration.active) advanceCalibration(nowT);
     if (els.vowelSpacePanel && els.vowelSpacePanel.open) {
         if (!drawVisualizer._lastVsDraw || nowT - drawVisualizer._lastVsDraw > 33) {
             drawVowelSpace();
@@ -4845,13 +5058,33 @@ if (els.vsModeTabs) {
 if (els.vsVoiceTabs) {
     els.vsVoiceTabs.addEventListener('click', (e) => {
         const btn = e.target.closest('.vs-lang-tab');
-        if (!btn) return;
+        if (!btn || btn.disabled) return;
         applyVowelSpaceVoice(btn.dataset.voice);
     });
 }
+if (els.vsCalibrateBtn) {
+    els.vsCalibrateBtn.addEventListener('click', () => {
+        if (state.vowelSpace.calibration.active) {
+            cancelCalibration();
+        } else {
+            if (!state.isMicActive) {
+                alert('マイクを ON にしてからキャリブレーションを開始してください');
+                return;
+            }
+            // Auto-open panel
+            if (els.vowelSpacePanel && !els.vowelSpacePanel.open) {
+                els.vowelSpacePanel.open = true;
+            }
+            startCalibration();
+        }
+    });
+}
+// Load saved per-user calibration from localStorage
+state.vowelSpace.calibration.saved = loadCalibrationFromStorage();
 applyVowelSpaceMode('basic');
 applyVowelSpaceLanguage('jp');
 applyVowelSpaceVoice('male');
+updateVoiceTypeTabs();
 if (els.vowelSpacePanel) {
     els.vowelSpacePanel.addEventListener('toggle', () => {
         if (els.vowelSpacePanel.open) drawVowelSpace();
