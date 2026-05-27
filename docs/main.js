@@ -33,7 +33,8 @@ let noiseGain = null;
 let micStream = null;
 let micSource = null;
 let micGainNode = null;
-let micAnalyser = null;
+let micAnalyser = null;        // fftSize=4096, used for spectrum & formant analysis
+let micAnalyserPitch = null;   // fftSize=2048, dedicated to YIN → cuts pitch latency ~half
 
 // LPC v2/v3: persistent buffers for the shared LPC pipeline + per-method smoothing state
 const LPC_V2_HISTORY_LEN = 3;
@@ -1599,18 +1600,28 @@ function drawDerivativeCanvas(canvas, derivative, params) {
 // robust to octave errors than plain autocorrelation. Buffers are reused
 // across calls to avoid per-frame allocation (called at ~60 Hz).
 
-let _yinDp = null;       // Float32Array, CMNDF values
-let _yinTime = null;     // Float32Array, time-domain input buffer
-const YIN_THRESHOLD = 0.12; // de Cheveigné recommended 0.10–0.15
+let _yinDp = null;        // CMNDF values
+let _yinTime = null;      // raw time-domain input
+let _yinFiltered = null;  // after pre-emphasis HP
+const YIN_THRESHOLD = 0.10;       // tighter → fewer sub-octave false positives
+const YIN_UNVOICED_DP = 0.35;     // if best d'(τ) is above this, reject (noisy / unvoiced)
+const YIN_PREEMPH = 0.97;         // standard speech pre-emphasis coefficient
 
-function detectPitchYIN(timeBuf, sampleRate) {
-    const N = timeBuf.length;
+function detectPitchYIN(rawBuf, sampleRate) {
+    const N = rawBuf.length;
 
-    // RMS gate — skip silent / near-silent frames
+    // Pre-emphasis HP filter: y[n] = x[n] - 0.97 * x[n-1]
+    // Removes DC and low-frequency rumble that confuses YIN at low pitches.
+    if (!_yinFiltered || _yinFiltered.length !== N) _yinFiltered = new Float32Array(N);
+    const buf = _yinFiltered;
+    buf[0] = rawBuf[0];
+    for (let i = 1; i < N; i++) buf[i] = rawBuf[i] - YIN_PREEMPH * rawBuf[i - 1];
+
+    // RMS gate (on post-pre-emphasis signal — looser threshold since HP attenuates LF energy)
     let rms = 0;
-    for (let i = 0; i < N; i++) rms += timeBuf[i] * timeBuf[i];
+    for (let i = 0; i < N; i++) rms += buf[i] * buf[i];
     rms = Math.sqrt(rms / N);
-    if (rms < 0.01) return -1;
+    if (rms < 0.005) return -1;
 
     const minPeriod = Math.max(2, Math.floor(sampleRate / 1000)); // 1000 Hz ceiling
     const maxPeriod = Math.min(Math.floor(sampleRate / 60), Math.floor(N / 2)); // 60 Hz floor
@@ -1626,7 +1637,7 @@ function detectPitchYIN(timeBuf, sampleRate) {
         let dsum = 0;
         const W = N - tau;
         for (let j = 0; j < W; j++) {
-            const delta = timeBuf[j] - timeBuf[j + tau];
+            const delta = buf[j] - buf[j + tau];
             dsum += delta * delta;
         }
         runningSum += dsum;
@@ -1642,16 +1653,16 @@ function detectPitchYIN(timeBuf, sampleRate) {
             break;
         }
     }
-    // Fallback: argmin in vocal range (and bail if even argmin is poor)
+    // Fallback: argmin in vocal range
     if (bestTau < 0) {
         let minVal = Infinity;
         for (let tau = minPeriod; tau <= maxPeriod; tau++) {
             if (dp[tau] < minVal) { minVal = dp[tau]; bestTau = tau; }
         }
-        if (bestTau < 0 || dp[bestTau] > 0.5) return -1;
     }
+    if (bestTau < 0 || dp[bestTau] > YIN_UNVOICED_DP) return -1; // unvoiced / too uncertain
 
-    // Step 4: parabolic interpolation around the chosen lag for sub-sample accuracy
+    // Step 4: parabolic interpolation
     let refined = bestTau;
     if (bestTau > minPeriod && bestTau < maxPeriod) {
         const y0 = dp[bestTau - 1], y1 = dp[bestTau], y2 = dp[bestTau + 1];
@@ -1666,10 +1677,12 @@ function detectPitchYIN(timeBuf, sampleRate) {
 }
 
 function detectPitchFromMic() {
-    if (!micAnalyser || !audioCtx) return -1;
-    const bufLen = micAnalyser.fftSize;
+    // Use the low-latency 2048-sample analyser if available; fall back to micAnalyser
+    const an = micAnalyserPitch || micAnalyser;
+    if (!an || !audioCtx) return -1;
+    const bufLen = an.fftSize;
     if (!_yinTime || _yinTime.length !== bufLen) _yinTime = new Float32Array(bufLen);
-    micAnalyser.getFloatTimeDomainData(_yinTime);
+    an.getFloatTimeDomainData(_yinTime);
     return detectPitchYIN(_yinTime, audioCtx.sampleRate);
 }
 
@@ -4173,6 +4186,10 @@ els.btnMic.addEventListener('click', async () => {
             micSource.disconnect();
             micSource = null;
         }
+        if (micAnalyserPitch) {
+            try { micAnalyserPitch.disconnect(); } catch (_) {}
+            micAnalyserPitch = null;
+        }
         state.isMicActive = false;
         state.isMicPaused = false;
         state.cachedMicFormants = null;
@@ -4219,9 +4236,15 @@ els.btnMic.addEventListener('click', async () => {
             micAnalyser.fftSize = 4096;
             micAnalyser.smoothingTimeConstant = 0.8;
 
+            // Dedicated low-latency analyser for pitch detection (43ms window vs 85ms)
+            micAnalyserPitch = audioCtx.createAnalyser();
+            micAnalyserPitch.fftSize = 2048;
+            micAnalyserPitch.smoothingTimeConstant = 0;
+
             // Connect mic source -> gain -> analyzer entirely locally (NO route to audioCtx.destination)
             micSource.connect(micGainNode);
             micGainNode.connect(micAnalyser);
+            micGainNode.connect(micAnalyserPitch);
 
             // Fix: WebKit/Blink optimizes away disconnected media stream graphs.
             // Create a silent dummy oscillator attached to destination to keep the audio tick active, 
@@ -4409,6 +4432,12 @@ async function ensureAnalysisPipeline() {
         silenceFilter.gain.value = 0;
         micAnalyser.connect(silenceFilter);
         silenceFilter.connect(audioCtx.destination);
+    }
+    if (!micAnalyserPitch) {
+        micAnalyserPitch = audioCtx.createAnalyser();
+        micAnalyserPitch.fftSize = 2048;
+        micAnalyserPitch.smoothingTimeConstant = 0;
+        micGainNode.connect(micAnalyserPitch);
     }
 }
 
