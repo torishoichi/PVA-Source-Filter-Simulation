@@ -2192,11 +2192,22 @@ function vsNearestVowel(f1, f2) {
     return best ? { vowel: best, dist: bestD } : null;
 }
 
+// Formant cache stores entries as either a plain number (older peak path)
+// or { freq, db } objects (LPC paths). Extract Hz safely.
+function vsFormantHz(entry) {
+    if (entry == null) return null;
+    if (typeof entry === 'number') return entry > 0 ? entry : null;
+    if (typeof entry === 'object' && typeof entry.freq === 'number') {
+        return entry.freq > 0 ? entry.freq : null;
+    }
+    return null;
+}
+
 function pushVowelSample() {
     if (!state.isMicActive || !state.cachedMicFormants) return;
-    const f1 = state.cachedMicFormants.f1;
-    const f2 = state.cachedMicFormants.f2;
-    if (f1 == null || f2 == null || f1 <= 0 || f2 <= 0) return;
+    const f1 = vsFormantHz(state.cachedMicFormants.f1);
+    const f2 = vsFormantHz(state.cachedMicFormants.f2);
+    if (f1 == null || f2 == null) return;
     const t = performance.now();
     const trail = state.vowelSpace.trail;
     trail.push({ t, f1, f2 });
@@ -2361,8 +2372,9 @@ function drawVowelSpace() {
         if (els.vsNearest) els.vsNearest.textContent = nearest ? `${nearest.vowel.label} (${Math.round(nearest.dist)}¢)` : '—';
         if (els.vsF1) els.vsF1.textContent = Math.round(cur.f1);
         if (els.vsF2) els.vsF2.textContent = Math.round(cur.f2);
-        if (els.vsF3 && state.cachedMicFormants && state.cachedMicFormants.f3 != null) {
-            els.vsF3.textContent = Math.round(state.cachedMicFormants.f3);
+        if (els.vsF3) {
+            const f3hz = state.cachedMicFormants ? vsFormantHz(state.cachedMicFormants.f3) : null;
+            els.vsF3.textContent = f3hz != null ? Math.round(f3hz) : '—';
         }
         if (els.vsRatio) els.vsRatio.textContent = (cur.f2 / cur.f1).toFixed(2);
     } else {
