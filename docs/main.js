@@ -4192,6 +4192,13 @@ function drawVisualizer() {
                 state.micFormantMethod === 'lpc-v2' ? estimateLpcV2Formants(micAnalyser, minDb, dbRange) :
                 state.micFormantMethod === 'lpc'    ? estimateLpcFormants(micAnalyser, minDb, dbRange, nyq) :
                                                       estimatePeakFormants(state.cachedMicData, minDb, dbRange, nyq, state.cachedMicPitch);
+            // During recording playback, override the formant values with the
+            // high-accuracy offline track (the live estimate above still ran, so the
+            // spectrum envelope overlay stays populated). Falls back to live until ready.
+            if (playbackAudio && playbackFormantTrack) {
+                const tracked = lookupFormantTrack(playbackAudio.currentTime);
+                if (tracked) estFormants = tracked;
+            }
             // Per-formant cache with timed fallback:
             // - Update cache when a formant is detected
             // - For undetected formants, fall back to cache value if it's recent enough
@@ -4819,6 +4826,227 @@ function updateLoopRegionUi() {
     if (els.pbHandleB) els.pbHandleB.style.left = (playbackLoopB * 100) + '%';
 }
 
+// ============================================================
+// Offline high-accuracy formant track (recording playback only).
+// No real-time budget here, so we decimate with a proper anti-alias FIR, use
+// pitch-synchronous windows + higher-order Burg LPC, and track+smooth the whole
+// file. The result drives the playback formant display instead of the live path.
+// ============================================================
+let playbackFormantTrack = null; // { hop: sec, frames: [{f1..f5}|null] }
+
+// Standalone Durand-Kerner (the live one is a closure; keep this self-contained).
+function _dkRoots(poly, n) {
+    if (poly[0] === 0) return null;
+    const c = new Float64Array(n + 1);
+    for (let i = 0; i <= n; i++) c[i] = poly[i] / poly[0];
+    const r = new Float64Array(2 * n);
+    for (let k = 0; k < n; k++) {
+        const th = 2 * Math.PI * k / n + 0.123;
+        r[2 * k] = 0.9 * Math.cos(th); r[2 * k + 1] = 0.9 * Math.sin(th);
+    }
+    for (let iter = 0; iter < 60; iter++) {
+        let maxD = 0;
+        for (let k = 0; k < n; k++) {
+            const xr = r[2 * k], xi = r[2 * k + 1];
+            let pr = 1, pi = 0;
+            for (let i = 1; i <= n; i++) {
+                const nr = pr * xr - pi * xi + c[i];
+                const ni = pr * xi + pi * xr;
+                pr = nr; pi = ni;
+            }
+            let dr = 1, di = 0;
+            for (let j = 0; j < n; j++) {
+                if (j === k) continue;
+                const er = xr - r[2 * j], ei = xi - r[2 * j + 1];
+                const tr = dr * er - di * ei, ti = dr * ei + di * er;
+                dr = tr; di = ti;
+            }
+            const den = dr * dr + di * di;
+            if (den < 1e-30) continue;
+            const qr = (pr * dr + pi * di) / den, qi = (pi * dr - pr * di) / den;
+            r[2 * k] = xr - qr; r[2 * k + 1] = xi - qi;
+            const d = Math.hypot(qr, qi);
+            if (d > maxD) maxD = d;
+        }
+        if (maxD < 1e-10) break;
+    }
+    return r;
+}
+
+// Windowed-sinc anti-alias decimation to ~targetSr (proper LPF, unlike the live box avg).
+function _offlineDecimate(mono, srOrig, targetSr) {
+    const factor = Math.max(1, Math.round(srOrig / targetSr));
+    if (factor === 1) return { data: mono, sr: srOrig };
+    const fc = 0.45 / factor;                 // cutoff in cycles/sample (0.9 × new Nyquist)
+    const M = 8 * factor + 1, c = (M - 1) / 2;
+    const sinc = (x) => (x === 0 ? 1 : Math.sin(Math.PI * x) / (Math.PI * x));
+    const ker = new Float64Array(M);
+    let ksum = 0;
+    for (let n = 0; n < M; n++) {
+        const ham = 0.54 - 0.46 * Math.cos(2 * Math.PI * n / (M - 1));
+        ker[n] = sinc(2 * fc * (n - c)) * ham;
+        ksum += ker[n];
+    }
+    for (let n = 0; n < M; n++) ker[n] /= ksum; // unity DC gain
+    const outN = Math.floor(mono.length / factor);
+    const out = new Float32Array(outN);
+    const half = (M - 1) >> 1;
+    for (let i = 0; i < outN; i++) {
+        const center = i * factor;
+        let acc = 0;
+        for (let n = 0; n < M; n++) {
+            const idx = center + n - half;
+            if (idx >= 0 && idx < mono.length) acc += ker[n] * mono[idx];
+        }
+        out[i] = acc;
+    }
+    return { data: out, sr: srOrig / factor };
+}
+
+// Assign F1–F5 across frames by continuity + band priors, then median-smooth.
+function _trackAndSmooth(frames, hopSec) {
+    const SLOTS = 5;
+    const priors = [500, 1500, 2500, 3500, 4500];
+    const tol = [350, 500, 650, 800, 950]; // max Hz from anchor for assignment
+    const assignedAll = new Array(frames.length);
+    let anchor = priors.slice();
+    for (let fi = 0; fi < frames.length; fi++) {
+        const cands = frames[fi];
+        const assigned = [null, null, null, null, null];
+        if (cands && cands.length) {
+            const used = new Array(cands.length).fill(false);
+            for (let s = 0; s < SLOTS; s++) {
+                let best = -1, bd = Infinity;
+                for (let j = 0; j < cands.length; j++) {
+                    if (used[j]) continue;
+                    if (s > 0 && assigned[s - 1] != null && cands[j].freq <= assigned[s - 1] + 30) continue;
+                    const d = Math.abs(cands[j].freq - anchor[s]);
+                    if (d < bd) { bd = d; best = j; }
+                }
+                if (best >= 0 && bd <= tol[s]) { assigned[s] = cands[best].freq; used[best] = true; }
+            }
+        }
+        assignedAll[fi] = assigned;
+        anchor = assigned.map((v, s) => (v != null ? v : priors[s]));
+    }
+    const W = 2; // ±2 frames (5-tap) median
+    const res = new Array(frames.length);
+    for (let fi = 0; fi < frames.length; fi++) {
+        const obj = { f1: null, f2: null, f3: null, f4: null, f5: null };
+        for (let s = 0; s < SLOTS; s++) {
+            const vals = [];
+            for (let d = -W; d <= W; d++) {
+                const kk = fi + d;
+                if (kk >= 0 && kk < frames.length && assignedAll[kk][s] != null) vals.push(assignedAll[kk][s]);
+            }
+            if (vals.length) { vals.sort((a, b) => a - b); obj['f' + (s + 1)] = vals[Math.floor(vals.length / 2)]; }
+        }
+        res[fi] = obj;
+    }
+    return { hop: hopSec, frames: res };
+}
+
+function analyzeRecordingFormantsOffline(audioBuffer) {
+    const srOrig = audioBuffer.sampleRate;
+    const nch = audioBuffer.numberOfChannels;
+    const ch0 = audioBuffer.getChannelData(0);
+    let mono = ch0;
+    if (nch > 1) {
+        mono = new Float32Array(ch0.length);
+        const ch1 = audioBuffer.getChannelData(1);
+        for (let i = 0; i < mono.length; i++) mono[i] = 0.5 * (ch0[i] + ch1[i]);
+    }
+    const { data: sig, sr } = _offlineDecimate(mono, srOrig, 11025);
+    const hopSec = 0.01;
+    const hop = Math.max(1, Math.round(hopSec * sr));
+    const p = Math.min(16, Math.max(10, Math.round(sr / 1000) + 2)); // ≈13 at 11 kHz
+    const minLag = Math.floor(sr / 500), maxLag = Math.floor(sr / 70); // f0 70–500 Hz
+    const w40 = Math.floor(0.04 * sr);
+    const minWin = Math.floor(0.02 * sr), maxWin = Math.floor(0.05 * sr);
+    const frames = [];
+    const preAlpha = 0.97;
+
+    for (let center = 0; center < sig.length; center += hop) {
+        // f0 via normalized autocorrelation on a 40 ms window
+        let s0 = center - (w40 >> 1); if (s0 < 0) s0 = 0;
+        let s1 = s0 + w40; if (s1 > sig.length) { s1 = sig.length; s0 = Math.max(0, s1 - w40); }
+        let r0 = 0; for (let i = s0; i < s1; i++) r0 += sig[i] * sig[i];
+        const rms = Math.sqrt(r0 / Math.max(1, s1 - s0));
+        if (rms < 0.005) { frames.push(null); continue; }
+        let bestLag = -1, bestVal = 0;
+        for (let lag = minLag; lag <= maxLag && lag < (s1 - s0); lag++) {
+            let acc = 0;
+            for (let i = s0; i + lag < s1; i++) acc += sig[i] * sig[i + lag];
+            const norm = acc / (r0 || 1);
+            if (norm > bestVal) { bestVal = norm; bestLag = lag; }
+        }
+        const voiced = bestVal > 0.3 && bestLag > 0;
+        const period = voiced ? bestLag : Math.floor(0.025 * sr);
+        // pitch-synchronous window ≈ 4 periods (bounded 20–50 ms)
+        let winLen = Math.max(minWin, Math.min(maxWin, 4 * period));
+        let a0 = center - (winLen >> 1); if (a0 < 0) a0 = 0;
+        let a1 = a0 + winLen; if (a1 > sig.length) { a1 = sig.length; a0 = Math.max(0, a1 - winLen); }
+        const M = a1 - a0;
+        if (M < p + 4) { frames.push(null); continue; }
+        const x = new Float64Array(M);
+        for (let i = 0; i < M; i++) {
+            const xn = sig[a0 + i], xn1 = i > 0 ? sig[a0 + i - 1] : sig[a0 + i];
+            const pe = xn - preAlpha * xn1;
+            const wnd = 0.5 * (1 - Math.cos(2 * Math.PI * i / (M - 1)));
+            x[i] = pe * wnd;
+        }
+        const k = burgLpc(x, M, p);
+        if (!k) { frames.push(null); continue; }
+        const a = reflectionsToPredictions(k, p);
+        const poly = new Float64Array(p + 1); poly[0] = 1;
+        for (let i = 1; i <= p; i++) poly[i] = -a[i];
+        const roots = _dkRoots(poly, p);
+        if (!roots) { frames.push(null); continue; }
+        const cands = [];
+        for (let i = 0; i < p; i++) {
+            const re = roots[2 * i], im = roots[2 * i + 1];
+            if (im <= 0) continue;
+            const mag = Math.hypot(re, im);
+            if (mag <= 0 || mag >= 1) continue;
+            const freq = Math.atan2(im, re) * sr / (2 * Math.PI);
+            const bw = -Math.log(mag) * sr / Math.PI;
+            if (freq < 90 || freq > 5500 || bw > 700) continue;
+            cands.push({ freq, bw });
+        }
+        cands.sort((u, v) => u.freq - v.freq);
+        frames.push(cands.length ? cands : null);
+    }
+    return _trackAndSmooth(frames, hopSec);
+}
+
+// Decode + analyze in the background; applied once ready (live path used until then).
+async function buildPlaybackFormantTrack(blob) {
+    playbackFormantTrack = null;
+    if (!audioCtx) return;
+    try {
+        const arr = await blob.arrayBuffer();
+        const audioBuf = await audioCtx.decodeAudioData(arr.slice(0));
+        const track = analyzeRecordingFormantsOffline(audioBuf);
+        if (playbackAudio) playbackFormantTrack = track; // still playing?
+    } catch (err) {
+        console.warn('Offline formant analysis failed:', err);
+        playbackFormantTrack = null;
+    }
+}
+
+// Look up the precomputed formant frame at a playback time → estFormants shape.
+function lookupFormantTrack(timeSec) {
+    const tr = playbackFormantTrack;
+    if (!tr || !tr.frames.length) return null;
+    let idx = Math.round(timeSec / tr.hop);
+    if (idx < 0) idx = 0;
+    if (idx >= tr.frames.length) idx = tr.frames.length - 1;
+    const f = tr.frames[idx];
+    if (!f) return null;
+    const mk = (hz) => (hz != null ? { freq: hz, db: 0 } : null);
+    return { f1: mk(f.f1), f2: mk(f.f2), f3: mk(f.f3), f4: mk(f.f4), f5: mk(f.f5) };
+}
+
 async function playRecording(id) {
     if (playbackAudio) stopPlayback();
 
@@ -4847,6 +5075,10 @@ async function playRecording(id) {
     // Known duration from the record (WebM blobs report Infinity via the element)
     playbackDurationSec = (rec.durationMs || 0) / 1000;
     if (els.pbTotalTime) els.pbTotalTime.textContent = playbackDurationSec.toFixed(1) + 's';
+
+    // Kick off the high-accuracy offline formant track (async; live path until ready)
+    playbackFormantTrack = null;
+    buildPlaybackFormantTrack(rec.blob);
 
     // Reset the A–B region to full track for each new recording
     playbackLoopA = 0;
@@ -4925,6 +5157,7 @@ function stopPlayback() {
     playbackAudio = null;
     playbackMediaSrc = null;
     playbackDurationSec = 0;
+    playbackFormantTrack = null;
     if (playbackUiRaf) { cancelAnimationFrame(playbackUiRaf); playbackUiRaf = null; }
     if (els.playbackControls) els.playbackControls.style.display = 'none';
     cleanupPlayback();
