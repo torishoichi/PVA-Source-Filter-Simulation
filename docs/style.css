@@ -362,6 +362,59 @@ input[type=range]::-moz-range-track {
 
 /* Vibrato analysis panel */
 /* Match Recordings panel visuals for visual consistency */
+/* Mic Analysis: outer wrapper around Vibrato / Vowel Space / Recordings */
+.mic-analysis-group {
+    margin-top: 12px;
+    padding: 6px 12px 4px;
+    background: rgba(255, 255, 255, 0.015);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+}
+
+.mic-analysis-summary {
+    list-style: none;
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0 6px;
+}
+.mic-analysis-summary::-webkit-details-marker { display: none; }
+.mic-analysis-summary::marker { content: ''; }
+
+.mic-analysis-disclosure {
+    display: inline-block;
+    width: 10px;
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    transition: transform 0.15s ease;
+}
+.mic-analysis-group[open] > .mic-analysis-summary .mic-analysis-disclosure {
+    transform: rotate(90deg);
+}
+
+.mic-analysis-title {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.mic-analysis-body {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-top: 2px;
+}
+
+/* Tighten inner panel spacing inside the wrapper */
+.mic-analysis-body > .vib-analysis-panel,
+.mic-analysis-body > .recordings-panel {
+    margin-top: 0;
+}
+
 .vib-analysis-panel {
     margin-top: 8px;
     padding: 6px 12px;
@@ -658,6 +711,49 @@ input[type=range]::-moz-range-track {
 .vstat-verdict.is-warn .vstat-val {
     background: rgba(255, 152, 0, 0.18);
     color: #ef6c00;
+}
+
+/* Low-confidence: neutralise the verdict chip and dim primary numbers
+   so a shaky estimate never reads as an assertion. */
+.vib-analysis-body.is-lowconf .vstat-verdict .vstat-val {
+    background: rgba(0, 0, 0, 0.06);
+    color: var(--text-secondary, #999);
+}
+.vib-analysis-body.is-lowconf .vstat-primary .vstat-val {
+    color: var(--text-secondary, #bbb);
+}
+
+/* Signal-quality meter — at-a-glance confidence, visible in Basic mode too. */
+.vib-quality {
+    margin-top: 9px;
+    width: 100%;
+}
+.vib-quality-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.vib-quality-tag {
+    font-size: 0.6rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-secondary, #999);
+    min-width: 46px;
+}
+.vib-quality-track {
+    flex: 1;
+    height: 5px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+}
+.vib-quality-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 999px;
+    background: #4caf50;
+    transition: width 0.2s ease, background-color 0.2s ease;
 }
 
 .vib-analysis-canvas-wrap {

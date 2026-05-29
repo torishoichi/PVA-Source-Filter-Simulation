@@ -482,6 +482,14 @@
                     </div>
                 </div>
 
+                <!-- Mic Analysis group: Vibrato / Vowel Space / Recordings -->
+                <details class="mic-analysis-group" id="mic-analysis-group" open>
+                <summary class="mic-analysis-summary">
+                    <span class="mic-analysis-disclosure" aria-hidden="true">▸</span>
+                    <span class="mic-analysis-title">Mic Analysis</span>
+                </summary>
+                <div class="mic-analysis-body">
+
                 <!-- Vibrato analysis panel (visible when mic active) -->
                 <details id="vibrato-panel" class="vib-analysis-panel">
                     <summary class="vib-analysis-summary">
@@ -504,12 +512,12 @@
                                 <span class="vib-section-title">Detected — mic input</span>
                             </div>
                             <div class="vib-analysis-stats">
-                                <div class="vstat">
+                                <div class="vstat vstat-primary">
                                     <span class="vstat-label">Rate <span class="tooltip" data-tooltip="検出されたビブラート周波数 (Hz)。歌唱の正常範囲は 4.5–7.5 Hz。<4.5=Wobble(揺れすぎ)、>7.5=Tremor(神経性の震え)。Goertzel + 放物線補間で sub-bin 推定。">[?]</span></span>
                                     <span class="vstat-val" id="vib-rate">—</span>
                                     <span class="vstat-unit">Hz</span>
                                 </div>
-                                <div class="vstat">
+                                <div class="vstat vstat-primary">
                                     <span class="vstat-label">Extent <span class="tooltip" data-tooltip="ピッチ揺れの片振幅 (cents)。クラシック ±50–100¢、ポピュラー ±30–60¢。±100¢ = ±半音。最小二乗フィットで算出 (Hann補正の近似より高精度)。">[?]</span></span>
                                     <span class="vstat-val" id="vib-extent">—</span>
                                     <span class="vstat-unit">±¢</span>
@@ -532,6 +540,12 @@
                                     <span class="vstat-label">Confidence <span class="tooltip" data-tooltip="検出全体の信頼度。Regularity×0.45 + Peak prominence×0.20 + Validity ratio×0.20 + Duration×0.15。低いときは Rate/Extent の数値を割引いて読む。">[?]</span></span>
                                     <span class="vstat-val" id="vib-confidence">—</span>
                                     <span class="vstat-unit">%</span>
+                                </div>
+                            </div>
+                            <div class="vib-quality">
+                                <div class="vib-quality-row">
+                                    <span class="vib-quality-tag">Signal</span>
+                                    <div class="vib-quality-track"><div class="vib-quality-fill" id="vib-quality-fill"></div></div>
                                 </div>
                             </div>
                         </div>
@@ -646,6 +660,39 @@
                     </div>
                 </details>
 
+                <!-- Recordings panel: local-only voice recordings (IndexedDB) -->
+                <details id="recordings-panel" class="recordings-panel">
+                    <summary class="recordings-head">
+                        <span class="recordings-disclosure" aria-hidden="true">▸</span>
+                        <span class="recordings-title">Recordings</span>
+                        <span class="recordings-meta" id="recordings-meta">0 件</span>
+                        <button id="rec-import-btn" class="rec-btn rec-import-btn" type="button" title="音声ファイルを取り込み">+ Import</button>
+                        <input type="file" id="rec-import-input" accept="audio/*,.wav,.mp3,.m4a,.ogg,.webm,.flac" style="display:none;">
+                    </summary>
+                    <ul id="recordings-list" class="recordings-list" aria-live="polite"></ul>
+                    <div class="recordings-empty" id="recordings-empty">
+                        マイクをONにして Rec ボタンで録音（最大15秒・端末内のみに保存）
+                    </div>
+                    <div id="playback-controls" class="playback-controls" style="display:none;">
+                        <span class="pb-time" id="pb-cur-time">0.0s</span>
+                        <input type="range" id="pb-seek" min="0" max="1000" value="0" step="1" class="pb-seek" aria-label="Playback position">
+                        <span class="pb-time" id="pb-total-time">0.0s</span>
+                        <button id="pb-loop" class="pb-loop-btn" type="button" aria-label="Toggle loop" title="Loop">⟲</button>
+                        <select id="pb-rate" class="pb-rate-select" aria-label="Playback speed">
+                            <option value="0.5">0.5x</option>
+                            <option value="0.75">0.75x</option>
+                            <option value="1" selected>1x</option>
+                            <option value="1.25">1.25x</option>
+                            <option value="1.5">1.5x</option>
+                            <option value="2">2x</option>
+                        </select>
+                    </div>
+                </details>
+
+                </div>
+                </details>
+                <!-- /Mic Analysis group -->
+
                 <!-- Roughness educational legend (visible when Roughness toggle is ON) -->
                 <div id="roughness-legend" class="roughness-legend" style="display:none;">
                     <div class="rl-header">
@@ -736,35 +783,6 @@
                         </div>
                     </details>
                 </div>
-
-                <!-- Recordings panel: local-only voice recordings (IndexedDB) -->
-                <details id="recordings-panel" class="recordings-panel">
-                    <summary class="recordings-head">
-                        <span class="recordings-disclosure" aria-hidden="true">▸</span>
-                        <span class="recordings-title">Recordings</span>
-                        <span class="recordings-meta" id="recordings-meta">0 件</span>
-                        <button id="rec-import-btn" class="rec-btn rec-import-btn" type="button" title="音声ファイルを取り込み">+ Import</button>
-                        <input type="file" id="rec-import-input" accept="audio/*,.wav,.mp3,.m4a,.ogg,.webm,.flac" style="display:none;">
-                    </summary>
-                    <ul id="recordings-list" class="recordings-list" aria-live="polite"></ul>
-                    <div class="recordings-empty" id="recordings-empty">
-                        マイクをONにして Rec ボタンで録音（最大15秒・端末内のみに保存）
-                    </div>
-                    <div id="playback-controls" class="playback-controls" style="display:none;">
-                        <span class="pb-time" id="pb-cur-time">0.0s</span>
-                        <input type="range" id="pb-seek" min="0" max="1000" value="0" step="1" class="pb-seek" aria-label="Playback position">
-                        <span class="pb-time" id="pb-total-time">0.0s</span>
-                        <button id="pb-loop" class="pb-loop-btn" type="button" aria-label="Toggle loop" title="Loop">⟲</button>
-                        <select id="pb-rate" class="pb-rate-select" aria-label="Playback speed">
-                            <option value="0.5">0.5x</option>
-                            <option value="0.75">0.75x</option>
-                            <option value="1" selected>1x</option>
-                            <option value="1.25">1.25x</option>
-                            <option value="1.5">1.5x</option>
-                            <option value="2">2x</option>
-                        </select>
-                    </div>
-                </details>
 
             </section>
         </main>

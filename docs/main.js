@@ -171,6 +171,7 @@ const state = {
     isMicPaused: false,
     cachedMicData: null,
     cachedMicPitch: -1,
+    cachedMicLevel: 0,         // mic RMS amplitude (0..~0.5), drives Vowel Space dot size
     cachedMicFormants: null, // Per-formant snapshot (preserved during pause and brief live dropouts)
     cachedMicFormantsTime: null, // Per-formant last-update timestamp (ms)
     micGain: 1.0,
@@ -282,6 +283,7 @@ const els = {
     vibVerdictBox: document.getElementById('vib-verdict-box'),
     vibF0: document.getElementById('vib-f0'),
     vibAnalysisBody: document.getElementById('vib-analysis-body'),
+    vibQualityFill: document.getElementById('vib-quality-fill'),
     vibModeTabs: document.getElementById('vib-mode-tabs'),
     vibSynthRate: document.getElementById('vib-synth-rate'),
     vibSynthExtent: document.getElementById('vib-synth-extent'),
@@ -1603,8 +1605,10 @@ function drawDerivativeCanvas(canvas, derivative, params) {
 let _yinDp = null;        // CMNDF values
 let _yinTime = null;      // raw time-domain input
 let _yinFiltered = null;  // after pre-emphasis HP
+let _yinClarity = 0;      // periodicity confidence of the last detection: 1 - d'(τ), 0 when unvoiced
 const YIN_THRESHOLD = 0.10;       // tighter → fewer sub-octave false positives
 const YIN_UNVOICED_DP = 0.35;     // if best d'(τ) is above this, reject (noisy / unvoiced)
+const VIBRATO_CLARITY_GATE = 0.72; // analysis drops pitch frames below this clarity (≈ d'(τ) > 0.28)
 const YIN_PREEMPH = 0.97;         // standard speech pre-emphasis coefficient
 
 function detectPitchYIN(rawBuf, sampleRate) {
@@ -1621,11 +1625,11 @@ function detectPitchYIN(rawBuf, sampleRate) {
     let rms = 0;
     for (let i = 0; i < N; i++) rms += buf[i] * buf[i];
     rms = Math.sqrt(rms / N);
-    if (rms < 0.005) return -1;
+    if (rms < 0.005) { _yinClarity = 0; return -1; }
 
     const minPeriod = Math.max(2, Math.floor(sampleRate / 1000)); // 1000 Hz ceiling
     const maxPeriod = Math.min(Math.floor(sampleRate / 60), Math.floor(N / 2)); // 60 Hz floor
-    if (maxPeriod <= minPeriod) return -1;
+    if (maxPeriod <= minPeriod) { _yinClarity = 0; return -1; }
 
     if (!_yinDp || _yinDp.length < maxPeriod + 1) _yinDp = new Float32Array(maxPeriod + 1);
     const dp = _yinDp;
@@ -1660,7 +1664,8 @@ function detectPitchYIN(rawBuf, sampleRate) {
             if (dp[tau] < minVal) { minVal = dp[tau]; bestTau = tau; }
         }
     }
-    if (bestTau < 0 || dp[bestTau] > YIN_UNVOICED_DP) return -1; // unvoiced / too uncertain
+    if (bestTau < 0 || dp[bestTau] > YIN_UNVOICED_DP) { _yinClarity = 0; return -1; } // unvoiced / too uncertain
+    _yinClarity = Math.max(0, Math.min(1, 1 - dp[bestTau]));
 
     // Step 4: parabolic interpolation
     let refined = bestTau;
@@ -1683,6 +1688,10 @@ function detectPitchFromMic() {
     const bufLen = an.fftSize;
     if (!_yinTime || _yinTime.length !== bufLen) _yinTime = new Float32Array(bufLen);
     an.getFloatTimeDomainData(_yinTime);
+    // Raw RMS amplitude (loudness) — used to size the Vowel Space dot
+    let rms = 0;
+    for (let i = 0; i < bufLen; i++) rms += _yinTime[i] * _yinTime[i];
+    state.cachedMicLevel = Math.sqrt(rms / bufLen);
     return detectPitchYIN(_yinTime, audioCtx.sampleRate);
 }
 
@@ -1884,13 +1893,14 @@ function applyViewMode(mode) {
 
 // ---------- Vibrato analysis ----------
 const VIBRATO_BUFFER_MS = 5000;
-const VIBRATO_ANALYSIS_MS = 3000;
+const VIBRATO_ANALYSIS_MS = 2200;   // shorter window → snappier reaction (≈9 cycles @ 4 Hz)
+const VIBRATO_CONF_DISPLAY_GATE = 0.4; // below this, don't assert Rate/Extent/Type — show "測定中…"
 const VIBRATO_ANALYSIS_INTERVAL = 200;
 
-function pushPitchSample(hz) {
+function pushPitchSample(hz, clarity = 0) {
     const t = performance.now();
     const buf = state.vibratoAnalysis.pitchBuf;
-    buf.push({ t, hz: hz > 0 ? hz : null });
+    buf.push({ t, hz: hz > 0 ? hz : null, clarity });
     const cutoff = t - VIBRATO_BUFFER_MS;
     while (buf.length > 0 && buf[0].t < cutoff) buf.shift();
 }
@@ -1908,6 +1918,8 @@ function resetVibratoUi() {
     if (els.vibVerdict) els.vibVerdict.textContent = '—';
     if (els.vibF0) els.vibF0.textContent = '—';
     if (els.vibVerdictBox) els.vibVerdictBox.classList.remove('is-good', 'is-warn');
+    if (els.vibAnalysisBody) els.vibAnalysisBody.classList.remove('is-lowconf');
+    if (els.vibQualityFill) els.vibQualityFill.style.width = '0%';
 }
 
 // Vibrato analysis pipeline:
@@ -1933,12 +1945,16 @@ function analyzeVibrato() {
     const slice = buf.slice(idx0);
     if (slice.length < 20) { resetVibratoUi(); return; }
 
+    // (0) Clarity gate: drop pitch frames whose YIN periodicity confidence is low.
+    //     Weak/noisy frames are the main source of jitter and octave glitches.
+    const gz = (s) => (s && s.hz != null && (s.clarity == null || s.clarity >= VIBRATO_CLARITY_GATE)) ? s.hz : null;
+
     // (1) 3-tap median filter (preserves edges, removes 1-sample spikes)
     const filtHz = new Array(slice.length);
     for (let i = 0; i < slice.length; i++) {
-        const a = i > 0 ? slice[i - 1].hz : null;
-        const b = slice[i].hz;
-        const c = i < slice.length - 1 ? slice[i + 1].hz : null;
+        const a = i > 0 ? gz(slice[i - 1]) : null;
+        const b = gz(slice[i]);
+        const c = i < slice.length - 1 ? gz(slice[i + 1]) : null;
         const v = [a, b, c].filter(x => x != null);
         if (v.length === 0) { filtHz[i] = null; continue; }
         v.sort((x, y) => x - y);
@@ -2102,15 +2118,24 @@ function analyzeVibrato() {
         cents: hzClean[i] != null ? 1200 * Math.log2(hzClean[i] / median) - (slope * i + intercept) : null,
     }));
 
-    if (els.vibRate) els.vibRate.textContent = peakFreq.toFixed(1);
-    if (els.vibExtent) els.vibExtent.textContent = Math.round(fitExtent);
+    // Low-confidence guard: don't assert Rate/Extent/Type when the estimate is shaky.
+    // f0 / Regularity / Confidence still show so the user can see *why* it's withheld.
+    const lowConf = confidence < VIBRATO_CONF_DISPLAY_GATE;
+    if (els.vibRate) els.vibRate.textContent = lowConf ? '—' : peakFreq.toFixed(1);
+    if (els.vibExtent) els.vibExtent.textContent = lowConf ? '—' : Math.round(fitExtent);
     if (els.vibRegularity) els.vibRegularity.textContent = Math.round(regularity * 100);
     if (els.vibConfidence) els.vibConfidence.textContent = Math.round(confidence * 100);
-    if (els.vibVerdict) els.vibVerdict.textContent = verdict;
+    if (els.vibVerdict) els.vibVerdict.textContent = lowConf ? '測定中…' : verdict;
     if (els.vibF0) els.vibF0.textContent = Math.round(median);
     if (els.vibVerdictBox) {
         els.vibVerdictBox.classList.remove('is-good', 'is-warn');
-        if (verdictClass) els.vibVerdictBox.classList.add(verdictClass);
+        if (!lowConf && verdictClass) els.vibVerdictBox.classList.add(verdictClass);
+    }
+    if (els.vibAnalysisBody) els.vibAnalysisBody.classList.toggle('is-lowconf', lowConf);
+    if (els.vibQualityFill) {
+        els.vibQualityFill.style.width = Math.round(confidence * 100) + '%';
+        els.vibQualityFill.style.backgroundColor =
+            confidence >= 0.7 ? '#4caf50' : confidence >= VIBRATO_CONF_DISPLAY_GATE ? '#fbc02d' : '#ef6c00';
     }
 }
 
@@ -2300,6 +2325,7 @@ const VOWEL_PALETTE = [
 ];
 
 const VS_TRAIL_MS = 1500;
+const VS_SMOOTH_MS = 250;   // window for median-smoothing the live readout / nearest-vowel decision
 
 // IPA trapezoid corners in normalized canvas coords [0,1]
 // Slanted left edge (front-bottom indented to match articulatory chart)
@@ -2538,6 +2564,56 @@ function updateVoiceTypeTabs() {
     }
 }
 
+// Map mic RMS level (loudness) → color. Quiet = soft blue, loud = hot red.
+// Perceptual (dB) so the ramp spreads evenly across soft→loud singing.
+function vsIntensityColor(level, alpha = 1) {
+    if (!(level > 0)) return `rgba(150, 160, 170, ${alpha})`;
+    const db = 20 * Math.log10(level);
+    const t = Math.max(0, Math.min(1, (db + 45) / 33)); // -45 dB quiet → -12 dB loud
+    const hue = 210 * (1 - t);   // 210 blue (soft) → 0 red (loud)
+    const sat = 55 + t * 35;     // more vivid when loud
+    const light = 58 - t * 10;   // denser when loud
+    return `hsla(${hue}, ${sat}%, ${light}%, ${alpha})`;
+}
+
+// Map mic RMS level → dot radius (px). Perceptual (dB) so soft/loud spread evenly.
+function vsLevelRadius(level) {
+    if (!(level > 0)) return 5;
+    const db = 20 * Math.log10(level);
+    const t = Math.max(0, Math.min(1, (db + 45) / 33)); // -45 dB → min, -12 dB → max
+    return 4 + t * 11; // 4..15 px
+}
+
+// f0 display: a large faint gray note-name watermark with Hz + cents below,
+// centered in the chart — identical in spirit to the Spectrum view's tuner overlay.
+// Drawn BEHIND the dot/trail as a quiet reference.
+function drawVsPitchMarker(ctx, w, h, f0) {
+    if (!(f0 > 0)) return;
+    const yTop = VS_TRAP.tl.sy * h;
+    const yBot = VS_TRAP.br.sy * h;
+    const cx = (VS_TRAP.bl.sx + VS_TRAP.tr.sx) / 2 * w;
+    const cy = (yTop + yBot) / 2;
+
+    ctx.save();
+    ctx.textAlign = 'center';
+
+    // Large note name
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.10)';
+    ctx.font = '700 48px Inter, sans-serif';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(freqToNote(f0), cx, cy - 8);
+
+    // Hz + cents below
+    const cents = freqToCents(f0);
+    const centsLabel = `${cents > 0 ? '+' : (cents < 0 ? '' : '±')}${cents}¢`;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.08)';
+    ctx.font = '400 16px Inter, sans-serif';
+    ctx.textBaseline = 'top';
+    ctx.fillText(`${Math.round(f0)} Hz  ${centsLabel}`, cx, cy + 24);
+
+    ctx.restore();
+}
+
 let vowelSpaceCtx = null;
 function getVowelSpaceCtx() {
     if (!vowelSpaceCtx && els.vowelSpaceCanvas) {
@@ -2552,6 +2628,33 @@ function vsLogDist(a, b) {
     const d1 = (vsLog(a.f1) - vsLog(b.f1));
     const d2 = (vsLog(a.f2) - vsLog(b.f2));
     return Math.sqrt(d1 * d1 + d2 * d2) * 1200 / Math.log10(2);
+}
+
+// Median-smoothed current (F1, F2) over the last VS_SMOOTH_MS of the trail.
+// LPC frames jitter frame-to-frame; the median is robust to single-frame spikes
+// so the live dot and the nearest-vowel decision stop flickering.
+function vsSmoothedCurrent() {
+    const trail = state.vowelSpace.trail;
+    if (trail.length === 0) return null;
+    const cutoff = trail[trail.length - 1].t - VS_SMOOTH_MS;
+    const f1s = [], f2s = [], f0s = [], levels = [];
+    for (let i = trail.length - 1; i >= 0; i--) {
+        if (trail[i].t < cutoff) break;
+        f1s.push(trail[i].f1);
+        f2s.push(trail[i].f2);
+        if (trail[i].f0 > 0) f0s.push(trail[i].f0);
+        if (trail[i].level > 0) levels.push(trail[i].level);
+    }
+    const med = (arr) => arr[Math.floor(arr.length / 2)];
+    const f0 = f0s.length ? med(f0s.slice().sort((a, b) => a - b)) : 0;
+    const level = levels.length ? med(levels.slice().sort((a, b) => a - b)) : 0;
+    if (f1s.length === 0) {
+        const last = trail[trail.length - 1];
+        return { f1: last.f1, f2: last.f2, f0, level };
+    }
+    f1s.sort((a, b) => a - b);
+    f2s.sort((a, b) => a - b);
+    return { f1: med(f1s), f2: med(f2s), f0, level };
 }
 
 function vsNearestVowel(f1, f2) {
@@ -2582,7 +2685,9 @@ function pushVowelSample() {
     if (f1 == null || f2 == null) return;
     const t = performance.now();
     const trail = state.vowelSpace.trail;
-    trail.push({ t, f1, f2 });
+    // Capture f0 + level alongside the formants so the dot's pitch color and size
+    // persist for the trail-fade window even after voicing stops.
+    trail.push({ t, f1, f2, f0: state.cachedMicPitch, level: state.cachedMicLevel });
     const cutoff = t - VS_TRAIL_MS;
     while (trail.length > 0 && trail[0].t < cutoff) trail.shift();
 }
@@ -2781,13 +2886,29 @@ function drawVowelSpace() {
             ctx.arc(pt.x, pt.y, 2.5, 0, Math.PI * 2);
             ctx.fill();
         }
-        // Current point (last)
-        const cur = trail[trail.length - 1];
+        // Current point — median-smoothed over the last VS_SMOOTH_MS (stable dot)
+        const cur = vsSmoothedCurrent() || trail[trail.length - 1];
         const curST = vsF1F2toST(cur.f1, cur.f2);
         const curPt = vsSTtoXY(curST.s, curST.t, w, h);
-        ctx.fillStyle = '#1e88e5';
+        // Color + size the dot by intensity (RMS loudness); show f0 as a marker behind.
+        // Values come from the trail-smoothed snapshot so they persist while the dot
+        // lingers after voicing stops (cachedMicPitch/Level reset to 0).
+        const f0 = (cur.f0 > 0) ? cur.f0 : state.cachedMicPitch;
+        const level = (cur.level > 0) ? cur.level : state.cachedMicLevel;
+        const dotColor = vsIntensityColor(level);
+        const r = vsLevelRadius(level); // dot size = loudness
+
+        // f0 watermark (note + Hz + cents), drawn BEHIND the dot like the Spectrum tuner
+        drawVsPitchMarker(ctx, w, h, f0);
+
+        // Soft glow halo in the intensity color for a more tactile read
+        ctx.fillStyle = vsIntensityColor(level, 0.18);
         ctx.beginPath();
-        ctx.arc(curPt.x, curPt.y, 6, 0, Math.PI * 2);
+        ctx.arc(curPt.x, curPt.y, r + 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = dotColor;
+        ctx.beginPath();
+        ctx.arc(curPt.x, curPt.y, r, 0, Math.PI * 2);
         ctx.fill();
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 2;
@@ -2937,7 +3058,7 @@ function drawVisualizer() {
         if (!state.isMicPaused) {
             const micPitch = detectPitchFromMic();
             state.cachedMicPitch = micPitch;
-            pushPitchSample(micPitch);
+            pushPitchSample(micPitch, _yinClarity);
         }
     } else if (state.vibratoAnalysis.pitchBuf.length) {
         state.vibratoAnalysis.pitchBuf = [];
@@ -4018,12 +4139,20 @@ function drawVisualizer() {
             canvasCtx.strokeStyle = 'rgba(140, 90, 200, 0.65)';
             canvasCtx.lineWidth = 1.8;
             canvasCtx.setLineDash([6, 3]);
+            let lastY = 0;
             for (let s = 0; s < samples; s++) {
                 const x = freqToX(freqs[s], width);
                 const norm = (dbs[s] - envMin) / span;
                 const y = height - norm * height * 0.78 - height * 0.10;
                 if (s === 0) canvasCtx.moveTo(x, y);
                 else canvasCtx.lineTo(x, y);
+                lastY = y;
+            }
+            // The LPC model is only valid up to its (decimated) Nyquist = decSr/2.
+            // When that's below the display range, hold the last value flat to the
+            // right edge so the envelope doesn't look truncated mid-chart.
+            if (maxFreq < MAX_FREQ_DISPLAY) {
+                canvasCtx.lineTo(freqToX(MAX_FREQ_DISPLAY, width), lastY);
             }
             canvasCtx.stroke();
             canvasCtx.setLineDash([]);
