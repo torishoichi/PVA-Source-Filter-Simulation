@@ -5020,7 +5020,8 @@ function analyzeRecordingFormantsOffline(audioBuffer) {
 }
 
 // Decode + analyze in the background; applied once ready (live path used until then).
-async function buildPlaybackFormantTrack(blob) {
+// On success, persist the track + mark the recording "Analyzed" (cached for reuse).
+async function buildPlaybackFormantTrack(id, blob) {
     playbackFormantTrack = null;
     if (!audioCtx) return;
     try {
@@ -5028,6 +5029,12 @@ async function buildPlaybackFormantTrack(blob) {
         const audioBuf = await audioCtx.decodeAudioData(arr.slice(0));
         const track = analyzeRecordingFormantsOffline(audioBuf);
         if (playbackAudio) playbackFormantTrack = track; // still playing?
+        try {
+            await RecordingsDB.markAnalyzed(id, track);
+            const cached = cachedRecordingsList && cachedRecordingsList.find(r => r.id === id);
+            if (cached) { cached.analyzed = true; cached.formantTrack = track; }
+            renderRecordingsList();
+        } catch (e) { console.warn('markAnalyzed failed:', e); }
     } catch (err) {
         console.warn('Offline formant analysis failed:', err);
         playbackFormantTrack = null;
@@ -5076,9 +5083,14 @@ async function playRecording(id) {
     playbackDurationSec = (rec.durationMs || 0) / 1000;
     if (els.pbTotalTime) els.pbTotalTime.textContent = playbackDurationSec.toFixed(1) + 's';
 
-    // Kick off the high-accuracy offline formant track (async; live path until ready)
+    // High-accuracy offline formant track: reuse the cached one if already analyzed,
+    // otherwise build it in the background (live path used until ready).
     playbackFormantTrack = null;
-    buildPlaybackFormantTrack(rec.blob);
+    if (rec.formantTrack && rec.formantTrack.frames && rec.formantTrack.frames.length) {
+        playbackFormantTrack = rec.formantTrack;
+    } else {
+        buildPlaybackFormantTrack(rec.id, rec.blob);
+    }
 
     // Reset the A–B region to full track for each new recording
     playbackLoopA = 0;
@@ -5447,7 +5459,15 @@ function renderRecordingsList() {
         delBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
         delBtn.addEventListener('click', () => deleteRecording(rec.id));
 
-        li.append(timeEl, labelInput, durEl, playBtn, dlBtn, delBtn);
+        li.append(timeEl, labelInput, durEl);
+        if (rec.analyzed) {
+            const analyzedEl = document.createElement('span');
+            analyzedEl.className = 'rec-analyzed';
+            analyzedEl.textContent = '✓ Analyzed';
+            analyzedEl.title = '高精度フォルマント解析済み（再生で生成・キャッシュ済み）';
+            li.append(analyzedEl);
+        }
+        li.append(playBtn, dlBtn, delBtn);
         els.recordingsList.appendChild(li);
     }
 }

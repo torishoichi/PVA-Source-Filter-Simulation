@@ -3088,6 +3088,18 @@ body.learn-drawer-open { overflow: hidden; }
     min-width: 42px;
     text-align: right;
 }
+.rec-analyzed {
+    flex: 0 0 auto;
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: #4f9650;
+    background: rgba(79, 150, 80, 0.12);
+    border: 1px solid rgba(79, 150, 80, 0.4);
+    border-radius: 999px;
+    padding: 1px 7px;
+    white-space: nowrap;
+}
 .rec-btn {
     flex: 0 0 auto;
     background: transparent;
