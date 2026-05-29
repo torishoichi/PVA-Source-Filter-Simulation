@@ -54,6 +54,9 @@ const lpcCoreState = {
     lastVoicedTime: 0
 };
 const LPC_K_HISTORY_LEN = 3;
+// Below this per-frame confidence (voicing × sharpness × completeness), the v3
+// formant readout freezes at its last value instead of chasing a shaky estimate.
+const LPC_CONF_GATE = 0.45;
 const lpcV2State = {
     history: { f1: [], f2: [], f3: [], f4: [], f5: [] },
     smoothed: { f1: null, f2: null, f3: null, f4: null, f5: null },
@@ -172,6 +175,7 @@ const state = {
     cachedMicData: null,
     cachedMicPitch: -1,
     cachedMicLevel: 0,         // mic RMS amplitude (0..~0.5), drives Vowel Space dot size
+    cachedMicFormantConfidence: 1, // 0..1 confidence of the latest v3 formant frame
     cachedMicFormants: null, // Per-formant snapshot (preserved during pause and brief live dropouts)
     cachedMicFormantsTime: null, // Per-formant last-update timestamp (ms)
     micGain: 1.0,
@@ -263,6 +267,10 @@ const els = {
     pbLoop: document.getElementById('pb-loop'),
     pbCurTime: document.getElementById('pb-cur-time'),
     pbTotalTime: document.getElementById('pb-total-time'),
+    pbSeekWrap: document.getElementById('pb-seek-wrap'),
+    pbRegion: document.getElementById('pb-region'),
+    pbHandleA: document.getElementById('pb-handle-a'),
+    pbHandleB: document.getElementById('pb-handle-b'),
     btnSlopeLine: document.getElementById('slope-line-toggle'),
     btnLogScale: document.getElementById('log-scale-toggle'),
     btnRoughness: document.getElementById('roughness-toggle'),
@@ -1608,7 +1616,8 @@ let _yinFiltered = null;  // after pre-emphasis HP
 let _yinClarity = 0;      // periodicity confidence of the last detection: 1 - d'(τ), 0 when unvoiced
 const YIN_THRESHOLD = 0.10;       // tighter → fewer sub-octave false positives
 const YIN_UNVOICED_DP = 0.35;     // if best d'(τ) is above this, reject (noisy / unvoiced)
-const VIBRATO_CLARITY_GATE = 0.72; // analysis drops pitch frames below this clarity (≈ d'(τ) > 0.28)
+const VIBRATO_CLARITY_GATE = 0.58; // analysis drops pitch frames below this clarity. Lowered from 0.72:
+                                   // vibrato itself depresses per-frame YIN clarity, so 0.72 dropped real cycles.
 const YIN_PREEMPH = 0.97;         // standard speech pre-emphasis coefficient
 
 function detectPitchYIN(rawBuf, sampleRate) {
@@ -1894,7 +1903,8 @@ function applyViewMode(mode) {
 // ---------- Vibrato analysis ----------
 const VIBRATO_BUFFER_MS = 5000;
 const VIBRATO_ANALYSIS_MS = 2200;   // shorter window → snappier reaction (≈9 cycles @ 4 Hz)
-const VIBRATO_CONF_DISPLAY_GATE = 0.4; // below this, don't assert Rate/Extent/Type — show "測定中…"
+const VIBRATO_CONF_DISPLAY_GATE = 0.3; // below this, don't assert Rate/Extent/Type — show "測定中…"
+                                       // Lowered from 0.4: real (non-pure-sine) vibrato sat just under the old gate.
 const VIBRATO_ANALYSIS_INTERVAL = 200;
 
 function pushPitchSample(hz, clarity = 0) {
@@ -1962,7 +1972,7 @@ function analyzeVibrato() {
     }
 
     const valid = filtHz.filter(h => h != null);
-    if (valid.length < slice.length * 0.4 || valid.length < 15) { resetVibratoUi(); return; }
+    if (valid.length < slice.length * 0.33 || valid.length < 15) { resetVibratoUi(); return; }
 
     // Median pitch
     const sortedHz = valid.slice().sort((a, b) => a - b);
@@ -2084,7 +2094,7 @@ function analyzeVibrato() {
         if (Math.abs(k - peakIdx) > 2) { nonPeakSum += powers[k]; nonPeakCount++; }
     }
     const meanNonPeak = nonPeakCount > 0 ? nonPeakSum / nonPeakCount : 1e-12;
-    const prominence = meanNonPeak > 0 ? Math.min(1, peakPower / (meanNonPeak * 30)) : 0;
+    const prominence = meanNonPeak > 0 ? Math.min(1, peakPower / (meanNonPeak * 15)) : 0;
 
     // Regularity = explained variance of the dominant sine
     const regularity = explainedVar;
@@ -3605,8 +3615,87 @@ function drawVisualizer() {
 
         // Assign F1-F5 by continuity (with band-assignment fallback)
         const raw = assignFormants(candidates, anchors);
+
+        // --- Harmonic-bias correction for F1/F2 (absolute-accuracy fix) ---
+        // LPC poles get pulled onto strong harmonics, so the resonance reads off-center.
+        // Smooth the REAL FFT magnitude by ~one harmonic spacing (f0) to erase the comb,
+        // tilt-flatten it (+6 dB/oct) so a formant becomes a clean local max, then snap
+        // each LPC seed to that unbiased envelope peak. Symmetric smoothing keeps the
+        // peak CENTER, which is exactly what we want for frequency accuracy.
+        const f0c = state.cachedMicPitch;
+        if (f0c > 50) {
+            const bins = analyzer.frequencyBinCount;
+            const binHz = sr / analyzer.fftSize;
+            let fdb = (state.cachedMicData && state.cachedMicData.length === bins)
+                ? state.cachedMicData : null;
+            if (!fdb) {
+                if (!lpcCoreState.freqBuf || lpcCoreState.freqBuf.length !== bins) {
+                    lpcCoreState.freqBuf = new Float32Array(bins);
+                }
+                analyzer.getFloatFrequencyData(lpcCoreState.freqBuf);
+                fdb = lpcCoreState.freqBuf;
+            }
+            if (!lpcCoreState.tiltDb || lpcCoreState.tiltDb.length !== bins) {
+                lpcCoreState.tiltDb = new Float32Array(bins);
+                for (let b = 0; b < bins; b++) {
+                    lpcCoreState.tiltDb[b] = 20 * Math.log10(Math.max(1, b * binHz) / 100);
+                }
+            }
+            const tilt = lpcCoreState.tiltDb;
+            const hw = Math.max(2, Math.round(0.5 * f0c / binHz)); // smooth half-width ≈ f0/2
+            const env = (bin) => {                                 // tilt-flattened, f0-smoothed dB
+                let s = 0, c = 0;
+                for (let j = bin - hw; j <= bin + hw; j++) {
+                    if (j < 0 || j >= bins) continue;
+                    s += fdb[j] + tilt[j]; c++;
+                }
+                return c ? s / c : -Infinity;
+            };
+            const refine = (seed) => {
+                if (seed == null) return seed;
+                const win = Math.max(1.5 * f0c, 0.10 * seed);      // ± search window (Hz)
+                const lo = Math.max(1, Math.round((seed - win) / binHz));
+                const hi = Math.min(bins - 2, Math.round((seed + win) / binHz));
+                let bestBin = -1, bestVal = -Infinity;
+                for (let b = lo; b <= hi; b++) {
+                    const v = env(b);
+                    if (v > bestVal) { bestVal = v; bestBin = b; }
+                }
+                if (bestBin < 1) return seed;
+                const a0 = env(bestBin - 1), b0 = env(bestBin), c0 = env(bestBin + 1);
+                const denom = a0 - 2 * b0 + c0;
+                let d = 0;
+                if (Math.abs(denom) > 1e-6) d = 0.5 * (a0 - c0) / denom;
+                if (d < -1 || d > 1) d = 0;
+                const refined = (bestBin + d) * binHz;
+                // Guard against grabbing a neighbouring formant
+                if (Math.abs(refined - seed) > Math.max(0.25 * seed, 2 * f0c)) return seed;
+                return refined;
+            };
+            raw.f1 = refine(raw.f1);
+            raw.f2 = refine(raw.f2);
+        }
+
         const foundCount = ['f1', 'f2', 'f3', 'f4', 'f5'].filter(k => raw[k] != null).length;
         if (foundCount < 2) return { voiced: false };
+
+        // Per-frame confidence ∈ [0,1]: voicing strength × F1/F2 sharpness × completeness.
+        // Used downstream to freeze the formant display on shaky frames instead of
+        // letting a spurious root yank the readout to the wrong vowel.
+        const voicingScore = Math.max(0, Math.min(1, (bestRatio - 0.30) / 0.50)); // 0.30→0, 0.80→1
+        const bwOf = (f) => {
+            if (f == null) return 600;
+            let best = 600, bd = Infinity;
+            for (const c of candidates) {
+                const d = Math.abs(c.freq - f);
+                if (d < bd) { bd = d; best = c.bw; }
+            }
+            return best;
+        };
+        const meanBw = (bwOf(raw.f1) + bwOf(raw.f2)) / 2;        // narrow = resonant = trustworthy
+        const sharpScore = Math.max(0, Math.min(1, 1 - (meanBw - 80) / 320)); // 80Hz→1, 400Hz→0
+        const countScore = Math.min(1, foundCount / 3);
+        const confidence = voicingScore * (0.35 + 0.45 * sharpScore + 0.20 * countScore);
 
         // Snapshot LPC coefficients for the envelope overlay
         lpcCoreState.lastCoefs = a;
@@ -3614,7 +3703,7 @@ function drawVisualizer() {
         lpcCoreState.lastDecSr = decSr;
         lpcCoreState.lastUpdate = performance.now();
 
-        return { voiced: true, raw };
+        return { voiced: true, raw, confidence };
     };
 
     const FORMANT_KEYS = ['f1', 'f2', 'f3', 'f4', 'f5'];
@@ -3691,6 +3780,20 @@ function drawVisualizer() {
         }
 
         lpcV3State.lastVoiced = now;
+        state.cachedMicFormantConfidence = core.confidence;
+
+        // Low-confidence freeze: don't ingest a shaky frame into the One-Euro filters
+        // (that would drag the smoothed value toward a likely-wrong root). Hold the
+        // previous output so the dot sits still instead of jumping to a bad vowel.
+        if (core.confidence < LPC_CONF_GATE) {
+            const out = {};
+            for (const k of FORMANT_KEYS) {
+                const f = lpcV3State.filters[k];
+                out[k] = (f && f.prevX != null) ? { freq: f.prevX, db: dbVal } : null;
+            }
+            return out;
+        }
+
         const picked = {};
         for (const k of FORMANT_KEYS) {
             const r = core.raw[k];
@@ -4550,6 +4653,18 @@ let playbackObjectUrl = null;
 let playbackRecId = null;
 let playbackRate = 1.0;
 let playbackLoop = false;
+let playbackLoopA = 0;   // section-loop start, ratio [0,1]
+let playbackLoopB = 1;   // section-loop end, ratio [0,1]
+let playbackDurationSec = 0; // known duration from the record (WebM reports Infinity)
+let pbSeeking = false;       // true only while actively dragging the seek slider
+
+// Effective duration: prefer the stored value (WebM blobs report Infinity),
+// fall back to the media element only when it's finite.
+function pbDuration() {
+    if (playbackDurationSec > 0) return playbackDurationSec;
+    const d = playbackAudio ? playbackAudio.duration : 0;
+    return isFinite(d) ? d : 0;
+}
 let playbackGainNode = null;    // audible output branch
 let playbackUiRaf = null;
 let micWasActiveBeforePlayback = false;
@@ -4679,13 +4794,29 @@ function ensurePlaybackGain() {
 
 function updatePlaybackUi() {
     if (!playbackAudio) { playbackUiRaf = null; return; }
-    const dur = playbackAudio.duration || 0;
+    const dur = pbDuration();
     const cur = playbackAudio.currentTime || 0;
-    if (els.pbSeek && document.activeElement !== els.pbSeek) {
+    // Section loop: wrap back to A when the playhead reaches B (full-track loop
+    // with B≈1 is handled by the 'ended' listener instead).
+    if (playbackLoop && dur > 0 && playbackLoopB < 0.999
+        && cur >= playbackLoopB * dur - 0.02) {
+        playbackAudio.currentTime = playbackLoopA * dur;
+    }
+    if (els.pbSeek && !pbSeeking) {
         els.pbSeek.value = String(dur > 0 ? Math.round((cur / dur) * 1000) : 0);
     }
     if (els.pbCurTime) els.pbCurTime.textContent = cur.toFixed(1) + 's';
     playbackUiRaf = requestAnimationFrame(updatePlaybackUi);
+}
+
+// Reflect playbackLoopA/B onto the region highlight + handle positions
+function updateLoopRegionUi() {
+    if (els.pbRegion) {
+        els.pbRegion.style.left = (playbackLoopA * 100) + '%';
+        els.pbRegion.style.width = ((playbackLoopB - playbackLoopA) * 100) + '%';
+    }
+    if (els.pbHandleA) els.pbHandleA.style.left = (playbackLoopA * 100) + '%';
+    if (els.pbHandleB) els.pbHandleB.style.left = (playbackLoopB * 100) + '%';
 }
 
 async function playRecording(id) {
@@ -4710,8 +4841,18 @@ async function playRecording(id) {
     playbackAudio.mozPreservesPitch = true;
     playbackAudio.webkitPreservesPitch = true;
     playbackAudio.playbackRate = playbackRate;
-    playbackAudio.loop = playbackLoop;
+    playbackAudio.loop = false; // looping handled manually (section-aware)
     playbackAudio.crossOrigin = 'anonymous';
+
+    // Known duration from the record (WebM blobs report Infinity via the element)
+    playbackDurationSec = (rec.durationMs || 0) / 1000;
+    if (els.pbTotalTime) els.pbTotalTime.textContent = playbackDurationSec.toFixed(1) + 's';
+
+    // Reset the A–B region to full track for each new recording
+    playbackLoopA = 0;
+    playbackLoopB = 1;
+    updateLoopRegionUi();
+    if (els.playbackControls) els.playbackControls.classList.toggle('is-loop', playbackLoop);
 
     try {
         playbackMediaSrc = audioCtx.createMediaElementSource(playbackAudio);
@@ -4725,9 +4866,21 @@ async function playRecording(id) {
     playbackMediaSrc.connect(playbackGainNode);
 
     playbackAudio.addEventListener('loadedmetadata', () => {
-        if (els.pbTotalTime) els.pbTotalTime.textContent = (playbackAudio.duration || 0).toFixed(1) + 's';
+        // Only trust the element's duration if it's finite (WebM often reports Infinity)
+        if (isFinite(playbackAudio.duration) && playbackAudio.duration > 0) {
+            playbackDurationSec = playbackAudio.duration;
+            if (els.pbTotalTime) els.pbTotalTime.textContent = playbackDurationSec.toFixed(1) + 's';
+        }
     });
-    playbackAudio.addEventListener('ended', () => stopPlayback());
+    playbackAudio.addEventListener('ended', () => {
+        if (playbackLoop) {
+            // Reached the natural end while looping (region ends at the track end) → restart at A
+            playbackAudio.currentTime = playbackLoopA * pbDuration();
+            playbackAudio.play().catch(() => {});
+        } else {
+            stopPlayback();
+        }
+    });
 
     playbackRecId = id;
     state.isMicActive = true;
@@ -4771,6 +4924,7 @@ function stopPlayback() {
     }
     playbackAudio = null;
     playbackMediaSrc = null;
+    playbackDurationSec = 0;
     if (playbackUiRaf) { cancelAnimationFrame(playbackUiRaf); playbackUiRaf = null; }
     if (els.playbackControls) els.playbackControls.style.display = 'none';
     cleanupPlayback();
@@ -4794,12 +4948,22 @@ function cleanupPlayback() {
 // Seek handler — HTMLAudioElement supports currentTime directly
 if (els.pbSeek) {
     els.pbSeek.addEventListener('input', () => {
-        if (!playbackAudio || !playbackAudio.duration) return;
+        const dur = pbDuration();
+        if (!playbackAudio || !dur) return;
         const ratio = Number(els.pbSeek.value) / 1000;
-        const pos = ratio * playbackAudio.duration;
+        const pos = ratio * dur;
         playbackAudio.currentTime = pos;
         if (els.pbCurTime) els.pbCurTime.textContent = pos.toFixed(1) + 's';
     });
+    // Suppress the playhead auto-update only WHILE dragging (not merely focused),
+    // otherwise the slider keeps focus after release and the bar freezes.
+    const seekStart = () => { pbSeeking = true; };
+    const seekEnd = () => { pbSeeking = false; };
+    els.pbSeek.addEventListener('pointerdown', seekStart);
+    els.pbSeek.addEventListener('pointerup', seekEnd);
+    els.pbSeek.addEventListener('pointercancel', seekEnd);
+    els.pbSeek.addEventListener('change', seekEnd);   // keyboard / programmatic commit
+    els.pbSeek.addEventListener('blur', seekEnd);
 }
 
 // Speed handler — preservesPitch keeps pitch constant
@@ -4811,14 +4975,50 @@ if (els.pbRate) {
     });
 }
 
-// Loop toggle
+// Section-loop toggle — reveals the A/B handles + region when on
 if (els.pbLoop) {
     els.pbLoop.addEventListener('click', () => {
         playbackLoop = !playbackLoop;
         els.pbLoop.classList.toggle('is-active', playbackLoop);
-        if (playbackAudio) playbackAudio.loop = playbackLoop;
+        if (els.playbackControls) els.playbackControls.classList.toggle('is-loop', playbackLoop);
+        if (playbackLoop) updateLoopRegionUi();
     });
 }
+
+// A/B handle dragging (Pointer Events unify mouse + touch; touch-action:none in CSS).
+function bindLoopHandle(handle, which) {
+    if (!handle) return;
+    const onMove = (clientX) => {
+        if (!els.pbSeekWrap) return;
+        const rect = els.pbSeekWrap.getBoundingClientRect();
+        if (rect.width <= 0) return;
+        let ratio = (clientX - rect.left) / rect.width;
+        ratio = Math.max(0, Math.min(1, ratio));
+        const MIN_GAP = 0.02;
+        if (which === 'a') {
+            playbackLoopA = Math.max(0, Math.min(ratio, playbackLoopB - MIN_GAP));
+        } else {
+            playbackLoopB = Math.min(1, Math.max(ratio, playbackLoopA + MIN_GAP));
+        }
+        updateLoopRegionUi();
+    };
+    handle.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        try { handle.setPointerCapture(e.pointerId); } catch (_) {}
+        const move = (ev) => onMove(ev.clientX);
+        const up = () => {
+            handle.removeEventListener('pointermove', move);
+            handle.removeEventListener('pointerup', up);
+            handle.removeEventListener('pointercancel', up);
+        };
+        handle.addEventListener('pointermove', move);
+        handle.addEventListener('pointerup', up);
+        handle.addEventListener('pointercancel', up);
+    });
+}
+bindLoopHandle(els.pbHandleA, 'a');
+bindLoopHandle(els.pbHandleB, 'b');
 
 // ============================================================
 // Export utilities — WAV (built-in) and MP3 (lamejs CDN)

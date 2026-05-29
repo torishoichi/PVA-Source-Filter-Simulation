@@ -3135,11 +3135,65 @@ body.learn-drawer-open { overflow: hidden; }
     min-width: 32px;
     text-align: center;
 }
-.pb-seek {
+.pb-seek-wrap {
+    position: relative;
     flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    height: 18px;
+}
+.pb-seek {
+    width: 100%;
     height: 3px;
     cursor: pointer;
+    position: relative;
+    z-index: 1;
 }
+/* A–B loop region highlight overlaid on the seek track */
+.pb-region {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    height: 6px;
+    background: rgba(79, 150, 80, 0.28);
+    border-radius: 2px;
+    pointer-events: none;
+    z-index: 0;
+    left: 0;
+    width: 100%;
+    display: none;          /* shown only while section loop is active */
+}
+.playback-controls.is-loop .pb-region { display: block; }
+/* Draggable A / B handles */
+.pb-handle {
+    position: absolute;
+    top: 50%;
+    width: 10px;
+    height: 16px;
+    margin-left: -5px;       /* center on its position */
+    transform: translateY(-50%);
+    background: #4f9650;
+    border: 1px solid #fff;
+    border-radius: 3px;
+    cursor: ew-resize;
+    z-index: 2;
+    touch-action: none;      /* iOS: prevent scroll-hijack during drag */
+    display: none;           /* shown only while section loop is active */
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+.playback-controls.is-loop .pb-handle { display: block; }
+.pb-handle::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 3px;
+    bottom: 3px;
+    width: 1px;
+    transform: translateX(-50%);
+    background: rgba(255, 255, 255, 0.7);
+}
+.pb-handle.pb-handle-a { left: 0%; }
+.pb-handle.pb-handle-b { left: 100%; }
 .pb-rate-select {
     flex: 0 0 auto;
     background: transparent;
