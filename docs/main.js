@@ -3616,66 +3616,6 @@ function drawVisualizer() {
         // Assign F1-F5 by continuity (with band-assignment fallback)
         const raw = assignFormants(candidates, anchors);
 
-        // --- Harmonic-bias correction for F1/F2 (absolute-accuracy fix) ---
-        // LPC poles get pulled onto strong harmonics, so the resonance reads off-center.
-        // Smooth the REAL FFT magnitude by ~one harmonic spacing (f0) to erase the comb,
-        // tilt-flatten it (+6 dB/oct) so a formant becomes a clean local max, then snap
-        // each LPC seed to that unbiased envelope peak. Symmetric smoothing keeps the
-        // peak CENTER, which is exactly what we want for frequency accuracy.
-        const f0c = state.cachedMicPitch;
-        if (f0c > 50) {
-            const bins = analyzer.frequencyBinCount;
-            const binHz = sr / analyzer.fftSize;
-            let fdb = (state.cachedMicData && state.cachedMicData.length === bins)
-                ? state.cachedMicData : null;
-            if (!fdb) {
-                if (!lpcCoreState.freqBuf || lpcCoreState.freqBuf.length !== bins) {
-                    lpcCoreState.freqBuf = new Float32Array(bins);
-                }
-                analyzer.getFloatFrequencyData(lpcCoreState.freqBuf);
-                fdb = lpcCoreState.freqBuf;
-            }
-            if (!lpcCoreState.tiltDb || lpcCoreState.tiltDb.length !== bins) {
-                lpcCoreState.tiltDb = new Float32Array(bins);
-                for (let b = 0; b < bins; b++) {
-                    lpcCoreState.tiltDb[b] = 20 * Math.log10(Math.max(1, b * binHz) / 100);
-                }
-            }
-            const tilt = lpcCoreState.tiltDb;
-            const hw = Math.max(2, Math.round(0.5 * f0c / binHz)); // smooth half-width ≈ f0/2
-            const env = (bin) => {                                 // tilt-flattened, f0-smoothed dB
-                let s = 0, c = 0;
-                for (let j = bin - hw; j <= bin + hw; j++) {
-                    if (j < 0 || j >= bins) continue;
-                    s += fdb[j] + tilt[j]; c++;
-                }
-                return c ? s / c : -Infinity;
-            };
-            const refine = (seed) => {
-                if (seed == null) return seed;
-                const win = Math.max(1.5 * f0c, 0.10 * seed);      // ± search window (Hz)
-                const lo = Math.max(1, Math.round((seed - win) / binHz));
-                const hi = Math.min(bins - 2, Math.round((seed + win) / binHz));
-                let bestBin = -1, bestVal = -Infinity;
-                for (let b = lo; b <= hi; b++) {
-                    const v = env(b);
-                    if (v > bestVal) { bestVal = v; bestBin = b; }
-                }
-                if (bestBin < 1) return seed;
-                const a0 = env(bestBin - 1), b0 = env(bestBin), c0 = env(bestBin + 1);
-                const denom = a0 - 2 * b0 + c0;
-                let d = 0;
-                if (Math.abs(denom) > 1e-6) d = 0.5 * (a0 - c0) / denom;
-                if (d < -1 || d > 1) d = 0;
-                const refined = (bestBin + d) * binHz;
-                // Guard against grabbing a neighbouring formant
-                if (Math.abs(refined - seed) > Math.max(0.25 * seed, 2 * f0c)) return seed;
-                return refined;
-            };
-            raw.f1 = refine(raw.f1);
-            raw.f2 = refine(raw.f2);
-        }
-
         const foundCount = ['f1', 'f2', 'f3', 'f4', 'f5'].filter(k => raw[k] != null).length;
         if (foundCount < 2) return { voiced: false };
 
@@ -4192,13 +4132,6 @@ function drawVisualizer() {
                 state.micFormantMethod === 'lpc-v2' ? estimateLpcV2Formants(micAnalyser, minDb, dbRange) :
                 state.micFormantMethod === 'lpc'    ? estimateLpcFormants(micAnalyser, minDb, dbRange, nyq) :
                                                       estimatePeakFormants(state.cachedMicData, minDb, dbRange, nyq, state.cachedMicPitch);
-            // During recording playback, override the formant values with the
-            // high-accuracy offline track (the live estimate above still ran, so the
-            // spectrum envelope overlay stays populated). Falls back to live until ready.
-            if (playbackAudio && playbackFormantTrack) {
-                const tracked = lookupFormantTrack(playbackAudio.currentTime);
-                if (tracked) estFormants = tracked;
-            }
             // Per-formant cache with timed fallback:
             // - Update cache when a formant is detected
             // - For undetected formants, fall back to cache value if it's recent enough
@@ -4215,8 +4148,9 @@ function drawVisualizer() {
             }
         }
 
-        // LPC envelope overlay (v2/v3 only): translucent curve showing the modeled vocal-tract response.
-        // Freshness check is skipped while paused so the envelope stays frozen with the formants.
+        // LPC envelope overlay (v2/v3): the REAL all-pole magnitude response of the same
+        // coefficients whose roots are the F1–F5 markers — so the curve and the markers are
+        // guaranteed consistent (markers sit on the envelope peaks).
         if ((state.micFormantMethod === 'lpc-v2' || state.micFormantMethod === 'lpc-v3')
             && lpcCoreState.lastCoefs
             && (state.isMicPaused || performance.now() - lpcCoreState.lastUpdate < 200)) {
@@ -4238,8 +4172,7 @@ function drawVisualizer() {
                 }
                 const magSq = reA * reA + imA * imA;
                 const db = -10 * Math.log10(magSq < 1e-30 ? 1e-30 : magSq);
-                dbs[s] = db;
-                freqs[s] = freq;
+                dbs[s] = db; freqs[s] = freq;
                 if (db < envMin) envMin = db;
                 if (db > envMax) envMax = db;
             }
@@ -4258,12 +4191,7 @@ function drawVisualizer() {
                 else canvasCtx.lineTo(x, y);
                 lastY = y;
             }
-            // The LPC model is only valid up to its (decimated) Nyquist = decSr/2.
-            // When that's below the display range, hold the last value flat to the
-            // right edge so the envelope doesn't look truncated mid-chart.
-            if (maxFreq < MAX_FREQ_DISPLAY) {
-                canvasCtx.lineTo(freqToX(MAX_FREQ_DISPLAY, width), lastY);
-            }
+            if (maxFreq < MAX_FREQ_DISPLAY) canvasCtx.lineTo(freqToX(MAX_FREQ_DISPLAY, width), lastY);
             canvasCtx.stroke();
             canvasCtx.setLineDash([]);
             canvasCtx.restore();
@@ -4833,6 +4761,7 @@ function updateLoopRegionUi() {
 // file. The result drives the playback formant display instead of the live path.
 // ============================================================
 let playbackFormantTrack = null; // { hop: sec, frames: [{f1..f5}|null] }
+let analyzingRecId = null;       // id of the recording currently being analyzed
 
 // Standalone Durand-Kerner (the live one is a closure; keep this self-contained).
 function _dkRoots(poly, n) {
@@ -4903,50 +4832,303 @@ function _offlineDecimate(mono, srOrig, targetSr) {
     return { data: out, sr: srOrig / factor };
 }
 
-// Assign F1–F5 across frames by continuity + band priors, then median-smooth.
-function _trackAndSmooth(frames, hopSec) {
-    const SLOTS = 5;
-    const priors = [500, 1500, 2500, 3500, 4500];
-    const tol = [350, 500, 650, 800, 950]; // max Hz from anchor for assignment
-    const assignedAll = new Array(frames.length);
-    let anchor = priors.slice();
-    for (let fi = 0; fi < frames.length; fi++) {
-        const cands = frames[fi];
-        const assigned = [null, null, null, null, null];
-        if (cands && cands.length) {
-            const used = new Array(cands.length).fill(false);
-            for (let s = 0; s < SLOTS; s++) {
-                let best = -1, bd = Infinity;
-                for (let j = 0; j < cands.length; j++) {
-                    if (used[j]) continue;
-                    if (s > 0 && assigned[s - 1] != null && cands[j].freq <= assigned[s - 1] + 30) continue;
-                    const d = Math.abs(cands[j].freq - anchor[s]);
-                    if (d < bd) { bd = d; best = j; }
-                }
-                if (best >= 0 && bd <= tol[s]) { assigned[s] = cands[best].freq; used[best] = true; }
+// --- In-place iterative radix-2 FFT (n = power of 2). inverse → IFFT (1/n scaled). ---
+function _fft(re, im, inverse) {
+    const n = re.length;
+    for (let i = 1, j = 0; i < n; i++) {
+        let bit = n >> 1;
+        for (; j & bit; bit >>= 1) j ^= bit;
+        j ^= bit;
+        if (i < j) { const tr = re[i]; re[i] = re[j]; re[j] = tr; const ti = im[i]; im[i] = im[j]; im[j] = ti; }
+    }
+    for (let len = 2; len <= n; len <<= 1) {
+        const ang = (inverse ? 2 : -2) * Math.PI / len;
+        const wr = Math.cos(ang), wi = Math.sin(ang);
+        const half = len >> 1;
+        for (let i = 0; i < n; i += len) {
+            let cwr = 1, cwi = 0;
+            for (let k = 0; k < half; k++) {
+                const ar = re[i + k], ai = im[i + k];
+                const br = re[i + k + half] * cwr - im[i + k + half] * cwi;
+                const bi = re[i + k + half] * cwi + im[i + k + half] * cwr;
+                re[i + k] = ar + br; im[i + k] = ai + bi;
+                re[i + k + half] = ar - br; im[i + k + half] = ai - bi;
+                const ncwr = cwr * wr - cwi * wi; cwi = cwr * wi + cwi * wr; cwr = ncwr;
             }
         }
-        assignedAll[fi] = assigned;
-        anchor = assigned.map((v, s) => (v != null ? v : priors[s]));
     }
-    const W = 2; // ±2 frames (5-tap) median
-    const res = new Array(frames.length);
-    for (let fi = 0; fi < frames.length; fi++) {
-        const obj = { f1: null, f2: null, f3: null, f4: null, f5: null };
-        for (let s = 0; s < SLOTS; s++) {
-            const vals = [];
-            for (let d = -W; d <= W; d++) {
-                const kk = fi + d;
-                if (kk >= 0 && kk < frames.length && assignedAll[kk][s] != null) vals.push(assignedAll[kk][s]);
-            }
-            if (vals.length) { vals.sort((a, b) => a - b); obj['f' + (s + 1)] = vals[Math.floor(vals.length / 2)]; }
-        }
-        res[fi] = obj;
-    }
-    return { hop: hopSec, frames: res };
+    if (inverse) { for (let i = 0; i < n; i++) { re[i] /= n; im[i] /= n; } }
 }
 
-function analyzeRecordingFormantsOffline(audioBuffer) {
+// Solve a (near-)symmetric linear system A x = b (n×n) via Gauss-Jordan w/ pivot.
+function _solveSym(A, b, n) {
+    const M = [];
+    for (let i = 0; i < n; i++) { const row = new Float64Array(n + 1); for (let j = 0; j < n; j++) row[j] = A[i][j]; row[n] = b[i]; M.push(row); }
+    for (let col = 0; col < n; col++) {
+        let piv = col, mx = Math.abs(M[col][col]);
+        for (let r = col + 1; r < n; r++) { const v = Math.abs(M[r][col]); if (v > mx) { mx = v; piv = r; } }
+        if (mx < 1e-12) return null;
+        if (piv !== col) { const t = M[piv]; M[piv] = M[col]; M[col] = t; }
+        const d = M[col][col];
+        for (let r = 0; r < n; r++) {
+            if (r === col) continue;
+            const f = M[r][col] / d;
+            if (f === 0) continue;
+            for (let c = col; c <= n; c++) M[r][c] -= f * M[col][c];
+        }
+    }
+    const x = new Float64Array(n);
+    for (let i = 0; i < n; i++) x[i] = M[i][n] / M[i][i];
+    return x;
+}
+
+// Short-time-energy weights (SWLP): emphasise high-energy = closed-phase samples.
+function _steWeights(x, M, L) {
+    const w = new Float64Array(M);
+    let acc = 0;
+    for (let n = 0; n < M; n++) {
+        acc += x[n] * x[n];
+        if (n >= L) acc -= x[n - L] * x[n - L];
+        w[n] = acc;
+    }
+    let mx = 0; for (let n = 0; n < M; n++) if (w[n] > mx) mx = w[n];
+    if (mx <= 0) { w.fill(1); return w; }
+    for (let n = 0; n < M; n++) w[n] = 0.1 + 0.9 * (w[n] / mx); // floor 0.1 for stability
+    return w;
+}
+
+// Weighted covariance-method LP (SWLP). Returns prediction coeffs a[0..p] (a[0]=1).
+function _weightedLP(x, M, p, w) {
+    if (M <= p + 2) return null;
+    const phi = []; for (let i = 0; i < p; i++) phi.push(new Float64Array(p));
+    const psi = new Float64Array(p);
+    for (let n = p; n < M; n++) {
+        const wn = w[n];
+        if (wn === 0) continue;
+        const xn = x[n];
+        for (let i = 1; i <= p; i++) {
+            const xi = x[n - i] * wn;
+            psi[i - 1] += xi * xn;
+            for (let j = i; j <= p; j++) phi[i - 1][j - 1] += xi * x[n - j];
+        }
+    }
+    for (let i = 0; i < p; i++) { for (let j = 0; j < i; j++) phi[i][j] = phi[j][i]; phi[i][i] += 1e-6; }
+    const sol = _solveSym(phi, psi, p);
+    if (!sol) return null;
+    const a = new Float64Array(p + 1); a[0] = 1;
+    for (let i = 0; i < p; i++) a[i + 1] = sol[i];
+    return a;
+}
+
+// Cepstrally-smoothed log-spectrum envelope of a frame (lifter below the pitch period).
+function _cepEnvelope(x, M, Nfft, sr, f0) {
+    const re = new Float64Array(Nfft), im = new Float64Array(Nfft);
+    for (let i = 0; i < M && i < Nfft; i++) {
+        const wnd = 0.5 * (1 - Math.cos(2 * Math.PI * i / (M - 1)));
+        re[i] = x[i] * wnd;
+    }
+    _fft(re, im, false);
+    const logm = new Float64Array(Nfft);
+    for (let k = 0; k < Nfft; k++) logm[k] = Math.log(Math.hypot(re[k], im[k]) + 1e-9);
+    const cre = logm.slice(0), cim = new Float64Array(Nfft);
+    _fft(cre, cim, true); // cepstrum
+    const period = Math.max(2, Math.round(sr / Math.max(60, f0)));
+    const cut = Math.max(4, Math.round(period * 0.7));
+    for (let q = 0; q < Nfft; q++) {
+        const qq = q <= Nfft / 2 ? q : Nfft - q;
+        if (qq > cut) { cre[q] = 0; cim[q] = 0; }
+    }
+    _fft(cre, cim, false); // smoothed log-spectrum (real part)
+    const half = Nfft >> 1;
+    const env = new Float64Array(half);
+    for (let k = 0; k < half; k++) env[k] = cre[k];
+    return { env, binHz: sr / Nfft, half };
+}
+
+// Multitaper (sine-taper) cepstral envelope: average K orthogonal tapered spectra to
+// cut variance, then cepstrally smooth → a steadier envelope for peak refinement.
+function _multitaperEnvelope(x, M, Nfft, sr, f0, K) {
+    const pow = new Float64Array(Nfft);
+    const norm = Math.sqrt(2 / (M + 1));
+    for (let k = 0; k < K; k++) {
+        const re = new Float64Array(Nfft), im = new Float64Array(Nfft);
+        for (let i = 0; i < M && i < Nfft; i++) {
+            const taper = norm * Math.sin(Math.PI * (k + 1) * (i + 1) / (M + 1));
+            re[i] = x[i] * taper;
+        }
+        _fft(re, im, false);
+        for (let b = 0; b < Nfft; b++) pow[b] += re[b] * re[b] + im[b] * im[b];
+    }
+    const logm = new Float64Array(Nfft);
+    for (let b = 0; b < Nfft; b++) logm[b] = 0.5 * Math.log(pow[b] / K + 1e-12);
+    const cre = logm.slice(0), cim = new Float64Array(Nfft);
+    _fft(cre, cim, true);
+    const period = Math.max(2, Math.round(sr / Math.max(60, f0)));
+    const cut = Math.max(4, Math.round(period * 0.7));
+    for (let q = 0; q < Nfft; q++) {
+        const qq = q <= Nfft / 2 ? q : Nfft - q;
+        if (qq > cut) { cre[q] = 0; cim[q] = 0; }
+    }
+    _fft(cre, cim, false);
+    const half = Nfft >> 1;
+    const env = new Float64Array(half);
+    for (let k = 0; k < half; k++) env[k] = cre[k];
+    return { env, binHz: sr / Nfft, half };
+}
+
+// Snap each candidate to the nearest peak of the smoothed envelope (±150 Hz).
+function _refineCandsToEnvelope(cands, env) {
+    if (!env) return cands;
+    const e = env.env, binHz = env.binHz, half = env.half;
+    const span = Math.round(150 / binHz);
+    return cands.map((c) => {
+        const bin = c.freq / binHz;
+        const lo = Math.max(1, Math.floor(bin - span));
+        const hi = Math.min(half - 2, Math.ceil(bin + span));
+        let bb = -1, bv = -Infinity;
+        for (let k = lo; k <= hi; k++) if (e[k] > bv) { bv = e[k]; bb = k; }
+        if (bb < 1) return c;
+        const a0 = e[bb - 1], b0 = e[bb], c0 = e[bb + 1];
+        const den = a0 - 2 * b0 + c0;
+        let d = 0; if (Math.abs(den) > 1e-9) d = 0.5 * (a0 - c0) / den; if (d < -1 || d > 1) d = 0;
+        const rf = (bb + d) * binHz;
+        return { freq: Math.abs(rf - c.freq) > 200 ? c.freq : rf, bw: c.bw, support: c.support };
+    });
+}
+
+// Per-frame candidates: weighted-LP at several orders, keep poles stable across orders.
+// FIR inverse filter: y[n] = x[n] - Σ a_k x[n-k] (a = prediction coeffs, a[0]=1).
+function _firInv(a, x, M) {
+    const ord = a.length - 1;
+    const y = new Float64Array(M);
+    for (let n = 0; n < M; n++) {
+        let s = x[n];
+        const kmax = Math.min(ord, n);
+        for (let k = 1; k <= kmax; k++) s -= a[k] * x[n - k];
+        y[n] = s;
+    }
+    return y;
+}
+
+// IAIF (Iterative Adaptive Inverse Filtering, simplified): estimate and remove the
+// glottal source contribution so the residual reflects the vocal tract more purely.
+// Returns the source-removed frame (formant LPC then runs on this).
+function _iaif(seg, M, p) {
+    const lpc = (x, ord) => { const k = burgLpc(x, M, ord); return k ? reflectionsToPredictions(k, ord) : null; };
+    const g1 = lpc(seg, 1); if (!g1) return seg;        // coarse tilt (order 1)
+    const y1 = _firInv(g1, seg, M);
+    const vt1 = lpc(y1, p); if (!vt1) return seg;       // first vocal-tract estimate
+    const gest = _firInv(vt1, seg, M);                  // glottal-flow estimate (VT removed)
+    const g2 = lpc(gest, Math.min(4, p)); if (!g2) return y1; // refined glottal model
+    return _firInv(g2, seg, M);                          // source-removed speech
+}
+
+// Extract resonance poles (freq, bw) from prediction coeffs a[0..order].
+function _polesFromCoeffs(a, order, sr, out) {
+    const poly = new Float64Array(order + 1); poly[0] = 1;
+    for (let i = 1; i <= order; i++) poly[i] = -a[i];
+    const roots = _dkRoots(poly, order);
+    if (!roots) return;
+    for (let i = 0; i < order; i++) {
+        const re = roots[2 * i], im = roots[2 * i + 1];
+        if (im <= 0) continue;
+        const mag = Math.hypot(re, im);
+        if (mag <= 0 || mag >= 1) continue;
+        const freq = Math.atan2(im, re) * sr / (2 * Math.PI);
+        const bw = -Math.log(mag) * sr / Math.PI;
+        if (freq < 90 || freq > 5500 || bw > 700) continue;
+        out.push({ freq, bw });
+    }
+}
+
+// Cluster a pooled set of poles (from many window×order estimates); keep clusters
+// with enough support (a real formant recurs across windows/orders).
+function _clusterPoles(poles, minSupport) {
+    if (!poles.length) return null;
+    poles.sort((u, v) => u.freq - v.freq);
+    const clusters = [];
+    let cur = [poles[0]];
+    for (let i = 1; i < poles.length; i++) {
+        if (poles[i].freq - cur[cur.length - 1].freq <= 150) cur.push(poles[i]);
+        else { clusters.push(cur); cur = [poles[i]]; }
+    }
+    clusters.push(cur);
+    const med = (arr) => { const s = arr.slice().sort((a, b) => a - b); return s[s.length >> 1]; };
+    let out = [];
+    for (const cl of clusters) {
+        if (cl.length < minSupport) continue;
+        out.push({ freq: med(cl.map(c => c.freq)), bw: med(cl.map(c => c.bw)), support: cl.length });
+    }
+    if (!out.length) {
+        out = clusters.filter(cl => cl.length >= 2)
+            .map(cl => ({ freq: med(cl.map(c => c.freq)), bw: med(cl.map(c => c.bw)), support: cl.length }));
+    }
+    out.sort((a, b) => a.freq - b.freq);
+    return out.length ? out : null;
+}
+
+// Global Viterbi formant tracking (per band) + light median smoothing.
+function _viterbiTrack(frameCands, hopSec, priorsPerFrame) {
+    const F = frameCands.length;
+    const bands = [[200, 1100], [700, 2800], [1700, 3600], [2800, 4600], [3800, 5500]];
+    const prior = [500, 1500, 2500, 3500, 4500];
+    const MISS = 400, JUMP_K = 1 / 300, BW_K = 1 / 400, PRIOR_K = 1 / 600, APPEAR = 60;
+    const tracks = [];
+    for (let s = 0; s < 5; s++) {
+        // Per-frame prior: data-driven from pass 1 if provided, else the fixed band center.
+        const pr = (t) => (priorsPerFrame && priorsPerFrame[t] && priorsPerFrame[t][s] != null)
+            ? priorsPerFrame[t][s] : prior[s];
+        const lo = bands[s][0], hi = bands[s][1];
+        const states = new Array(F);
+        for (let t = 0; t < F; t++) {
+            const cs = frameCands[t];
+            const lst = [];
+            if (cs) for (const c of cs) if (c.freq >= lo && c.freq <= hi) lst.push(c);
+            lst.push(null); // "missing"
+            states[t] = lst;
+        }
+        const dp = new Array(F), bp = new Array(F);
+        for (let t = 0; t < F; t++) { dp[t] = new Float64Array(states[t].length); bp[t] = new Int32Array(states[t].length); }
+        for (let i = 0; i < states[0].length; i++) {
+            const c = states[0][i];
+            dp[0][i] = c ? (BW_K * c.bw + PRIOR_K * Math.abs(c.freq - pr(0))) : MISS;
+        }
+        for (let t = 1; t < F; t++) {
+            for (let i = 0; i < states[t].length; i++) {
+                const c = states[t][i];
+                const emis = c ? (BW_K * c.bw + PRIOR_K * Math.abs(c.freq - pr(t))) : MISS * 0.5;
+                let best = Infinity, bi = 0;
+                for (let j = 0; j < states[t - 1].length; j++) {
+                    const pc = states[t - 1][j];
+                    const trans = (c && pc) ? JUMP_K * Math.abs(c.freq - pc.freq) : APPEAR;
+                    const cost = dp[t - 1][j] + trans;
+                    if (cost < best) { best = cost; bi = j; }
+                }
+                dp[t][i] = best + emis; bp[t][i] = bi;
+            }
+        }
+        let bi = 0, bv = Infinity;
+        for (let i = 0; i < states[F - 1].length; i++) if (dp[F - 1][i] < bv) { bv = dp[F - 1][i]; bi = i; }
+        const path = new Array(F);
+        for (let t = F - 1; t >= 0; t--) { const c = states[t][bi]; path[t] = c ? c.freq : null; bi = bp[t][bi]; }
+        tracks.push(path);
+    }
+    const W = 2;
+    const frames = new Array(F);
+    for (let t = 0; t < F; t++) frames[t] = { f1: null, f2: null, f3: null, f4: null, f5: null };
+    for (let s = 0; s < 5; s++) {
+        for (let t = 0; t < F; t++) {
+            const vals = [];
+            for (let d = -W; d <= W; d++) { const k = t + d; if (k >= 0 && k < F && tracks[s][k] != null) vals.push(tracks[s][k]); }
+            if (vals.length) { vals.sort((a, b) => a - b); frames[t]['f' + (s + 1)] = vals[vals.length >> 1]; }
+        }
+    }
+    return { hop: hopSec, frames };
+}
+
+async function analyzeRecordingFormantsOffline(audioBuffer) {
+    const _yield = () => new Promise(r => setTimeout(r, 0));
+    let _processed = 0;
     const srOrig = audioBuffer.sampleRate;
     const nch = audioBuffer.numberOfChannels;
     const ch0 = audioBuffer.getChannelData(0);
@@ -4957,22 +5139,26 @@ function analyzeRecordingFormantsOffline(audioBuffer) {
         for (let i = 0; i < mono.length; i++) mono[i] = 0.5 * (ch0[i] + ch1[i]);
     }
     const { data: sig, sr } = _offlineDecimate(mono, srOrig, 11025);
-    const hopSec = 0.01;
+    const hopSec = 0.005;                                  // 5 ms hop (2× time resolution)
     const hop = Math.max(1, Math.round(hopSec * sr));
-    const p = Math.min(16, Math.max(10, Math.round(sr / 1000) + 2)); // ≈13 at 11 kHz
+    const baseP = Math.min(16, Math.max(10, Math.round(sr / 1000) + 2)); // ≈13 at 11 kHz
+    const orders = [baseP - 2, baseP, baseP + 2].filter(o => o >= 8);
+    const winPeriods = [3, 4, 5];                          // window-length ensemble
     const minLag = Math.floor(sr / 500), maxLag = Math.floor(sr / 70); // f0 70–500 Hz
     const w40 = Math.floor(0.04 * sr);
-    const minWin = Math.floor(0.02 * sr), maxWin = Math.floor(0.05 * sr);
-    const frames = [];
-    const preAlpha = 0.97;
+    const minWin = Math.floor(0.02 * sr), maxWin = Math.floor(0.055 * sr);
+    const Nfft = 2048;
+    const frameCands = [];
 
     for (let center = 0; center < sig.length; center += hop) {
-        // f0 via normalized autocorrelation on a 40 ms window
+        // Yield to the event loop every ~48 frames so a heavy analysis never freezes the UI
+        if ((_processed++ & 47) === 0 && _processed > 1) await _yield();
+        // f0 via normalized autocorrelation (40 ms)
         let s0 = center - (w40 >> 1); if (s0 < 0) s0 = 0;
         let s1 = s0 + w40; if (s1 > sig.length) { s1 = sig.length; s0 = Math.max(0, s1 - w40); }
         let r0 = 0; for (let i = s0; i < s1; i++) r0 += sig[i] * sig[i];
         const rms = Math.sqrt(r0 / Math.max(1, s1 - s0));
-        if (rms < 0.005) { frames.push(null); continue; }
+        if (rms < 0.005) { frameCands.push(null); continue; }
         let bestLag = -1, bestVal = 0;
         for (let lag = minLag; lag <= maxLag && lag < (s1 - s0); lag++) {
             let acc = 0;
@@ -4982,41 +5168,41 @@ function analyzeRecordingFormantsOffline(audioBuffer) {
         }
         const voiced = bestVal > 0.3 && bestLag > 0;
         const period = voiced ? bestLag : Math.floor(0.025 * sr);
-        // pitch-synchronous window ≈ 4 periods (bounded 20–50 ms)
-        let winLen = Math.max(minWin, Math.min(maxWin, 4 * period));
-        let a0 = center - (winLen >> 1); if (a0 < 0) a0 = 0;
-        let a1 = a0 + winLen; if (a1 > sig.length) { a1 = sig.length; a0 = Math.max(0, a1 - winLen); }
-        const M = a1 - a0;
-        if (M < p + 4) { frames.push(null); continue; }
-        const x = new Float64Array(M);
-        for (let i = 0; i < M; i++) {
-            const xn = sig[a0 + i], xn1 = i > 0 ? sig[a0 + i - 1] : sig[a0 + i];
-            const pe = xn - preAlpha * xn1;
-            const wnd = 0.5 * (1 - Math.cos(2 * Math.PI * i / (M - 1)));
-            x[i] = pe * wnd;
+
+        // Window-length ensemble: each window → IAIF source removal → SWLP at multiple
+        // orders → pooled poles. Stable poles (recurring across windows×orders) survive.
+        const poles = [];
+        let envFrame = null;
+        for (const kp of winPeriods) {
+            let winLen = Math.max(minWin, Math.min(maxWin, kp * period));
+            let a0 = center - (winLen >> 1); if (a0 < 0) a0 = 0;
+            let a1 = a0 + winLen; if (a1 > sig.length) { a1 = sig.length; a0 = Math.max(0, a1 - winLen); }
+            const M = a1 - a0;
+            if (M < orders[orders.length - 1] + 8) continue;
+            const seg = new Float64Array(M);
+            for (let i = 0; i < M; i++) {
+                const wnd = 0.5 * (1 - Math.cos(2 * Math.PI * i / (M - 1)));
+                seg[i] = sig[a0 + i] * wnd;
+            }
+            const y = _iaif(seg, M, baseP);               // glottal source removed
+            const w = _steWeights(y, M, baseP + 1);       // SWLP weights (closed-phase emphasis)
+            for (const ord of orders) {
+                const a = _weightedLP(y, M, ord, w);
+                if (a) _polesFromCoeffs(a, ord, sr, poles);
+            }
+            if (kp === 4) envFrame = _multitaperEnvelope(seg, M, Nfft, sr, voiced ? sr / period : 150, 5);
         }
-        const k = burgLpc(x, M, p);
-        if (!k) { frames.push(null); continue; }
-        const a = reflectionsToPredictions(k, p);
-        const poly = new Float64Array(p + 1); poly[0] = 1;
-        for (let i = 1; i <= p; i++) poly[i] = -a[i];
-        const roots = _dkRoots(poly, p);
-        if (!roots) { frames.push(null); continue; }
-        const cands = [];
-        for (let i = 0; i < p; i++) {
-            const re = roots[2 * i], im = roots[2 * i + 1];
-            if (im <= 0) continue;
-            const mag = Math.hypot(re, im);
-            if (mag <= 0 || mag >= 1) continue;
-            const freq = Math.atan2(im, re) * sr / (2 * Math.PI);
-            const bw = -Math.log(mag) * sr / Math.PI;
-            if (freq < 90 || freq > 5500 || bw > 700) continue;
-            cands.push({ freq, bw });
-        }
-        cands.sort((u, v) => u.freq - v.freq);
-        frames.push(cands.length ? cands : null);
+        const minSupport = Math.max(2, Math.ceil(winPeriods.length * orders.length * 0.25));
+        let cands = _clusterPoles(poles, minSupport);
+        if (!cands || !cands.length) { frameCands.push(null); continue; }
+        cands = _refineCandsToEnvelope(cands, envFrame);  // multitaper-envelope refine
+        frameCands.push(cands);
     }
-    return _trackAndSmooth(frames, hopSec);
+    // Two-pass Viterbi: pass 1 (fixed priors) → smoothed track becomes data-driven
+    // priors for pass 2, anchoring each frame to its own local estimate.
+    const pass1 = _viterbiTrack(frameCands, hopSec);
+    const priors2 = pass1.frames.map(f => [f.f1, f.f2, f.f3, f.f4, f.f5]);
+    return _viterbiTrack(frameCands, hopSec, priors2);
 }
 
 // Decode + analyze in the background; applied once ready (live path used until then).
@@ -5024,20 +5210,24 @@ function analyzeRecordingFormantsOffline(audioBuffer) {
 async function buildPlaybackFormantTrack(id, blob) {
     playbackFormantTrack = null;
     if (!audioCtx) return;
+    analyzingRecId = id;            // show "解析中…" on the row
+    renderRecordingsList();
     try {
         const arr = await blob.arrayBuffer();
         const audioBuf = await audioCtx.decodeAudioData(arr.slice(0));
-        const track = analyzeRecordingFormantsOffline(audioBuf);
+        const track = await analyzeRecordingFormantsOffline(audioBuf); // async/chunked
         if (playbackAudio) playbackFormantTrack = track; // still playing?
         try {
             await RecordingsDB.markAnalyzed(id, track);
             const cached = cachedRecordingsList && cachedRecordingsList.find(r => r.id === id);
             if (cached) { cached.analyzed = true; cached.formantTrack = track; }
-            renderRecordingsList();
         } catch (e) { console.warn('markAnalyzed failed:', e); }
     } catch (err) {
         console.warn('Offline formant analysis failed:', err);
         playbackFormantTrack = null;
+    } finally {
+        if (analyzingRecId === id) analyzingRecId = null;
+        renderRecordingsList();
     }
 }
 
@@ -5083,14 +5273,9 @@ async function playRecording(id) {
     playbackDurationSec = (rec.durationMs || 0) / 1000;
     if (els.pbTotalTime) els.pbTotalTime.textContent = playbackDurationSec.toFixed(1) + 's';
 
-    // High-accuracy offline formant track: reuse the cached one if already analyzed,
-    // otherwise build it in the background (live path used until ready).
+    // NOTE: offline high-accuracy track is disabled for now — playback uses the same
+    // self-consistent live LPC path (curve = LPC response, markers = its roots) as the mic.
     playbackFormantTrack = null;
-    if (rec.formantTrack && rec.formantTrack.frames && rec.formantTrack.frames.length) {
-        playbackFormantTrack = rec.formantTrack;
-    } else {
-        buildPlaybackFormantTrack(rec.id, rec.blob);
-    }
 
     // Reset the A–B region to full track for each new recording
     playbackLoopA = 0;
@@ -5460,7 +5645,13 @@ function renderRecordingsList() {
         delBtn.addEventListener('click', () => deleteRecording(rec.id));
 
         li.append(timeEl, labelInput, durEl);
-        if (rec.analyzed) {
+        if (rec.id === analyzingRecId) {
+            const busyEl = document.createElement('span');
+            busyEl.className = 'rec-analyzed is-analyzing';
+            busyEl.textContent = '⏳ 解析中…';
+            busyEl.title = '高精度フォルマント解析を実行中';
+            li.append(busyEl);
+        } else if (rec.analyzed) {
             const analyzedEl = document.createElement('span');
             analyzedEl.className = 'rec-analyzed';
             analyzedEl.textContent = '✓ Analyzed';
@@ -5591,6 +5782,10 @@ if (els.btnImport && els.importInput) {
 if (window.RecordingsDB) {
     refreshRecordingsList().catch(err => console.error('Initial recordings load failed:', err));
 }
+
+// App version — shown in the bottom-right corner (bump on each release)
+const APP_VERSION = 'v1.6.0';
+(() => { const el = document.getElementById('app-version'); if (el) el.textContent = APP_VERSION; })();
 
 // Service Worker — enables offline use and "Add to Home Screen"
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {

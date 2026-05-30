@@ -3100,6 +3100,23 @@ body.learn-drawer-open { overflow: hidden; }
     padding: 1px 7px;
     white-space: nowrap;
 }
+.rec-analyzed.is-analyzing {
+    color: #c98a16;
+    background: rgba(201, 138, 22, 0.12);
+    border-color: rgba(201, 138, 22, 0.4);
+}
+.app-version {
+    position: fixed;
+    right: 8px;
+    bottom: 6px;
+    font-size: 0.62rem;
+    color: var(--text-secondary);
+    opacity: 0.4;
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+    z-index: 50;
+    user-select: none;
+}
 .rec-btn {
     flex: 0 0 auto;
     background: transparent;
