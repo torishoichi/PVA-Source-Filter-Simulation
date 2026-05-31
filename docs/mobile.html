@@ -100,6 +100,14 @@
                 <input type="range" id="mic-gain" min="0" max="5" value="1.0" step="0.1">
                 <span class="control-val" id="mic-gain-val">1.0x</span>
             </div>
+            <div class="toolbar-item">
+                <select id="mic-device-select" class="mobile-select" title="マイクデバイス" style="display:none;">
+                    <option value="">既定のマイク</option>
+                </select>
+            </div>
+            <div class="toolbar-item">
+                <button id="mic-record" class="rec-btn" type="button" style="display:none;" title="録音" aria-label="Record">● Rec<span id="mic-record-timer" style="margin-left:4px;"></span></button>
+            </div>
         </div>
     </section>
 
@@ -107,11 +115,35 @@
     <nav class="tab-nav">
         <button class="tab-btn active" data-tab="source">Source</button>
         <button class="tab-btn" data-tab="filter">Filter</button>
+        <button class="tab-btn" data-tab="rec">Rec</button>
         <button class="tab-btn" data-tab="learn">Learn</button>
     </nav>
 
     <!-- Tab: Source -->
     <section class="tab-content active" id="tab-source">
+        <details class="card vibrato-card" id="loudness-panel" open>
+            <summary class="vibrato-summary">
+                <span class="vibrato-title">Loudness Ceiling</span>
+                <span class="vibrato-chevron" aria-hidden="true">▾</span>
+            </summary>
+            <div class="vibrato-body">
+                <div class="loud-meter">
+                    <div class="loud-track">
+                        <div class="loud-fill" id="loud-fill"></div>
+                        <div class="loud-marker" id="loud-marker"></div>
+                    </div>
+                    <span class="loud-val" id="loud-val">— dB</span>
+                </div>
+                <div class="loud-ceiling-row">
+                    <label for="loud-ceiling">Ceiling <span class="tooltip"
+                            data-tooltip="この声量（dB）を超えると赤。マイク感度・距離に依存する相対値なので、Gain と立ち位置を固定してから自分の『押さずに楽に出せる上限』に合わせる。設定はブラウザに保存。">[?]</span></label>
+                    <input type="range" id="loud-ceiling" min="-48" max="0" value="-18" step="1" class="mobile-range">
+                    <span class="loud-ceiling-val" id="loud-ceiling-val">-18 dB</span>
+                </div>
+                <p class="loud-hint">マイクをONにすると声量がバーで出ます。縦線（天井）を超えると赤、手前で黄、安全域は緑。緑〜黄を保って歌う練習で大声・押し込みを抑制。</p>
+            </div>
+        </details>
+
         <div class="card">
             <label class="slider-label">
                 Pitch (f₀) <span class="tooltip"
@@ -148,6 +180,14 @@
                 <span class="slider-val" id="resistance-val">1.0</span>
             </label>
             <input type="range" id="resistance-slider" min="0.3" max="2.5" value="1.0" step="0.1" class="mobile-range">
+        </div>
+
+        <div class="card">
+            <div class="card-row">
+                <span>Airflow (U = P/R) <span class="tooltip"
+                        data-tooltip="気流量。呼気圧（P）と声門抵抗（R）の力学的なバランスの結果として生じる媒介的な値です。">[?]</span></span>
+                <span id="airflow-val" class="mono">1.00</span>
+            </div>
         </div>
 
         <details class="card vibrato-card">
@@ -235,6 +275,77 @@
                 </select>
             </div>
         </div>
+
+        <details class="card vibrato-card">
+            <summary class="vibrato-summary">
+                <span class="vibrato-title">Voice Source (Rd)</span>
+                <span class="vibrato-chevron" aria-hidden="true">▾</span>
+            </summary>
+            <div class="vibrato-body">
+                <div class="vibrato-row">
+                    <label class="slider-label" for="rd-slider">
+                        Rd (Shape) <span class="tooltip"
+                            data-tooltip="Fant (1995) の形状パラメータ。波形全体の形を制御するマスター値です。低い値（0.3〜）はPressed発声、中間値（1.0前後）はModal発声、高い値（〜2.7）はBreathy発声に対応します。">[?]</span>
+                        <span class="slider-val" id="rd-val">—</span>
+                    </label>
+                    <input type="range" id="rd-slider" min="0.3" max="2.7" value="1.0" step="0.01" class="mobile-range">
+                    <small class="vibrato-hint">声門波形の形。低い=圧迫的 / 中央=均衡 / 高い=息漏れ</small>
+                </div>
+                <div style="margin-top:10px;">
+                    <span class="guide-toggle" id="lf-guide-toggle">[??] Show Guide</span>
+                </div>
+                <div class="lf-guide-panel" id="lf-guide-panel" style="display:none;">
+                    <table class="guide-table">
+                        <thead>
+                            <tr>
+                                <th>パラメータ</th>
+                                <th>意味</th>
+                                <th>値が高い時</th>
+                                <th>値が低い時</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Rd</strong></td>
+                                <td>波形全体の形状を決めるマスター値</td>
+                                <td>息漏れ寄り。閉鎖が緩く倍音が少ない</td>
+                                <td>圧迫寄り。閉鎖が急峻で倍音が豊か</td>
+                            </tr>
+                            <tr>
+                                <td><strong>OQ</strong><br><small>開放率</small></td>
+                                <td>1周期中、声門が開いている割合</td>
+                                <td>長く開放 → Breathy、柔らかい音</td>
+                                <td>短く開放 → Pressed、鋭い音</td>
+                            </tr>
+                            <tr>
+                                <td><strong>SQ</strong><br><small>速度比</small></td>
+                                <td>開く速度と閉じる速度の比率</td>
+                                <td>急速に開き緩やかに閉じる → 倍音↑</td>
+                                <td>対称的な開閉 → 倍音↓</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Tp</strong><br><small>流量ピーク</small></td>
+                                <td>気流が最大になる時点</td>
+                                <td colspan="2" style="text-align:center; color:#8b949e;">波形のピーク位置を示すマーカー</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Te</strong><br><small>閉鎖点</small></td>
+                                <td>声門が閉じる時点（最大興奮点）</td>
+                                <td colspan="2" style="text-align:center; color:#8b949e;">Open相とReturn相の境界マーカー</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <h4 class="guide-subtitle">Rd スケール（5段階）</h4>
+                    <div class="rd-scale">
+                        <div class="rd-level pressed-strong">Rd &lt; 0.5<br><small>Pressed寄り — 倍音↑<br>声帯が強く閉鎖。パワフルな音色</small></div>
+                        <div class="rd-level pressed-mild">0.5 – 0.9<br><small>やや Pressed — 倍音やや↑<br>明瞭だがやや硬い音色</small></div>
+                        <div class="rd-level modal">0.9 – 1.3<br><small>Modal — バランス型<br>健康的な発声。最適バランス</small></div>
+                        <div class="rd-level breathy-mild">1.3 – 2.0<br><small>やや Breathy — 倍音↓<br>柔らかく温かみのある音色</small></div>
+                        <div class="rd-level breathy-strong">Rd &gt; 2.0<br><small>Breathy寄り — 倍音↓↓<br>息の混じった柔らかい音色</small></div>
+                    </div>
+                </div>
+            </div>
+        </details>
     </section>
 
     <!-- Tab: Filter -->
@@ -339,6 +450,107 @@
                 <button class="preset-btn" data-preset="close">Close</button>
             </div>
         </div>
+
+        <!-- Vowel Space — F1×F2 map (uses LPC v3 formant data) -->
+        <details id="vowel-space-panel" class="vib-analysis-panel">
+            <summary class="vib-analysis-summary">
+                <span class="vib-analysis-disclosure" aria-hidden="true">▸</span>
+                <span class="vib-analysis-title">Vowel Space</span>
+                <span class="vib-analysis-summary-hint">マイクONで母音空間を表示 (F1×F2)</span>
+            </summary>
+            <div class="vib-analysis-body is-basic" id="vs-body">
+                <div class="vib-analysis-controls">
+                    <div class="vs-lang-tabs" id="vs-voice-tabs" role="tablist" aria-label="声道長プロファイル">
+                        <button class="vs-lang-tab is-active" data-voice="male" type="button" role="tab" aria-selected="true" title="AMAB — 平均的な男性の声道長プロファイル">AMAB</button>
+                        <button class="vs-lang-tab" data-voice="female" type="button" role="tab" aria-selected="false" title="AFAB — 平均的な女性の声道長プロファイル">AFAB</button>
+                        <button class="vs-lang-tab" data-voice="child" type="button" role="tab" aria-selected="false" title="子供 (声道長 ~40% 短い)">Child</button>
+                        <button class="vs-lang-tab" data-voice="me" type="button" role="tab" aria-selected="false" disabled title="個人キャリブレーション結果 (Calibrate ボタンで作成)">Me</button>
+                    </div>
+                    <button id="vs-calibrate-btn" class="vs-calibrate-btn" type="button" title="自分の発声で参照値を測定 (各母音 2 秒ずつ)">🎯 Calibrate</button>
+                    <div class="vs-lang-tabs" id="vs-lang-tabs" role="tablist" aria-label="参照母音">
+                        <button class="vs-lang-tab is-active" data-lang="jp" type="button" role="tab" aria-selected="true">JP 5</button>
+                        <button class="vs-lang-tab" data-lang="en" type="button" role="tab" aria-selected="false">IPA EN</button>
+                    </div>
+                    <div class="vib-mode-tabs" id="vs-mode-tabs" role="tablist" aria-label="表示モード">
+                        <button class="vib-mode-tab is-active" data-mode="basic" type="button" role="tab" aria-selected="true">Basic</button>
+                        <button class="vib-mode-tab" data-mode="advanced" type="button" role="tab" aria-selected="false">Advanced</button>
+                    </div>
+                </div>
+                <div class="vib-section">
+                    <div class="vib-section-head">
+                        <span class="vib-section-title">Detected — mic input</span>
+                    </div>
+                    <div class="vs-readout-row">
+                        <div class="vstat">
+                            <span class="vstat-label">Nearest <span class="tooltip" data-tooltip="現在の (F1, F2) に最も近い参照母音 (log Hz 距離)。括弧内は距離 (cents-like スケール)。">[?]</span></span>
+                            <span class="vstat-val" id="vs-nearest">—</span>
+                        </div>
+                        <div class="vstat">
+                            <span class="vstat-label">F1 <span class="tooltip" data-tooltip="第1フォルマント (Hz)。口の開き / 顎の落とし方を反映。高い = 開いた音 (/a/)、低い = 閉じた音 (/i/, /u/)。">[?]</span></span>
+                            <span class="vstat-val" id="vs-f1">—</span>
+                            <span class="vstat-unit">Hz</span>
+                        </div>
+                        <div class="vstat">
+                            <span class="vstat-label">F2 <span class="tooltip" data-tooltip="第2フォルマント (Hz)。舌の前後位置を反映。高い = 前舌 (/i/, /e/)、低い = 後舌 (/u/, /o/)。">[?]</span></span>
+                            <span class="vstat-val" id="vs-f2">—</span>
+                            <span class="vstat-unit">Hz</span>
+                        </div>
+                        <div class="vstat vib-advanced-only">
+                            <span class="vstat-label">F2/F1 <span class="tooltip" data-tooltip="第2/第1フォルマント比。明るさ・前舌度の代理指標。≧4 で前舌（明）、≦2 で後舌（暗）。">[?]</span></span>
+                            <span class="vstat-val" id="vs-ratio">—</span>
+                        </div>
+                        <div class="vstat vib-advanced-only">
+                            <span class="vstat-label">F3 <span class="tooltip" data-tooltip="第3フォルマント (Hz)。/r/ 系の判別、Singer's Formant cluster の下限。">[?]</span></span>
+                            <span class="vstat-val" id="vs-f3">—</span>
+                            <span class="vstat-unit">Hz</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="vs-canvas-wrap">
+                    <canvas id="vowel-space-canvas"></canvas>
+                </div>
+            </div>
+        </details>
+    </section>
+
+    <!-- Tab: Rec (recordings & playback) -->
+    <section class="tab-content" id="tab-rec">
+        <details id="recordings-panel" class="recordings-panel" open>
+            <summary class="recordings-head">
+                <span class="recordings-disclosure" aria-hidden="true">▸</span>
+                <span class="recordings-title">Recordings</span>
+                <span class="recordings-meta" id="recordings-meta">0 件</span>
+                <button id="rec-import-btn" class="rec-btn rec-import-btn" type="button" title="音声ファイルを取り込み">+ Import</button>
+                <input type="file" id="rec-import-input" accept="audio/*,.wav,.mp3,.m4a,.ogg,.webm,.flac" style="display:none;">
+            </summary>
+            <ul id="recordings-list" class="recordings-list" aria-live="polite"></ul>
+            <div class="recordings-empty" id="recordings-empty">
+                マイクをONにして上部の Rec ボタンで録音（最大60秒・端末内のみに保存）
+            </div>
+            <div id="playback-controls" class="playback-controls" style="display:none;">
+                <span class="pb-time" id="pb-cur-time">0.0s</span>
+                <div class="pb-seek-wrap" id="pb-seek-wrap">
+                    <div class="pb-region" id="pb-region"></div>
+                    <input type="range" id="pb-seek" min="0" max="1000" value="0" step="1" class="pb-seek" aria-label="Playback position">
+                    <div class="pb-handle pb-handle-a" id="pb-handle-a" role="slider" aria-label="Loop start" tabindex="0" title="区間 始点 (A)"></div>
+                    <div class="pb-handle pb-handle-b" id="pb-handle-b" role="slider" aria-label="Loop end" tabindex="0" title="区間 終点 (B)"></div>
+                </div>
+                <span class="pb-time" id="pb-total-time">0.0s</span>
+                <button id="pb-loop" class="pb-loop-btn" type="button" aria-label="Toggle section loop" title="区間リピート">⟲</button>
+                <select id="pb-rate" class="pb-rate-select" aria-label="Playback speed">
+                    <option value="0.1">0.1x</option>
+                    <option value="0.2">0.2x</option>
+                    <option value="0.3">0.3x</option>
+                    <option value="0.5">0.5x</option>
+                    <option value="0.75">0.75x</option>
+                    <option value="1" selected>1x</option>
+                    <option value="1.25">1.25x</option>
+                    <option value="1.5">1.5x</option>
+                    <option value="2">2x</option>
+                </select>
+            </div>
+            <p class="loud-hint" style="margin-top:8px;">録音は端末内（IndexedDB）にのみ保存され、サーバーには送信されません。</p>
+        </details>
     </section>
 
     <!-- Tab: Status -->
@@ -1179,6 +1391,7 @@
             });
         })();
     </script>
+    <script src="recordings-db.js"></script>
     <script src="main.js"></script>
     <script>
         // Learn tab updater — independent of state.roughnessVisible
