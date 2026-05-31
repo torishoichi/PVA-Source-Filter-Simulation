@@ -79,17 +79,6 @@ const RecordingsDB = {
         return rec;
     },
 
-    // Mark a recording as analyzed and cache its offline formant track for reuse.
-    async markAnalyzed(id, formantTrack) {
-        const store = await tx('readwrite');
-        const rec = await reqToPromise(store.get(id));
-        if (!rec) return null;
-        rec.analyzed = true;
-        if (formantTrack) rec.formantTrack = formantTrack;
-        await reqToPromise(store.put(rec));
-        return rec;
-    },
-
     async estimate() {
         if (navigator.storage && navigator.storage.estimate) {
             return navigator.storage.estimate();

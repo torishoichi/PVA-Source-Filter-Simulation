@@ -4572,7 +4572,7 @@ if (els.btnMicPause) {
 // ============================================================
 // Recording (local IndexedDB) — record / playback / list / delete
 // ============================================================
-const REC_MAX_MS = 15000;
+const REC_MAX_MS = 60000;
 let mediaRecorder = null;
 let recChunks = [];
 let recStartTs = 0;
@@ -4754,496 +4754,6 @@ function updateLoopRegionUi() {
     if (els.pbHandleB) els.pbHandleB.style.left = (playbackLoopB * 100) + '%';
 }
 
-// ============================================================
-// Offline high-accuracy formant track (recording playback only).
-// No real-time budget here, so we decimate with a proper anti-alias FIR, use
-// pitch-synchronous windows + higher-order Burg LPC, and track+smooth the whole
-// file. The result drives the playback formant display instead of the live path.
-// ============================================================
-let playbackFormantTrack = null; // { hop: sec, frames: [{f1..f5}|null] }
-let analyzingRecId = null;       // id of the recording currently being analyzed
-
-// Standalone Durand-Kerner (the live one is a closure; keep this self-contained).
-function _dkRoots(poly, n) {
-    if (poly[0] === 0) return null;
-    const c = new Float64Array(n + 1);
-    for (let i = 0; i <= n; i++) c[i] = poly[i] / poly[0];
-    const r = new Float64Array(2 * n);
-    for (let k = 0; k < n; k++) {
-        const th = 2 * Math.PI * k / n + 0.123;
-        r[2 * k] = 0.9 * Math.cos(th); r[2 * k + 1] = 0.9 * Math.sin(th);
-    }
-    for (let iter = 0; iter < 60; iter++) {
-        let maxD = 0;
-        for (let k = 0; k < n; k++) {
-            const xr = r[2 * k], xi = r[2 * k + 1];
-            let pr = 1, pi = 0;
-            for (let i = 1; i <= n; i++) {
-                const nr = pr * xr - pi * xi + c[i];
-                const ni = pr * xi + pi * xr;
-                pr = nr; pi = ni;
-            }
-            let dr = 1, di = 0;
-            for (let j = 0; j < n; j++) {
-                if (j === k) continue;
-                const er = xr - r[2 * j], ei = xi - r[2 * j + 1];
-                const tr = dr * er - di * ei, ti = dr * ei + di * er;
-                dr = tr; di = ti;
-            }
-            const den = dr * dr + di * di;
-            if (den < 1e-30) continue;
-            const qr = (pr * dr + pi * di) / den, qi = (pi * dr - pr * di) / den;
-            r[2 * k] = xr - qr; r[2 * k + 1] = xi - qi;
-            const d = Math.hypot(qr, qi);
-            if (d > maxD) maxD = d;
-        }
-        if (maxD < 1e-10) break;
-    }
-    return r;
-}
-
-// Windowed-sinc anti-alias decimation to ~targetSr (proper LPF, unlike the live box avg).
-function _offlineDecimate(mono, srOrig, targetSr) {
-    const factor = Math.max(1, Math.round(srOrig / targetSr));
-    if (factor === 1) return { data: mono, sr: srOrig };
-    const fc = 0.45 / factor;                 // cutoff in cycles/sample (0.9 × new Nyquist)
-    const M = 8 * factor + 1, c = (M - 1) / 2;
-    const sinc = (x) => (x === 0 ? 1 : Math.sin(Math.PI * x) / (Math.PI * x));
-    const ker = new Float64Array(M);
-    let ksum = 0;
-    for (let n = 0; n < M; n++) {
-        const ham = 0.54 - 0.46 * Math.cos(2 * Math.PI * n / (M - 1));
-        ker[n] = sinc(2 * fc * (n - c)) * ham;
-        ksum += ker[n];
-    }
-    for (let n = 0; n < M; n++) ker[n] /= ksum; // unity DC gain
-    const outN = Math.floor(mono.length / factor);
-    const out = new Float32Array(outN);
-    const half = (M - 1) >> 1;
-    for (let i = 0; i < outN; i++) {
-        const center = i * factor;
-        let acc = 0;
-        for (let n = 0; n < M; n++) {
-            const idx = center + n - half;
-            if (idx >= 0 && idx < mono.length) acc += ker[n] * mono[idx];
-        }
-        out[i] = acc;
-    }
-    return { data: out, sr: srOrig / factor };
-}
-
-// --- In-place iterative radix-2 FFT (n = power of 2). inverse → IFFT (1/n scaled). ---
-function _fft(re, im, inverse) {
-    const n = re.length;
-    for (let i = 1, j = 0; i < n; i++) {
-        let bit = n >> 1;
-        for (; j & bit; bit >>= 1) j ^= bit;
-        j ^= bit;
-        if (i < j) { const tr = re[i]; re[i] = re[j]; re[j] = tr; const ti = im[i]; im[i] = im[j]; im[j] = ti; }
-    }
-    for (let len = 2; len <= n; len <<= 1) {
-        const ang = (inverse ? 2 : -2) * Math.PI / len;
-        const wr = Math.cos(ang), wi = Math.sin(ang);
-        const half = len >> 1;
-        for (let i = 0; i < n; i += len) {
-            let cwr = 1, cwi = 0;
-            for (let k = 0; k < half; k++) {
-                const ar = re[i + k], ai = im[i + k];
-                const br = re[i + k + half] * cwr - im[i + k + half] * cwi;
-                const bi = re[i + k + half] * cwi + im[i + k + half] * cwr;
-                re[i + k] = ar + br; im[i + k] = ai + bi;
-                re[i + k + half] = ar - br; im[i + k + half] = ai - bi;
-                const ncwr = cwr * wr - cwi * wi; cwi = cwr * wi + cwi * wr; cwr = ncwr;
-            }
-        }
-    }
-    if (inverse) { for (let i = 0; i < n; i++) { re[i] /= n; im[i] /= n; } }
-}
-
-// Solve a (near-)symmetric linear system A x = b (n×n) via Gauss-Jordan w/ pivot.
-function _solveSym(A, b, n) {
-    const M = [];
-    for (let i = 0; i < n; i++) { const row = new Float64Array(n + 1); for (let j = 0; j < n; j++) row[j] = A[i][j]; row[n] = b[i]; M.push(row); }
-    for (let col = 0; col < n; col++) {
-        let piv = col, mx = Math.abs(M[col][col]);
-        for (let r = col + 1; r < n; r++) { const v = Math.abs(M[r][col]); if (v > mx) { mx = v; piv = r; } }
-        if (mx < 1e-12) return null;
-        if (piv !== col) { const t = M[piv]; M[piv] = M[col]; M[col] = t; }
-        const d = M[col][col];
-        for (let r = 0; r < n; r++) {
-            if (r === col) continue;
-            const f = M[r][col] / d;
-            if (f === 0) continue;
-            for (let c = col; c <= n; c++) M[r][c] -= f * M[col][c];
-        }
-    }
-    const x = new Float64Array(n);
-    for (let i = 0; i < n; i++) x[i] = M[i][n] / M[i][i];
-    return x;
-}
-
-// Short-time-energy weights (SWLP): emphasise high-energy = closed-phase samples.
-function _steWeights(x, M, L) {
-    const w = new Float64Array(M);
-    let acc = 0;
-    for (let n = 0; n < M; n++) {
-        acc += x[n] * x[n];
-        if (n >= L) acc -= x[n - L] * x[n - L];
-        w[n] = acc;
-    }
-    let mx = 0; for (let n = 0; n < M; n++) if (w[n] > mx) mx = w[n];
-    if (mx <= 0) { w.fill(1); return w; }
-    for (let n = 0; n < M; n++) w[n] = 0.1 + 0.9 * (w[n] / mx); // floor 0.1 for stability
-    return w;
-}
-
-// Weighted covariance-method LP (SWLP). Returns prediction coeffs a[0..p] (a[0]=1).
-function _weightedLP(x, M, p, w) {
-    if (M <= p + 2) return null;
-    const phi = []; for (let i = 0; i < p; i++) phi.push(new Float64Array(p));
-    const psi = new Float64Array(p);
-    for (let n = p; n < M; n++) {
-        const wn = w[n];
-        if (wn === 0) continue;
-        const xn = x[n];
-        for (let i = 1; i <= p; i++) {
-            const xi = x[n - i] * wn;
-            psi[i - 1] += xi * xn;
-            for (let j = i; j <= p; j++) phi[i - 1][j - 1] += xi * x[n - j];
-        }
-    }
-    for (let i = 0; i < p; i++) { for (let j = 0; j < i; j++) phi[i][j] = phi[j][i]; phi[i][i] += 1e-6; }
-    const sol = _solveSym(phi, psi, p);
-    if (!sol) return null;
-    const a = new Float64Array(p + 1); a[0] = 1;
-    for (let i = 0; i < p; i++) a[i + 1] = sol[i];
-    return a;
-}
-
-// Cepstrally-smoothed log-spectrum envelope of a frame (lifter below the pitch period).
-function _cepEnvelope(x, M, Nfft, sr, f0) {
-    const re = new Float64Array(Nfft), im = new Float64Array(Nfft);
-    for (let i = 0; i < M && i < Nfft; i++) {
-        const wnd = 0.5 * (1 - Math.cos(2 * Math.PI * i / (M - 1)));
-        re[i] = x[i] * wnd;
-    }
-    _fft(re, im, false);
-    const logm = new Float64Array(Nfft);
-    for (let k = 0; k < Nfft; k++) logm[k] = Math.log(Math.hypot(re[k], im[k]) + 1e-9);
-    const cre = logm.slice(0), cim = new Float64Array(Nfft);
-    _fft(cre, cim, true); // cepstrum
-    const period = Math.max(2, Math.round(sr / Math.max(60, f0)));
-    const cut = Math.max(4, Math.round(period * 0.7));
-    for (let q = 0; q < Nfft; q++) {
-        const qq = q <= Nfft / 2 ? q : Nfft - q;
-        if (qq > cut) { cre[q] = 0; cim[q] = 0; }
-    }
-    _fft(cre, cim, false); // smoothed log-spectrum (real part)
-    const half = Nfft >> 1;
-    const env = new Float64Array(half);
-    for (let k = 0; k < half; k++) env[k] = cre[k];
-    return { env, binHz: sr / Nfft, half };
-}
-
-// Multitaper (sine-taper) cepstral envelope: average K orthogonal tapered spectra to
-// cut variance, then cepstrally smooth → a steadier envelope for peak refinement.
-function _multitaperEnvelope(x, M, Nfft, sr, f0, K) {
-    const pow = new Float64Array(Nfft);
-    const norm = Math.sqrt(2 / (M + 1));
-    for (let k = 0; k < K; k++) {
-        const re = new Float64Array(Nfft), im = new Float64Array(Nfft);
-        for (let i = 0; i < M && i < Nfft; i++) {
-            const taper = norm * Math.sin(Math.PI * (k + 1) * (i + 1) / (M + 1));
-            re[i] = x[i] * taper;
-        }
-        _fft(re, im, false);
-        for (let b = 0; b < Nfft; b++) pow[b] += re[b] * re[b] + im[b] * im[b];
-    }
-    const logm = new Float64Array(Nfft);
-    for (let b = 0; b < Nfft; b++) logm[b] = 0.5 * Math.log(pow[b] / K + 1e-12);
-    const cre = logm.slice(0), cim = new Float64Array(Nfft);
-    _fft(cre, cim, true);
-    const period = Math.max(2, Math.round(sr / Math.max(60, f0)));
-    const cut = Math.max(4, Math.round(period * 0.7));
-    for (let q = 0; q < Nfft; q++) {
-        const qq = q <= Nfft / 2 ? q : Nfft - q;
-        if (qq > cut) { cre[q] = 0; cim[q] = 0; }
-    }
-    _fft(cre, cim, false);
-    const half = Nfft >> 1;
-    const env = new Float64Array(half);
-    for (let k = 0; k < half; k++) env[k] = cre[k];
-    return { env, binHz: sr / Nfft, half };
-}
-
-// Snap each candidate to the nearest peak of the smoothed envelope (±150 Hz).
-function _refineCandsToEnvelope(cands, env) {
-    if (!env) return cands;
-    const e = env.env, binHz = env.binHz, half = env.half;
-    const span = Math.round(150 / binHz);
-    return cands.map((c) => {
-        const bin = c.freq / binHz;
-        const lo = Math.max(1, Math.floor(bin - span));
-        const hi = Math.min(half - 2, Math.ceil(bin + span));
-        let bb = -1, bv = -Infinity;
-        for (let k = lo; k <= hi; k++) if (e[k] > bv) { bv = e[k]; bb = k; }
-        if (bb < 1) return c;
-        const a0 = e[bb - 1], b0 = e[bb], c0 = e[bb + 1];
-        const den = a0 - 2 * b0 + c0;
-        let d = 0; if (Math.abs(den) > 1e-9) d = 0.5 * (a0 - c0) / den; if (d < -1 || d > 1) d = 0;
-        const rf = (bb + d) * binHz;
-        return { freq: Math.abs(rf - c.freq) > 200 ? c.freq : rf, bw: c.bw, support: c.support };
-    });
-}
-
-// Per-frame candidates: weighted-LP at several orders, keep poles stable across orders.
-// FIR inverse filter: y[n] = x[n] - Σ a_k x[n-k] (a = prediction coeffs, a[0]=1).
-function _firInv(a, x, M) {
-    const ord = a.length - 1;
-    const y = new Float64Array(M);
-    for (let n = 0; n < M; n++) {
-        let s = x[n];
-        const kmax = Math.min(ord, n);
-        for (let k = 1; k <= kmax; k++) s -= a[k] * x[n - k];
-        y[n] = s;
-    }
-    return y;
-}
-
-// IAIF (Iterative Adaptive Inverse Filtering, simplified): estimate and remove the
-// glottal source contribution so the residual reflects the vocal tract more purely.
-// Returns the source-removed frame (formant LPC then runs on this).
-function _iaif(seg, M, p) {
-    const lpc = (x, ord) => { const k = burgLpc(x, M, ord); return k ? reflectionsToPredictions(k, ord) : null; };
-    const g1 = lpc(seg, 1); if (!g1) return seg;        // coarse tilt (order 1)
-    const y1 = _firInv(g1, seg, M);
-    const vt1 = lpc(y1, p); if (!vt1) return seg;       // first vocal-tract estimate
-    const gest = _firInv(vt1, seg, M);                  // glottal-flow estimate (VT removed)
-    const g2 = lpc(gest, Math.min(4, p)); if (!g2) return y1; // refined glottal model
-    return _firInv(g2, seg, M);                          // source-removed speech
-}
-
-// Extract resonance poles (freq, bw) from prediction coeffs a[0..order].
-function _polesFromCoeffs(a, order, sr, out) {
-    const poly = new Float64Array(order + 1); poly[0] = 1;
-    for (let i = 1; i <= order; i++) poly[i] = -a[i];
-    const roots = _dkRoots(poly, order);
-    if (!roots) return;
-    for (let i = 0; i < order; i++) {
-        const re = roots[2 * i], im = roots[2 * i + 1];
-        if (im <= 0) continue;
-        const mag = Math.hypot(re, im);
-        if (mag <= 0 || mag >= 1) continue;
-        const freq = Math.atan2(im, re) * sr / (2 * Math.PI);
-        const bw = -Math.log(mag) * sr / Math.PI;
-        if (freq < 90 || freq > 5500 || bw > 700) continue;
-        out.push({ freq, bw });
-    }
-}
-
-// Cluster a pooled set of poles (from many window×order estimates); keep clusters
-// with enough support (a real formant recurs across windows/orders).
-function _clusterPoles(poles, minSupport) {
-    if (!poles.length) return null;
-    poles.sort((u, v) => u.freq - v.freq);
-    const clusters = [];
-    let cur = [poles[0]];
-    for (let i = 1; i < poles.length; i++) {
-        if (poles[i].freq - cur[cur.length - 1].freq <= 150) cur.push(poles[i]);
-        else { clusters.push(cur); cur = [poles[i]]; }
-    }
-    clusters.push(cur);
-    const med = (arr) => { const s = arr.slice().sort((a, b) => a - b); return s[s.length >> 1]; };
-    let out = [];
-    for (const cl of clusters) {
-        if (cl.length < minSupport) continue;
-        out.push({ freq: med(cl.map(c => c.freq)), bw: med(cl.map(c => c.bw)), support: cl.length });
-    }
-    if (!out.length) {
-        out = clusters.filter(cl => cl.length >= 2)
-            .map(cl => ({ freq: med(cl.map(c => c.freq)), bw: med(cl.map(c => c.bw)), support: cl.length }));
-    }
-    out.sort((a, b) => a.freq - b.freq);
-    return out.length ? out : null;
-}
-
-// Global Viterbi formant tracking (per band) + light median smoothing.
-function _viterbiTrack(frameCands, hopSec, priorsPerFrame) {
-    const F = frameCands.length;
-    const bands = [[200, 1100], [700, 2800], [1700, 3600], [2800, 4600], [3800, 5500]];
-    const prior = [500, 1500, 2500, 3500, 4500];
-    const MISS = 400, JUMP_K = 1 / 300, BW_K = 1 / 400, PRIOR_K = 1 / 600, APPEAR = 60;
-    const tracks = [];
-    for (let s = 0; s < 5; s++) {
-        // Per-frame prior: data-driven from pass 1 if provided, else the fixed band center.
-        const pr = (t) => (priorsPerFrame && priorsPerFrame[t] && priorsPerFrame[t][s] != null)
-            ? priorsPerFrame[t][s] : prior[s];
-        const lo = bands[s][0], hi = bands[s][1];
-        const states = new Array(F);
-        for (let t = 0; t < F; t++) {
-            const cs = frameCands[t];
-            const lst = [];
-            if (cs) for (const c of cs) if (c.freq >= lo && c.freq <= hi) lst.push(c);
-            lst.push(null); // "missing"
-            states[t] = lst;
-        }
-        const dp = new Array(F), bp = new Array(F);
-        for (let t = 0; t < F; t++) { dp[t] = new Float64Array(states[t].length); bp[t] = new Int32Array(states[t].length); }
-        for (let i = 0; i < states[0].length; i++) {
-            const c = states[0][i];
-            dp[0][i] = c ? (BW_K * c.bw + PRIOR_K * Math.abs(c.freq - pr(0))) : MISS;
-        }
-        for (let t = 1; t < F; t++) {
-            for (let i = 0; i < states[t].length; i++) {
-                const c = states[t][i];
-                const emis = c ? (BW_K * c.bw + PRIOR_K * Math.abs(c.freq - pr(t))) : MISS * 0.5;
-                let best = Infinity, bi = 0;
-                for (let j = 0; j < states[t - 1].length; j++) {
-                    const pc = states[t - 1][j];
-                    const trans = (c && pc) ? JUMP_K * Math.abs(c.freq - pc.freq) : APPEAR;
-                    const cost = dp[t - 1][j] + trans;
-                    if (cost < best) { best = cost; bi = j; }
-                }
-                dp[t][i] = best + emis; bp[t][i] = bi;
-            }
-        }
-        let bi = 0, bv = Infinity;
-        for (let i = 0; i < states[F - 1].length; i++) if (dp[F - 1][i] < bv) { bv = dp[F - 1][i]; bi = i; }
-        const path = new Array(F);
-        for (let t = F - 1; t >= 0; t--) { const c = states[t][bi]; path[t] = c ? c.freq : null; bi = bp[t][bi]; }
-        tracks.push(path);
-    }
-    const W = 2;
-    const frames = new Array(F);
-    for (let t = 0; t < F; t++) frames[t] = { f1: null, f2: null, f3: null, f4: null, f5: null };
-    for (let s = 0; s < 5; s++) {
-        for (let t = 0; t < F; t++) {
-            const vals = [];
-            for (let d = -W; d <= W; d++) { const k = t + d; if (k >= 0 && k < F && tracks[s][k] != null) vals.push(tracks[s][k]); }
-            if (vals.length) { vals.sort((a, b) => a - b); frames[t]['f' + (s + 1)] = vals[vals.length >> 1]; }
-        }
-    }
-    return { hop: hopSec, frames };
-}
-
-async function analyzeRecordingFormantsOffline(audioBuffer) {
-    const _yield = () => new Promise(r => setTimeout(r, 0));
-    let _processed = 0;
-    const srOrig = audioBuffer.sampleRate;
-    const nch = audioBuffer.numberOfChannels;
-    const ch0 = audioBuffer.getChannelData(0);
-    let mono = ch0;
-    if (nch > 1) {
-        mono = new Float32Array(ch0.length);
-        const ch1 = audioBuffer.getChannelData(1);
-        for (let i = 0; i < mono.length; i++) mono[i] = 0.5 * (ch0[i] + ch1[i]);
-    }
-    const { data: sig, sr } = _offlineDecimate(mono, srOrig, 11025);
-    const hopSec = 0.005;                                  // 5 ms hop (2× time resolution)
-    const hop = Math.max(1, Math.round(hopSec * sr));
-    const baseP = Math.min(16, Math.max(10, Math.round(sr / 1000) + 2)); // ≈13 at 11 kHz
-    const orders = [baseP - 2, baseP, baseP + 2].filter(o => o >= 8);
-    const winPeriods = [3, 4, 5];                          // window-length ensemble
-    const minLag = Math.floor(sr / 500), maxLag = Math.floor(sr / 70); // f0 70–500 Hz
-    const w40 = Math.floor(0.04 * sr);
-    const minWin = Math.floor(0.02 * sr), maxWin = Math.floor(0.055 * sr);
-    const Nfft = 2048;
-    const frameCands = [];
-
-    for (let center = 0; center < sig.length; center += hop) {
-        // Yield to the event loop every ~48 frames so a heavy analysis never freezes the UI
-        if ((_processed++ & 47) === 0 && _processed > 1) await _yield();
-        // f0 via normalized autocorrelation (40 ms)
-        let s0 = center - (w40 >> 1); if (s0 < 0) s0 = 0;
-        let s1 = s0 + w40; if (s1 > sig.length) { s1 = sig.length; s0 = Math.max(0, s1 - w40); }
-        let r0 = 0; for (let i = s0; i < s1; i++) r0 += sig[i] * sig[i];
-        const rms = Math.sqrt(r0 / Math.max(1, s1 - s0));
-        if (rms < 0.005) { frameCands.push(null); continue; }
-        let bestLag = -1, bestVal = 0;
-        for (let lag = minLag; lag <= maxLag && lag < (s1 - s0); lag++) {
-            let acc = 0;
-            for (let i = s0; i + lag < s1; i++) acc += sig[i] * sig[i + lag];
-            const norm = acc / (r0 || 1);
-            if (norm > bestVal) { bestVal = norm; bestLag = lag; }
-        }
-        const voiced = bestVal > 0.3 && bestLag > 0;
-        const period = voiced ? bestLag : Math.floor(0.025 * sr);
-
-        // Window-length ensemble: each window → IAIF source removal → SWLP at multiple
-        // orders → pooled poles. Stable poles (recurring across windows×orders) survive.
-        const poles = [];
-        let envFrame = null;
-        for (const kp of winPeriods) {
-            let winLen = Math.max(minWin, Math.min(maxWin, kp * period));
-            let a0 = center - (winLen >> 1); if (a0 < 0) a0 = 0;
-            let a1 = a0 + winLen; if (a1 > sig.length) { a1 = sig.length; a0 = Math.max(0, a1 - winLen); }
-            const M = a1 - a0;
-            if (M < orders[orders.length - 1] + 8) continue;
-            const seg = new Float64Array(M);
-            for (let i = 0; i < M; i++) {
-                const wnd = 0.5 * (1 - Math.cos(2 * Math.PI * i / (M - 1)));
-                seg[i] = sig[a0 + i] * wnd;
-            }
-            const y = _iaif(seg, M, baseP);               // glottal source removed
-            const w = _steWeights(y, M, baseP + 1);       // SWLP weights (closed-phase emphasis)
-            for (const ord of orders) {
-                const a = _weightedLP(y, M, ord, w);
-                if (a) _polesFromCoeffs(a, ord, sr, poles);
-            }
-            if (kp === 4) envFrame = _multitaperEnvelope(seg, M, Nfft, sr, voiced ? sr / period : 150, 5);
-        }
-        const minSupport = Math.max(2, Math.ceil(winPeriods.length * orders.length * 0.25));
-        let cands = _clusterPoles(poles, minSupport);
-        if (!cands || !cands.length) { frameCands.push(null); continue; }
-        cands = _refineCandsToEnvelope(cands, envFrame);  // multitaper-envelope refine
-        frameCands.push(cands);
-    }
-    // Two-pass Viterbi: pass 1 (fixed priors) → smoothed track becomes data-driven
-    // priors for pass 2, anchoring each frame to its own local estimate.
-    const pass1 = _viterbiTrack(frameCands, hopSec);
-    const priors2 = pass1.frames.map(f => [f.f1, f.f2, f.f3, f.f4, f.f5]);
-    return _viterbiTrack(frameCands, hopSec, priors2);
-}
-
-// Decode + analyze in the background; applied once ready (live path used until then).
-// On success, persist the track + mark the recording "Analyzed" (cached for reuse).
-async function buildPlaybackFormantTrack(id, blob) {
-    playbackFormantTrack = null;
-    if (!audioCtx) return;
-    analyzingRecId = id;            // show "解析中…" on the row
-    renderRecordingsList();
-    try {
-        const arr = await blob.arrayBuffer();
-        const audioBuf = await audioCtx.decodeAudioData(arr.slice(0));
-        const track = await analyzeRecordingFormantsOffline(audioBuf); // async/chunked
-        if (playbackAudio) playbackFormantTrack = track; // still playing?
-        try {
-            await RecordingsDB.markAnalyzed(id, track);
-            const cached = cachedRecordingsList && cachedRecordingsList.find(r => r.id === id);
-            if (cached) { cached.analyzed = true; cached.formantTrack = track; }
-        } catch (e) { console.warn('markAnalyzed failed:', e); }
-    } catch (err) {
-        console.warn('Offline formant analysis failed:', err);
-        playbackFormantTrack = null;
-    } finally {
-        if (analyzingRecId === id) analyzingRecId = null;
-        renderRecordingsList();
-    }
-}
-
-// Look up the precomputed formant frame at a playback time → estFormants shape.
-function lookupFormantTrack(timeSec) {
-    const tr = playbackFormantTrack;
-    if (!tr || !tr.frames.length) return null;
-    let idx = Math.round(timeSec / tr.hop);
-    if (idx < 0) idx = 0;
-    if (idx >= tr.frames.length) idx = tr.frames.length - 1;
-    const f = tr.frames[idx];
-    if (!f) return null;
-    const mk = (hz) => (hz != null ? { freq: hz, db: 0 } : null);
-    return { f1: mk(f.f1), f2: mk(f.f2), f3: mk(f.f3), f4: mk(f.f4), f5: mk(f.f5) };
-}
-
 async function playRecording(id) {
     if (playbackAudio) stopPlayback();
 
@@ -5272,10 +4782,6 @@ async function playRecording(id) {
     // Known duration from the record (WebM blobs report Infinity via the element)
     playbackDurationSec = (rec.durationMs || 0) / 1000;
     if (els.pbTotalTime) els.pbTotalTime.textContent = playbackDurationSec.toFixed(1) + 's';
-
-    // NOTE: offline high-accuracy track is disabled for now — playback uses the same
-    // self-consistent live LPC path (curve = LPC response, markers = its roots) as the mic.
-    playbackFormantTrack = null;
 
     // Reset the A–B region to full track for each new recording
     playbackLoopA = 0;
@@ -5354,7 +4860,6 @@ function stopPlayback() {
     playbackAudio = null;
     playbackMediaSrc = null;
     playbackDurationSec = 0;
-    playbackFormantTrack = null;
     if (playbackUiRaf) { cancelAnimationFrame(playbackUiRaf); playbackUiRaf = null; }
     if (els.playbackControls) els.playbackControls.style.display = 'none';
     cleanupPlayback();
@@ -5619,11 +5124,20 @@ function renderRecordingsList() {
         const playBtn = document.createElement('button');
         playBtn.className = 'rec-btn';
         playBtn.type = 'button';
-        const isPlayingThis = rec.id === playbackRecId;
-        playBtn.textContent = isPlayingThis ? '■ Stop' : '▶ Play';
+        // Pause keeps the clip loaded so the next press resumes from the same
+        // position; playRecording() always restarts from 0, so resume calls
+        // the live element directly instead of re-entering playRecording().
+        const isCurrent = rec.id === playbackRecId && playbackAudio && !playbackAudio.ended;
+        const isPlayingThis = isCurrent && !playbackAudio.paused;
+        playBtn.textContent = isPlayingThis ? '⏸ Pause' : (isCurrent ? '▶ Resume' : '▶ Play');
         playBtn.addEventListener('click', () => {
-            if (isPlayingThis) stopPlayback();
-            else playRecording(rec.id);
+            if (rec.id === playbackRecId && playbackAudio && !playbackAudio.ended) {
+                if (playbackAudio.paused) playbackAudio.play().catch(() => {});
+                else playbackAudio.pause();
+                renderRecordingsList();
+            } else {
+                playRecording(rec.id);
+            }
         });
 
         const dlBtn = document.createElement('button');
@@ -5644,21 +5158,7 @@ function renderRecordingsList() {
         delBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
         delBtn.addEventListener('click', () => deleteRecording(rec.id));
 
-        li.append(timeEl, labelInput, durEl);
-        if (rec.id === analyzingRecId) {
-            const busyEl = document.createElement('span');
-            busyEl.className = 'rec-analyzed is-analyzing';
-            busyEl.textContent = '⏳ 解析中…';
-            busyEl.title = '高精度フォルマント解析を実行中';
-            li.append(busyEl);
-        } else if (rec.analyzed) {
-            const analyzedEl = document.createElement('span');
-            analyzedEl.className = 'rec-analyzed';
-            analyzedEl.textContent = '✓ Analyzed';
-            analyzedEl.title = '高精度フォルマント解析済み（再生で生成・キャッシュ済み）';
-            li.append(analyzedEl);
-        }
-        li.append(playBtn, dlBtn, delBtn);
+        li.append(timeEl, labelInput, durEl, playBtn, dlBtn, delBtn);
         els.recordingsList.appendChild(li);
     }
 }
@@ -5784,7 +5284,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — shown in the bottom-right corner (bump on each release)
-const APP_VERSION = 'v1.6.0';
+const APP_VERSION = 'v1.8.0';
 (() => { const el = document.getElementById('app-version'); if (el) el.textContent = APP_VERSION; })();
 
 // Service Worker — enables offline use and "Add to Home Screen"
