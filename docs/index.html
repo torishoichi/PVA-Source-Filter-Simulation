@@ -18,6 +18,9 @@
             window.location.href = 'mobile.html';
         }
     </script>
+    <!-- Cloudflare Web Analytics -->
+    <script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "2279b3f22c82463ba5687550c972e9a8"}'></script>
+    <!-- End Cloudflare Web Analytics -->
 </head>
 
 <body>
@@ -489,6 +492,30 @@
                     <span class="mic-analysis-title">Mic Analysis</span>
                 </summary>
                 <div class="mic-analysis-body">
+
+                <!-- Loudness Ceiling — guard against over-singing / pressed-loud phonation -->
+                <details id="loudness-panel" class="vib-analysis-panel" open>
+                    <summary class="vib-analysis-summary">
+                        <span class="vib-analysis-disclosure" aria-hidden="true">▸</span>
+                        <span class="vib-analysis-title">Loudness Ceiling</span>
+                        <span class="vib-analysis-summary-hint">声量の上限ガード（大声・押し込み抑制）</span>
+                    </summary>
+                    <div class="vib-analysis-body">
+                        <div class="loud-meter">
+                            <div class="loud-track">
+                                <div class="loud-fill" id="loud-fill"></div>
+                                <div class="loud-marker" id="loud-marker"></div>
+                            </div>
+                            <span class="loud-val" id="loud-val">— dB</span>
+                        </div>
+                        <div class="loud-ceiling-row">
+                            <label for="loud-ceiling">Ceiling <span class="tooltip" data-tooltip="この声量（dB）を超えると赤。マイク感度・距離に依存する相対値なので、Gain と立ち位置を固定してから自分の『押さずに楽に出せる上限』に合わせる。設定はブラウザに保存。">[?]</span></label>
+                            <input type="range" id="loud-ceiling" min="-48" max="0" value="-18" step="1">
+                            <span class="loud-ceiling-val" id="loud-ceiling-val">-18 dB</span>
+                        </div>
+                        <p class="loud-hint">マイクをONにすると声量がバーで出ます。縦線（天井）を超えると赤、手前で黄、安全域は緑。緑〜黄を保って歌う練習で大声・押し込みを抑制。</p>
+                    </div>
+                </details>
 
                 <!-- Vibrato analysis panel (visible when mic active) -->
                 <details id="vibrato-panel" class="vib-analysis-panel">

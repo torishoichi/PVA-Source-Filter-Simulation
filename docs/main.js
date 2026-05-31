@@ -178,6 +178,8 @@ const state = {
     cachedMicFormantConfidence: 1, // 0..1 confidence of the latest v3 formant frame
     cachedMicFormants: null, // Per-formant snapshot (preserved during pause and brief live dropouts)
     cachedMicFormantsTime: null, // Per-formant last-update timestamp (ms)
+    loudnessCeilingDb: -18,    // user-set loudness ceiling (dB RMS); guards over-singing / pressed-loud
+    loudnessDb: -90,           // EMA-smoothed current loudness (dB), for the ceiling meter
     micGain: 1.0,
     micDeviceId: null,         // null = browser default
     micDevices: [],            // populated after first permission grant
@@ -312,6 +314,11 @@ const els = {
     vsF2: document.getElementById('vs-f2'),
     vsF3: document.getElementById('vs-f3'),
     vsRatio: document.getElementById('vs-ratio'),
+    loudFill: document.getElementById('loud-fill'),
+    loudMarker: document.getElementById('loud-marker'),
+    loudVal: document.getElementById('loud-val'),
+    loudCeilSlider: document.getElementById('loud-ceiling'),
+    loudCeilVal: document.getElementById('loud-ceiling-val'),
     masterVolume: document.getElementById('master-volume'),
     micGainSlider: document.getElementById('mic-gain'),
     micDeviceSelect: document.getElementById('mic-device-select'),
@@ -2414,6 +2421,65 @@ function saveCalibrationToStorage(data) {
     try { localStorage.setItem(CAL_STORAGE_KEY, JSON.stringify(data)); } catch (_) {}
 }
 
+// ---------- Loudness ceiling meter ----------
+// A manual "don't sing louder than this" guard. Reuses the raw mic RMS already
+// computed in detectPitchFromMic(); the ceiling is user-set and persisted.
+const LOUD_STORAGE_KEY = 'sf_loudness_ceiling_v1';
+const LOUD_METER_MIN_DB = -60; // bar left edge
+const LOUD_METER_MAX_DB = 0;   // bar right edge
+const LOUD_GREEN_MARGIN = 6;   // dB below the ceiling that still reads green
+
+function loadLoudnessCeiling() {
+    try {
+        const raw = localStorage.getItem(LOUD_STORAGE_KEY);
+        if (raw == null) return null;
+        const v = parseFloat(raw);
+        return Number.isFinite(v) ? v : null;
+    } catch (_) { return null; }
+}
+
+function saveLoudnessCeiling(db) {
+    try { localStorage.setItem(LOUD_STORAGE_KEY, String(db)); } catch (_) {}
+}
+
+// Map a dB value to a 0..100 fill percentage across the meter's range.
+function loudDbToPct(db) {
+    const t = (db - LOUD_METER_MIN_DB) / (LOUD_METER_MAX_DB - LOUD_METER_MIN_DB);
+    return Math.max(0, Math.min(1, t)) * 100;
+}
+
+function resetLoudnessMeter() {
+    state.loudnessDb = LOUD_METER_MIN_DB;
+    if (els.loudFill) { els.loudFill.style.width = '0%'; els.loudFill.style.backgroundColor = '#cfd8dc'; }
+    if (els.loudVal) els.loudVal.textContent = '— dB';
+}
+
+// Called every animation frame while the mic is active (and not paused).
+function updateLoudnessMeter() {
+    const ceiling = state.loudnessCeilingDb;
+    if (els.loudMarker) els.loudMarker.style.left = loudDbToPct(ceiling) + '%';
+
+    const level = state.cachedMicLevel;
+    const db = level > 0 ? 20 * Math.log10(level) : -120;
+    if (db <= LOUD_METER_MIN_DB) { // effectively silent
+        state.loudnessDb = LOUD_METER_MIN_DB;
+        if (els.loudFill) { els.loudFill.style.width = '0%'; els.loudFill.style.backgroundColor = '#cfd8dc'; }
+        if (els.loudVal) els.loudVal.textContent = '— dB';
+        return;
+    }
+    // EMA — faster attack than release so peaks register but the bar settles smoothly.
+    const a = db > state.loudnessDb ? 0.5 : 0.2;
+    state.loudnessDb = state.loudnessDb * (1 - a) + db * a;
+
+    const sdb = state.loudnessDb;
+    let color;
+    if (sdb >= ceiling) color = '#e53935';                         // over ceiling → red
+    else if (sdb >= ceiling - LOUD_GREEN_MARGIN) color = '#fbc02d'; // approaching → amber
+    else color = '#43a047';                                        // safe → green
+    if (els.loudFill) { els.loudFill.style.width = loudDbToPct(sdb) + '%'; els.loudFill.style.backgroundColor = color; }
+    if (els.loudVal) els.loudVal.textContent = Math.round(sdb) + ' dB';
+}
+
 function startCalibration() {
     const cal = state.vowelSpace.calibration;
     cal.active = true;
@@ -3085,6 +3151,7 @@ function drawVisualizer() {
 
     // Vowel Space: push F1/F2 sample every frame, redraw if panel open (~30fps)
     if (state.isMicActive) pushVowelSample();
+    if (state.isMicActive && !state.isMicPaused) updateLoudnessMeter();
     if (state.vowelSpace.calibration.active) advanceCalibration(nowT);
     if (els.vowelSpacePanel && els.vowelSpacePanel.open) {
         if (!drawVisualizer._lastVsDraw || nowT - drawVisualizer._lastVsDraw > 33) {
@@ -4461,6 +4528,7 @@ els.btnMic.addEventListener('click', async () => {
         state.cachedMicFormantsTime = null;
         els.btnMic.classList.remove('mic-active');
         updateVibratoPanelVisibility();
+        resetLoudnessMeter();
         // Stop any in-progress recording when mic is turned off
         if (mediaRecorder && mediaRecorder.state === 'recording') stopRecording();
         if (els.btnMicRecord) {
@@ -5284,7 +5352,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — shown in the bottom-right corner (bump on each release)
-const APP_VERSION = 'v1.8.0';
+const APP_VERSION = 'v1.9.0';
 (() => { const el = document.getElementById('app-version'); if (el) el.textContent = APP_VERSION; })();
 
 // Service Worker — enables offline use and "Add to Home Screen"
@@ -5436,6 +5504,15 @@ els.micGainSlider.addEventListener('input', (e) => {
     }
 });
 
+if (els.loudCeilSlider) {
+    els.loudCeilSlider.addEventListener('input', (e) => {
+        state.loudnessCeilingDb = parseFloat(e.target.value);
+        if (els.loudCeilVal) els.loudCeilVal.textContent = state.loudnessCeilingDb + ' dB';
+        if (els.loudMarker) els.loudMarker.style.left = loudDbToPct(state.loudnessCeilingDb) + '%';
+        saveLoudnessCeiling(state.loudnessCeilingDb);
+    });
+}
+
 els.spectrumSlopeSlider.addEventListener('input', (e) => {
     state.spectrumSlope = parseFloat(e.target.value);
     if (els.slopeVal) els.slopeVal.textContent = state.spectrumSlope + 'dB';
@@ -5584,6 +5661,15 @@ refreshMicDevices();
 
 // Load saved per-user calibration from localStorage
 state.vowelSpace.calibration.saved = loadCalibrationFromStorage();
+
+// Load saved loudness ceiling and sync the slider/marker
+{
+    const savedCeil = loadLoudnessCeiling();
+    if (savedCeil != null) state.loudnessCeilingDb = savedCeil;
+    if (els.loudCeilSlider) els.loudCeilSlider.value = state.loudnessCeilingDb;
+    if (els.loudCeilVal) els.loudCeilVal.textContent = state.loudnessCeilingDb + ' dB';
+    if (els.loudMarker) els.loudMarker.style.left = loudDbToPct(state.loudnessCeilingDb) + '%';
+}
 applyVowelSpaceMode('basic');
 applyVowelSpaceLanguage('jp');
 applyVowelSpaceVoice('male');
