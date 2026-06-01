@@ -3575,15 +3575,20 @@ function drawVisualizer() {
     // Shared LPC pipeline (Praat-inspired): decimate → voicing → LPC → root-find → formant assignment.
     // anchors: previous smoothed F1-F5 for continuity tracking (null = bootstrap).
     // Returns { voiced: true, raw: {f1..f5} } or { voiced: false }.
-    const lpcCoreExtract = (analyzer, anchors) => {
+    const lpcCoreExtract = (analyzer, anchors, timeOverride) => {
         const sr = audioCtx.sampleRate;
-        const N = analyzer.fftSize;
+        const N = analyzer ? analyzer.fftSize : (timeOverride ? timeOverride.length : 4096);
 
         if (!lpcCoreState.timeBuf || lpcCoreState.timeBuf.length !== N) {
             lpcCoreState.timeBuf = new Float32Array(N);
         }
         const buf = lpcCoreState.timeBuf;
-        analyzer.getFloatTimeDomainData(buf);
+        if (timeOverride) {
+            // Playback: analyse the decoded recording window directly (iOS-safe, no AnalyserNode).
+            buf.set(timeOverride.length === N ? timeOverride : timeOverride.subarray(0, N));
+        } else {
+            analyzer.getFloatTimeDomainData(buf);
+        }
 
         // RMS gate
         let rms = 0;
@@ -3759,7 +3764,7 @@ function drawVisualizer() {
     };
 
     // v3: One-Euro adaptive filter (smooth at rest, responsive to fast changes)
-    const estimateLpcV3Formants = (analyzer, minDb, dbRange) => {
+    const estimateLpcV3Formants = (analyzer, minDb, dbRange, timeOverride) => {
         const dbVal = minDb + dbRange * 0.5;
         const now = performance.now();
         // Anchors for continuity: previous One-Euro output
@@ -3770,7 +3775,7 @@ function drawVisualizer() {
             f4: lpcV3State.filters.f4?.prevX ?? null,
             f5: lpcV3State.filters.f5?.prevX ?? null
         };
-        const core = lpcCoreExtract(analyzer, anchors);
+        const core = lpcCoreExtract(analyzer, anchors, timeOverride);
 
         if (!core.voiced) {
             const stale = now - lpcV3State.lastVoiced > 120;
@@ -4198,15 +4203,18 @@ function drawVisualizer() {
             // Pause: freeze formants at the moment of pause (use cached snapshot)
             estFormants = state.cachedMicFormants;
         } else {
-            // During playback, prefer the precomputed offline formant track (speed-independent,
-            // iOS-safe). Falls back to live LPC until the track finishes building.
-            const pbFormants = (!!playbackAudio && !playbackAudio.paused)
-                ? lookupFormantTrack(playbackAudio.currentTime) : null;
-            estFormants = pbFormants ? pbFormants : (
-                state.micFormantMethod === 'lpc-v3' ? estimateLpcV3Formants(micAnalyser, minDb, dbRange) :
-                state.micFormantMethod === 'lpc-v2' ? estimateLpcV2Formants(micAnalyser, minDb, dbRange) :
-                state.micFormantMethod === 'lpc'    ? estimateLpcFormants(micAnalyser, minDb, dbRange, nyq) :
-                                                      estimatePeakFormants(state.cachedMicData, minDb, dbRange, nyq, state.cachedMicPitch));
+            // During playback, analyse the decoded buffer window at the current position
+            // through the SAME LPC v3 path — so markers AND the purple envelope curve appear
+            // and stay consistent. Speed-independent & iOS-safe. Live mic path when not playing.
+            const pbWin = (!!playbackAudio && !playbackAudio.paused && playbackBuffer)
+                ? getPlaybackTimeWindow(playbackAudio.currentTime, micAnalyser.fftSize) : null;
+            estFormants = pbWin
+                ? estimateLpcV3Formants(micAnalyser, minDb, dbRange, pbWin)
+                : (
+                    state.micFormantMethod === 'lpc-v3' ? estimateLpcV3Formants(micAnalyser, minDb, dbRange) :
+                    state.micFormantMethod === 'lpc-v2' ? estimateLpcV2Formants(micAnalyser, minDb, dbRange) :
+                    state.micFormantMethod === 'lpc'    ? estimateLpcFormants(micAnalyser, minDb, dbRange, nyq) :
+                                                          estimatePeakFormants(state.cachedMicData, minDb, dbRange, nyq, state.cachedMicPitch));
             // Per-formant cache with timed fallback:
             // - Update cache when a formant is detected
             // - For undetected formants, fall back to cache value if it's recent enough
@@ -5106,6 +5114,21 @@ function computePlaybackSpectrum(timeSec) {
     }
 }
 
+// Raw (un-windowed) buffer slice at a playback time, for LPC formant analysis.
+let _pbLpcWin = null;
+function getPlaybackTimeWindow(timeSec, N) {
+    if (!playbackBuffer) return null;
+    const sr = playbackBuffer.sampleRate;
+    const ch = playbackBuffer.getChannelData(0);
+    const start = Math.round(timeSec * sr) - (N >> 1);
+    if (!_pbLpcWin || _pbLpcWin.length !== N) _pbLpcWin = new Float32Array(N);
+    for (let i = 0; i < N; i++) {
+        const idx = start + i;
+        _pbLpcWin[i] = (idx >= 0 && idx < ch.length) ? ch[idx] : 0;
+    }
+    return _pbLpcWin;
+}
+
 function updatePlaybackUi() {
     if (!playbackAudio || playbackAudio.paused) { playbackUiRaf = null; return; }
     const dur = pbDuration();
@@ -5218,7 +5241,8 @@ async function playRecording(id) {
                 playbackDurationSec = audioBuf.duration;
                 if (els.pbTotalTime) els.pbTotalTime.textContent = playbackDurationSec.toFixed(1) + 's';
             }
-            return buildPlaybackFormantTrack(audioBuf);
+            // playbackBuffer ready → drawVisualizer analyses windows from it directly
+            // (both markers and the LPC envelope curve), so no precomputed track needed.
         })
         .catch(err => console.warn('Playback analysis prep failed:', err));
 }
@@ -5654,7 +5678,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — shown in the bottom-right corner (bump on each release)
-const APP_VERSION = 'v1.11.0';
+const APP_VERSION = 'v1.11.1';
 (() => { const el = document.getElementById('app-version'); if (el) el.textContent = APP_VERSION; })();
 
 // Service Worker — enables offline use and "Add to Home Screen"
