@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🎙 まずデモを試す
+    url: https://source-filter-simulation.tori-shoichi.workers.dev
+    about: バグ報告・提案の前に、実際に動かして挙動を確認してみてください

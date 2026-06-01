@@ -1,10 +1,21 @@
 # PVA Source-Filter Simulation
 
+![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
+![PWA](https://img.shields.io/badge/PWA-ready-blueviolet)
+![Dependencies](https://img.shields.io/badge/dependencies-none-success)
+![Deploy](https://img.shields.io/badge/deploy-Cloudflare%20Workers-orange)
+
 声帯振動（**Source**）とフォルマント（**Filter**）をリアルタイムに操作し、パワースペクトラム・声門波形・母音空間を通じて発声の音響を学ぶ教育用 Web アプリです。マイク入力で自分の声を解析したり、録音して聴き返しながらフォルマントを観察できます。
 
 🔗 **[source-filter-simulation.tori-shoichi.workers.dev](https://source-filter-simulation.tori-shoichi.workers.dev)**
 
 参考書籍: *Practical Vocal Acoustics* — Kenneth Bozeman (NATS Books)
+
+<!-- スクリーンショットを入れる場合: docs/screenshot.png（マイクで声を出して解析中の画面）を
+     置き、下の2行のコメントを外すと表示されます。
+![スクリーンショット](docs/screenshot.png)
+*マイク入力でリアルタイムにスペクトラム・フォルマント・母音空間を解析*
+-->>
 
 ---
 
