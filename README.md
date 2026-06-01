@@ -11,11 +11,8 @@
 
 参考書籍: *Practical Vocal Acoustics* — Kenneth Bozeman (NATS Books)
 
-<!-- スクリーンショットを入れる場合: docs/screenshot.png（マイクで声を出して解析中の画面）を
-     置き、下の2行のコメントを外すと表示されます。
-![スクリーンショット](docs/screenshot.png)
-*マイク入力でリアルタイムにスペクトラム・フォルマント・母音空間を解析*
--->>
+![PVA Source-Filter Simulation — リアルタイム音響解析](docs/screenshot.png)
+*マイク入力で、声のスペクトラム・フォルマント（F1–F5）・LPC エンベロープ（紫破線）をリアルタイム表示*
 
 ---
 
@@ -39,6 +36,9 @@
 - ビブラート解析（速さ / 深さ / 規則性 / 信頼度）
 - **Loudness Ceiling**（声量の上限ガード、押し込み・大声の抑制練習）
 - スペクトログラム
+
+![Vowel Space — F1×F2 母音空間マップ](docs/vowel-space.png)
+*Vowel Space：検出した F1×F2 を IPA 母音図にマッピング（軌跡＋現在位置）*
 
 ### ⏺ 録音・再生
 - 最大 60 秒の録音、**IndexedDB に端末内保存**（サーバー送信なし）
