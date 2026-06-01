@@ -377,6 +377,20 @@ canvas {
     min-width: 0;
 }
 
+/* mic-toolbar: keep device select / Rec button compact & aligned with the Gain row */
+.spectrum-toolbar .mobile-select {
+    height: 32px;
+    padding: 4px 26px 4px 10px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    max-width: 130px;
+}
+.spectrum-toolbar .rec-btn {
+    padding: 6px 12px;
+    white-space: nowrap;
+    line-height: 1;
+}
+
 .btn-icon-sm {
     min-width: 36px;
     height: 36px;

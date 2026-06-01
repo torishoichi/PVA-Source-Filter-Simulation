@@ -100,12 +100,12 @@
                 <input type="range" id="mic-gain" min="0" max="5" value="1.0" step="0.1">
                 <span class="control-val" id="mic-gain-val">1.0x</span>
             </div>
-            <div class="toolbar-item">
+            <div class="toolbar-item toolbar-item-fit">
                 <select id="mic-device-select" class="mobile-select" title="マイクデバイス" style="display:none;">
                     <option value="">既定のマイク</option>
                 </select>
             </div>
-            <div class="toolbar-item">
+            <div class="toolbar-item toolbar-item-fit">
                 <button id="mic-record" class="rec-btn" type="button" style="display:none;" title="録音" aria-label="Record">● Rec<span id="mic-record-timer" style="margin-left:4px;"></span></button>
             </div>
         </div>
@@ -121,29 +121,6 @@
 
     <!-- Tab: Source -->
     <section class="tab-content active" id="tab-source">
-        <details class="card vibrato-card" id="loudness-panel" open>
-            <summary class="vibrato-summary">
-                <span class="vibrato-title">Loudness Ceiling</span>
-                <span class="vibrato-chevron" aria-hidden="true">▾</span>
-            </summary>
-            <div class="vibrato-body">
-                <div class="loud-meter">
-                    <div class="loud-track">
-                        <div class="loud-fill" id="loud-fill"></div>
-                        <div class="loud-marker" id="loud-marker"></div>
-                    </div>
-                    <span class="loud-val" id="loud-val">— dB</span>
-                </div>
-                <div class="loud-ceiling-row">
-                    <label for="loud-ceiling">Ceiling <span class="tooltip"
-                            data-tooltip="この声量（dB）を超えると赤。マイク感度・距離に依存する相対値なので、Gain と立ち位置を固定してから自分の『押さずに楽に出せる上限』に合わせる。設定はブラウザに保存。">[?]</span></label>
-                    <input type="range" id="loud-ceiling" min="-48" max="0" value="-18" step="1" class="mobile-range">
-                    <span class="loud-ceiling-val" id="loud-ceiling-val">-18 dB</span>
-                </div>
-                <p class="loud-hint">マイクをONにすると声量がバーで出ます。縦線（天井）を超えると赤、手前で黄、安全域は緑。緑〜黄を保って歌う練習で大声・押し込みを抑制。</p>
-            </div>
-        </details>
-
         <div class="card">
             <label class="slider-label">
                 Pitch (f₀) <span class="tooltip"
@@ -515,6 +492,29 @@
 
     <!-- Tab: Rec (recordings & playback) -->
     <section class="tab-content" id="tab-rec">
+        <details class="card vibrato-card" id="loudness-panel">
+            <summary class="vibrato-summary">
+                <span class="vibrato-title">Loudness Ceiling</span>
+                <span class="vibrato-chevron" aria-hidden="true">▾</span>
+            </summary>
+            <div class="vibrato-body">
+                <div class="loud-meter">
+                    <div class="loud-track">
+                        <div class="loud-fill" id="loud-fill"></div>
+                        <div class="loud-marker" id="loud-marker"></div>
+                    </div>
+                    <span class="loud-val" id="loud-val">— dB</span>
+                </div>
+                <div class="loud-ceiling-row">
+                    <label for="loud-ceiling">Ceiling <span class="tooltip"
+                            data-tooltip="この声量（dB）を超えると赤。マイク感度・距離に依存する相対値なので、Gain と立ち位置を固定してから自分の『押さずに楽に出せる上限』に合わせる。設定はブラウザに保存。">[?]</span></label>
+                    <input type="range" id="loud-ceiling" min="-48" max="0" value="-18" step="1" class="mobile-range">
+                    <span class="loud-ceiling-val" id="loud-ceiling-val">-18 dB</span>
+                </div>
+                <p class="loud-hint">マイクをONにすると声量がバーで出ます。縦線（天井）を超えると赤、手前で黄、安全域は緑。緑〜黄を保って歌う練習で大声・押し込みを抑制。</p>
+            </div>
+        </details>
+
         <details id="recordings-panel" class="recordings-panel" open>
             <summary class="recordings-head">
                 <span class="recordings-disclosure" aria-hidden="true">▸</span>
