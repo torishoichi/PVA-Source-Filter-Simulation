@@ -1832,7 +1832,7 @@ function initSpectrogramBuffer() {
 }
 
 function pickSpectrogramAnalyser() {
-    const playbackOn = !!playbackSource && !playbackPaused;
+    const playbackOn = !!playbackAudio && !playbackAudio.paused;
     if ((state.isMicActive || playbackOn) && micAnalyser) return micAnalyser;
     if (isPlaying && analyser) return analyser;
     return null;
@@ -4109,7 +4109,11 @@ function drawVisualizer() {
             state.cachedMicData = new Float32Array(micAnalyser.frequencyBinCount);
         }
 
-        if (!state.isMicPaused) {
+        // While a recording is playing, the spectrum comes from computePlaybackSpectrum()
+        // (offline FFT of the decoded buffer, set in updatePlaybackUi) — don't overwrite
+        // state.cachedMicData with the silent analyser (iOS feeds it nothing anyway).
+        const pbActiveSpec = !!playbackAudio && !playbackAudio.paused && !!playbackBuffer;
+        if (!state.isMicPaused && !pbActiveSpec) {
             micAnalyser.getFloatFrequencyData(state.cachedMicData);
         }
 
@@ -4194,11 +4198,15 @@ function drawVisualizer() {
             // Pause: freeze formants at the moment of pause (use cached snapshot)
             estFormants = state.cachedMicFormants;
         } else {
-            estFormants =
+            // During playback, prefer the precomputed offline formant track (speed-independent,
+            // iOS-safe). Falls back to live LPC until the track finishes building.
+            const pbFormants = (!!playbackAudio && !playbackAudio.paused)
+                ? lookupFormantTrack(playbackAudio.currentTime) : null;
+            estFormants = pbFormants ? pbFormants : (
                 state.micFormantMethod === 'lpc-v3' ? estimateLpcV3Formants(micAnalyser, minDb, dbRange) :
                 state.micFormantMethod === 'lpc-v2' ? estimateLpcV2Formants(micAnalyser, minDb, dbRange) :
                 state.micFormantMethod === 'lpc'    ? estimateLpcFormants(micAnalyser, minDb, dbRange, nyq) :
-                                                      estimatePeakFormants(state.cachedMicData, minDb, dbRange, nyq, state.cachedMicPitch);
+                                                      estimatePeakFormants(state.cachedMicData, minDb, dbRange, nyq, state.cachedMicPitch));
             // Per-formant cache with timed fallback:
             // - Update cache when a formant is detected
             // - For undetected formants, fall back to cache value if it's recent enough
@@ -4647,92 +4655,37 @@ let recStartTs = 0;
 let recTimerId = null;
 let recAutoStopId = null;
 
-// Playback uses an AudioBufferSourceNode (decoded via decodeAudioData) so that
-// spectrum/formant analysis works on iOS Safari — where a MediaElementSource does
-// NOT feed an AnalyserNode (audio plays but the analyser stays silent).
-// Trade-off: AudioBufferSourceNode has no preservesPitch, so rate changes alter pitch.
-let playbackBuffer = null;      // decoded AudioBuffer
-let playbackSource = null;      // current AudioBufferSourceNode (recreated per start/seek/resume)
-let playbackStartCtxTime = 0;   // audioCtx.currentTime when the current source started
-let playbackStartOffset = 0;    // buffer offset (sec) at that start
-let playbackPaused = false;     // true while paused (source stopped, position retained)
-let playbackPausedPos = 0;      // retained position (sec) while paused / ended
-let playbackEnded = false;      // reached natural end (not looping)
+// Playback uses an HTMLAudioElement for native pitch-preserving rate changes and
+// free seeking. It is NOT routed through createMediaElementSource (iOS Safari won't
+// feed an AnalyserNode); instead the recording is decoded into an AudioBuffer that is
+// analysed offline at the playback position — speed-independent and iOS-safe.
+// See computePlaybackSpectrum() (spectrum) and lookupFormantTrack() (formants).
+let playbackAudio = null;       // HTMLAudioElement (audible, preservesPitch)
+let playbackObjectUrl = null;   // object URL for the blob
+let playbackBuffer = null;      // decoded AudioBuffer — analysis only (not audible)
 let playbackRecId = null;
 let playbackRate = 1.0;
 let playbackLoop = false;
 let playbackLoopA = 0;   // section-loop start, ratio [0,1]
 let playbackLoopB = 1;   // section-loop end, ratio [0,1]
-let playbackDurationSec = 0; // duration (sec)
+let playbackDurationSec = 0; // duration (sec); WebM elements can report Infinity
 let pbSeeking = false;       // true only while actively dragging the seek slider
-let pbSeekTargetPos = null;  // pending seek position (sec), applied on drag release
 
 function pbDuration() {
     if (playbackDurationSec > 0) return playbackDurationSec;
-    return playbackBuffer ? playbackBuffer.duration : 0;
-}
-
-// Current playback position (sec), derived from the running source's elapsed time.
-function pbCurrentTime() {
-    if (!playbackBuffer) return 0;
-    if (playbackPaused || playbackEnded || !playbackSource) return playbackPausedPos || playbackStartOffset;
-    const t = playbackStartOffset + (audioCtx.currentTime - playbackStartCtxTime) * playbackRate;
-    return Math.max(0, Math.min(t, playbackBuffer.duration));
-}
-
-// (Re)create a source node and start playing at offsetSec.
-function startPlaybackSource(offsetSec) {
-    stopPlaybackSource();
-    const dur = playbackBuffer ? playbackBuffer.duration : 0;
-    const off = Math.max(0, Math.min(offsetSec, dur));
-    const src = audioCtx.createBufferSource();
-    src.buffer = playbackBuffer;
-    src.playbackRate.value = playbackRate;
-    if (micGainNode) src.connect(micGainNode);          // analysis branch (spectrum/formant)
-    if (playbackGainNode) src.connect(playbackGainNode); // audible branch
-    src.onended = onPlaybackSourceEnded;
-    src.start(0, off);
-    playbackSource = src;
-    playbackStartCtxTime = audioCtx.currentTime;
-    playbackStartOffset = off;
-    playbackPaused = false;
-    playbackEnded = false;
-}
-
-// Stop & detach the current source without clearing the retained position.
-function stopPlaybackSource() {
-    if (playbackSource) {
-        try { playbackSource.onended = null; playbackSource.stop(); } catch (_) {}
-        try { playbackSource.disconnect(); } catch (_) {}
-        playbackSource = null;
-    }
-}
-
-// Fires only on natural end (manual stops null out onended first).
-function onPlaybackSourceEnded() {
-    if (playbackLoop) {
-        startPlaybackSource(playbackLoopA * pbDuration());
-        if (!playbackUiRaf) playbackUiRaf = requestAnimationFrame(updatePlaybackUi);
-    } else {
-        playbackEnded = true;
-        playbackPausedPos = pbDuration();
-        stopPlayback();
-    }
+    if (playbackBuffer && playbackBuffer.duration > 0) return playbackBuffer.duration;
+    const d = playbackAudio ? playbackAudio.duration : 0;
+    return isFinite(d) ? d : 0;
 }
 
 function pausePlayback() {
-    if (!playbackSource || playbackPaused) return;
-    playbackPausedPos = pbCurrentTime();
-    playbackPaused = true;
-    stopPlaybackSource();
+    if (playbackAudio && !playbackAudio.paused) { try { playbackAudio.pause(); } catch (_) {} }
     renderRecordingsList();
 }
 
 function resumePlayback() {
-    if (!playbackBuffer || !playbackPaused) return;
-    startPlaybackSource(playbackPausedPos);
-    if (playbackUiRaf) cancelAnimationFrame(playbackUiRaf);
-    playbackUiRaf = requestAnimationFrame(updatePlaybackUi);
+    if (playbackAudio && playbackAudio.paused) { playbackAudio.play().catch(() => {}); }
+    if (!playbackUiRaf) playbackUiRaf = requestAnimationFrame(updatePlaybackUi);
     renderRecordingsList();
 }
 let playbackGainNode = null;    // audible output branch
@@ -4862,20 +4815,314 @@ function ensurePlaybackGain() {
     }
 }
 
+// ============================================================
+// Offline playback analysis (ported from 2ae0a1b). Lets spectrum / Vowel Space
+// react during <audio> playback WITHOUT an AnalyserNode — required on iOS Safari,
+// where MediaElementSource does not feed an analyser. Operates on the decoded
+// AudioBuffer at the absolute recording time, so it is speed-independent.
+// ============================================================
+let playbackFormantTrack = null; // { hop: sec, frames: [{f1..f5}|null] }
+
+// Standalone Durand-Kerner (the live one is a closure; keep this self-contained).
+function _dkRoots(poly, n) {
+    if (poly[0] === 0) return null;
+    const c = new Float64Array(n + 1);
+    for (let i = 0; i <= n; i++) c[i] = poly[i] / poly[0];
+    const r = new Float64Array(2 * n);
+    for (let k = 0; k < n; k++) {
+        const th = 2 * Math.PI * k / n + 0.123;
+        r[2 * k] = 0.9 * Math.cos(th); r[2 * k + 1] = 0.9 * Math.sin(th);
+    }
+    for (let iter = 0; iter < 60; iter++) {
+        let maxD = 0;
+        for (let k = 0; k < n; k++) {
+            const xr = r[2 * k], xi = r[2 * k + 1];
+            let pr = 1, pi = 0;
+            for (let i = 1; i <= n; i++) {
+                const nr = pr * xr - pi * xi + c[i];
+                const ni = pr * xi + pi * xr;
+                pr = nr; pi = ni;
+            }
+            let dr = 1, di = 0;
+            for (let j = 0; j < n; j++) {
+                if (j === k) continue;
+                const er = xr - r[2 * j], ei = xi - r[2 * j + 1];
+                const tr = dr * er - di * ei, ti = dr * ei + di * er;
+                dr = tr; di = ti;
+            }
+            const den = dr * dr + di * di;
+            if (den < 1e-30) continue;
+            const qr = (pr * dr + pi * di) / den, qi = (pi * dr - pr * di) / den;
+            r[2 * k] = xr - qr; r[2 * k + 1] = xi - qi;
+            const d = Math.hypot(qr, qi);
+            if (d > maxD) maxD = d;
+        }
+        if (maxD < 1e-10) break;
+    }
+    return r;
+}
+
+// Windowed-sinc anti-alias decimation to ~targetSr (proper LPF, unlike the live box avg).
+function _offlineDecimate(mono, srOrig, targetSr) {
+    const factor = Math.max(1, Math.round(srOrig / targetSr));
+    if (factor === 1) return { data: mono, sr: srOrig };
+    const fc = 0.45 / factor;                 // cutoff in cycles/sample (0.9 × new Nyquist)
+    const M = 8 * factor + 1, c = (M - 1) / 2;
+    const sinc = (x) => (x === 0 ? 1 : Math.sin(Math.PI * x) / (Math.PI * x));
+    const ker = new Float64Array(M);
+    let ksum = 0;
+    for (let n = 0; n < M; n++) {
+        const ham = 0.54 - 0.46 * Math.cos(2 * Math.PI * n / (M - 1));
+        ker[n] = sinc(2 * fc * (n - c)) * ham;
+        ksum += ker[n];
+    }
+    for (let n = 0; n < M; n++) ker[n] /= ksum; // unity DC gain
+    const outN = Math.floor(mono.length / factor);
+    const out = new Float32Array(outN);
+    const half = (M - 1) >> 1;
+    for (let i = 0; i < outN; i++) {
+        const center = i * factor;
+        let acc = 0;
+        for (let n = 0; n < M; n++) {
+            const idx = center + n - half;
+            if (idx >= 0 && idx < mono.length) acc += ker[n] * mono[idx];
+        }
+        out[i] = acc;
+    }
+    return { data: out, sr: srOrig / factor };
+}
+
+// Assign F1–F5 across frames by continuity + band priors, then median-smooth.
+function _trackAndSmooth(frames, hopSec) {
+    const SLOTS = 5;
+    const priors = [500, 1500, 2500, 3500, 4500];
+    const tol = [350, 500, 650, 800, 950]; // max Hz from anchor for assignment
+    const assignedAll = new Array(frames.length);
+    let anchor = priors.slice();
+    for (let fi = 0; fi < frames.length; fi++) {
+        const cands = frames[fi];
+        const assigned = [null, null, null, null, null];
+        if (cands && cands.length) {
+            const used = new Array(cands.length).fill(false);
+            for (let s = 0; s < SLOTS; s++) {
+                let best = -1, bd = Infinity;
+                for (let j = 0; j < cands.length; j++) {
+                    if (used[j]) continue;
+                    if (s > 0 && assigned[s - 1] != null && cands[j].freq <= assigned[s - 1] + 30) continue;
+                    const d = Math.abs(cands[j].freq - anchor[s]);
+                    if (d < bd) { bd = d; best = j; }
+                }
+                if (best >= 0 && bd <= tol[s]) { assigned[s] = cands[best].freq; used[best] = true; }
+            }
+        }
+        assignedAll[fi] = assigned;
+        anchor = assigned.map((v, s) => (v != null ? v : priors[s]));
+    }
+    const W = 2; // ±2 frames (5-tap) median
+    const res = new Array(frames.length);
+    for (let fi = 0; fi < frames.length; fi++) {
+        const obj = { f1: null, f2: null, f3: null, f4: null, f5: null };
+        for (let s = 0; s < SLOTS; s++) {
+            const vals = [];
+            for (let d = -W; d <= W; d++) {
+                const kk = fi + d;
+                if (kk >= 0 && kk < frames.length && assignedAll[kk][s] != null) vals.push(assignedAll[kk][s]);
+            }
+            if (vals.length) { vals.sort((a, b) => a - b); obj['f' + (s + 1)] = vals[Math.floor(vals.length / 2)]; }
+        }
+        res[fi] = obj;
+    }
+    return { hop: hopSec, frames: res };
+}
+
+function analyzeRecordingFormantsOffline(audioBuffer) {
+    const srOrig = audioBuffer.sampleRate;
+    const nch = audioBuffer.numberOfChannels;
+    const ch0 = audioBuffer.getChannelData(0);
+    let mono = ch0;
+    if (nch > 1) {
+        mono = new Float32Array(ch0.length);
+        const ch1 = audioBuffer.getChannelData(1);
+        for (let i = 0; i < mono.length; i++) mono[i] = 0.5 * (ch0[i] + ch1[i]);
+    }
+    const { data: sig, sr } = _offlineDecimate(mono, srOrig, 11025);
+    const hopSec = 0.01;
+    const hop = Math.max(1, Math.round(hopSec * sr));
+    const p = Math.min(16, Math.max(10, Math.round(sr / 1000) + 2)); // ≈13 at 11 kHz
+    const minLag = Math.floor(sr / 500), maxLag = Math.floor(sr / 70); // f0 70–500 Hz
+    const w40 = Math.floor(0.04 * sr);
+    const minWin = Math.floor(0.02 * sr), maxWin = Math.floor(0.05 * sr);
+    const frames = [];
+    const preAlpha = 0.97;
+
+    for (let center = 0; center < sig.length; center += hop) {
+        // f0 via normalized autocorrelation on a 40 ms window
+        let s0 = center - (w40 >> 1); if (s0 < 0) s0 = 0;
+        let s1 = s0 + w40; if (s1 > sig.length) { s1 = sig.length; s0 = Math.max(0, s1 - w40); }
+        let r0 = 0; for (let i = s0; i < s1; i++) r0 += sig[i] * sig[i];
+        const rms = Math.sqrt(r0 / Math.max(1, s1 - s0));
+        if (rms < 0.005) { frames.push(null); continue; }
+        let bestLag = -1, bestVal = 0;
+        for (let lag = minLag; lag <= maxLag && lag < (s1 - s0); lag++) {
+            let acc = 0;
+            for (let i = s0; i + lag < s1; i++) acc += sig[i] * sig[i + lag];
+            const norm = acc / (r0 || 1);
+            if (norm > bestVal) { bestVal = norm; bestLag = lag; }
+        }
+        const voiced = bestVal > 0.3 && bestLag > 0;
+        const period = voiced ? bestLag : Math.floor(0.025 * sr);
+        // pitch-synchronous window ≈ 4 periods (bounded 20–50 ms)
+        let winLen = Math.max(minWin, Math.min(maxWin, 4 * period));
+        let a0 = center - (winLen >> 1); if (a0 < 0) a0 = 0;
+        let a1 = a0 + winLen; if (a1 > sig.length) { a1 = sig.length; a0 = Math.max(0, a1 - winLen); }
+        const M = a1 - a0;
+        if (M < p + 4) { frames.push(null); continue; }
+        const x = new Float64Array(M);
+        for (let i = 0; i < M; i++) {
+            const xn = sig[a0 + i], xn1 = i > 0 ? sig[a0 + i - 1] : sig[a0 + i];
+            const pe = xn - preAlpha * xn1;
+            const wnd = 0.5 * (1 - Math.cos(2 * Math.PI * i / (M - 1)));
+            x[i] = pe * wnd;
+        }
+        const k = burgLpc(x, M, p);
+        if (!k) { frames.push(null); continue; }
+        const a = reflectionsToPredictions(k, p);
+        const poly = new Float64Array(p + 1); poly[0] = 1;
+        for (let i = 1; i <= p; i++) poly[i] = -a[i];
+        const roots = _dkRoots(poly, p);
+        if (!roots) { frames.push(null); continue; }
+        const cands = [];
+        for (let i = 0; i < p; i++) {
+            const re = roots[2 * i], im = roots[2 * i + 1];
+            if (im <= 0) continue;
+            const mag = Math.hypot(re, im);
+            if (mag <= 0 || mag >= 1) continue;
+            const freq = Math.atan2(im, re) * sr / (2 * Math.PI);
+            const bw = -Math.log(mag) * sr / Math.PI;
+            if (freq < 90 || freq > 5500 || bw > 700) continue;
+            cands.push({ freq, bw });
+        }
+        cands.sort((u, v) => u.freq - v.freq);
+        frames.push(cands.length ? cands : null);
+    }
+    return _trackAndSmooth(frames, hopSec);
+}
+
+// Analyze an already-decoded AudioBuffer in the background; applied once ready
+// (live path used until then). Takes a decoded buffer to avoid a second decode.
+async function buildPlaybackFormantTrack(audioBuffer) {
+    playbackFormantTrack = null;
+    if (!audioBuffer) return;
+    try {
+        const track = analyzeRecordingFormantsOffline(audioBuffer);
+        if (playbackAudio) playbackFormantTrack = track; // still playing?
+    } catch (err) {
+        console.warn('Offline formant analysis failed:', err);
+        playbackFormantTrack = null;
+    }
+}
+
+// Look up the precomputed formant frame at a playback time → estFormants shape.
+function lookupFormantTrack(timeSec) {
+    const tr = playbackFormantTrack;
+    if (!tr || !tr.frames.length) return null;
+    let idx = Math.round(timeSec / tr.hop);
+    if (idx < 0) idx = 0;
+    if (idx >= tr.frames.length) idx = tr.frames.length - 1;
+    const f = tr.frames[idx];
+    if (!f) return null;
+    const mk = (hz) => (hz != null ? { freq: hz, db: 0 } : null);
+    return { f1: mk(f.f1), f2: mk(f.f2), f3: mk(f.f3), f4: mk(f.f4), f5: mk(f.f5) };
+}
+
+// ---- Minimal radix-2 FFT (in-place) for the playback spectrum window ----
+function fftRadix2(re, im) {
+    const n = re.length;
+    for (let i = 1, j = 0; i < n; i++) {
+        let bit = n >> 1;
+        for (; j & bit; bit >>= 1) j ^= bit;
+        j ^= bit;
+        if (i < j) {
+            const tr = re[i]; re[i] = re[j]; re[j] = tr;
+            const ti = im[i]; im[i] = im[j]; im[j] = ti;
+        }
+    }
+    for (let len = 2; len <= n; len <<= 1) {
+        const ang = -2 * Math.PI / len;
+        const wr = Math.cos(ang), wi = Math.sin(ang);
+        const half = len >> 1;
+        for (let i = 0; i < n; i += len) {
+            let cr = 1, ci = 0;
+            for (let k = 0; k < half; k++) {
+                const ar = re[i + k], ai = im[i + k];
+                const br = re[i + k + half], bi = im[i + k + half];
+                const vr = br * cr - bi * ci, vi = br * ci + bi * cr;
+                re[i + k] = ar + vr; im[i + k] = ai + vi;
+                re[i + k + half] = ar - vr; im[i + k + half] = ai - vi;
+                const ncr = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = ncr;
+            }
+        }
+    }
+}
+
+// Compute a dB spectrum at playback time `timeSec` from the decoded buffer and
+// fill state.cachedMicData, so drawSpectrum renders it without an AnalyserNode.
+let _pbSpecRe = null, _pbSpecIm = null, _pbSpecWin = null;
+function computePlaybackSpectrum(timeSec) {
+    if (!playbackBuffer || !micAnalyser) return;
+    const N = micAnalyser.fftSize;              // 4096
+    const bins = micAnalyser.frequencyBinCount; // 2048
+    const sr = playbackBuffer.sampleRate;
+    const ch = playbackBuffer.getChannelData(0);
+    const start = Math.round(timeSec * sr) - (N >> 1);
+    if (!_pbSpecRe || _pbSpecRe.length !== N) {
+        _pbSpecRe = new Float64Array(N);
+        _pbSpecIm = new Float64Array(N);
+        _pbSpecWin = new Float64Array(N);
+        for (let i = 0; i < N; i++) _pbSpecWin[i] = 0.5 * (1 - Math.cos(2 * Math.PI * i / (N - 1)));
+    }
+    let rms = 0;
+    for (let i = 0; i < N; i++) {
+        const idx = start + i;
+        const s = (idx >= 0 && idx < ch.length) ? ch[idx] : 0;
+        rms += s * s;
+        _pbSpecRe[i] = s * _pbSpecWin[i];
+        _pbSpecIm[i] = 0;
+    }
+    state.cachedMicLevel = Math.sqrt(rms / N); // expose level so Vowel Space admits samples
+    fftRadix2(_pbSpecRe, _pbSpecIm);
+    if (!state.cachedMicData || state.cachedMicData.length !== bins) {
+        state.cachedMicData = new Float32Array(bins);
+    }
+    const arr = state.cachedMicData;
+    const norm = 2 / N;
+    const minDb = micAnalyser.minDecibels, maxDb = micAnalyser.maxDecibels;
+    const smooth = 0.6; // EMA to mimic AnalyserNode smoothingTimeConstant
+    for (let i = 0; i < bins; i++) {
+        const mag = Math.hypot(_pbSpecRe[i], _pbSpecIm[i]) * norm;
+        let db = 20 * Math.log10(mag + 1e-9);
+        if (db < minDb) db = minDb; else if (db > maxDb) db = maxDb;
+        arr[i] = (arr[i] && isFinite(arr[i])) ? (arr[i] * smooth + db * (1 - smooth)) : db;
+    }
+}
+
 function updatePlaybackUi() {
-    if (!playbackBuffer || playbackPaused) { playbackUiRaf = null; return; }
+    if (!playbackAudio || playbackAudio.paused) { playbackUiRaf = null; return; }
     const dur = pbDuration();
-    const cur = pbCurrentTime();
+    const cur = playbackAudio.currentTime || 0;
     // Section loop: wrap back to A when the playhead reaches B (full-track loop
-    // with B≈1 is handled by the source's onended instead).
+    // with B≈1 is handled by the 'ended' listener instead).
     if (playbackLoop && dur > 0 && playbackLoopB < 0.999
         && cur >= playbackLoopB * dur - 0.02) {
-        startPlaybackSource(playbackLoopA * dur);
+        playbackAudio.currentTime = playbackLoopA * dur;
     }
     if (els.pbSeek && !pbSeeking) {
         els.pbSeek.value = String(dur > 0 ? Math.round((cur / dur) * 1000) : 0);
     }
     if (els.pbCurTime) els.pbCurTime.textContent = cur.toFixed(1) + 's';
+    // Offline spectrum at the current recording time (analysis branch; formants come
+    // from the precomputed track via drawVisualizer). Speed-independent.
+    if (playbackBuffer) computePlaybackSpectrum(cur);
     playbackUiRaf = requestAnimationFrame(updatePlaybackUi);
 }
 
@@ -4890,14 +5137,10 @@ function updateLoopRegionUi() {
 }
 
 async function playRecording(id) {
-    if (playbackBuffer || playbackSource) stopPlayback();
+    if (playbackAudio) stopPlayback();
 
-    const rec = await RecordingsDB.get(id);
+    const rec = await RecordingsDB.get(id);   // only await before play() (iOS gesture)
     if (!rec) return;
-
-    await ensureAnalysisPipeline();
-    ensurePlaybackGain();
-    if (audioCtx.state === 'suspended') { try { await audioCtx.resume(); } catch (_) {} }
 
     // Detach live mic from analysis path during playback
     micWasActiveBeforePlayback = !!(micSource && state.isMicActive);
@@ -4905,59 +5148,91 @@ async function playRecording(id) {
         try { micSource.disconnect(micGainNode); } catch (_) {}
     }
 
-    // Decode the recording into an AudioBuffer — unlike MediaElementSource this
-    // feeds the AnalyserNode on iOS Safari, so spectrum/formant analysis works.
-    try {
-        const arrBuf = await rec.blob.arrayBuffer();
-        playbackBuffer = await audioCtx.decodeAudioData(arrBuf.slice(0));
-    } catch (err) {
-        console.error('decodeAudioData failed:', err);
-        alert('再生用のデコードに失敗しました');
-        playbackBuffer = null;
-        cleanupPlayback();
-        return;
-    }
+    // <audio> element: pitch-preserving rate, native seeking. NOT routed into Web Audio
+    // (iOS won't feed an analyser). Analysis is done offline on the decoded buffer.
+    playbackObjectUrl = URL.createObjectURL(rec.blob);
+    playbackAudio = new Audio();
+    playbackAudio.src = playbackObjectUrl;
+    playbackAudio.preservesPitch = true;
+    playbackAudio.mozPreservesPitch = true;
+    playbackAudio.webkitPreservesPitch = true;
+    playbackAudio.playbackRate = playbackRate;
+    playbackAudio.loop = false; // section loop handled manually
 
-    playbackDurationSec = playbackBuffer.duration || ((rec.durationMs || 0) / 1000);
+    playbackDurationSec = (rec.durationMs || 0) / 1000; // WebM element duration can be Infinity
     if (els.pbTotalTime) els.pbTotalTime.textContent = playbackDurationSec.toFixed(1) + 's';
 
-    // Reset the A–B region to full track for each new recording
     playbackLoopA = 0;
     playbackLoopB = 1;
     updateLoopRegionUi();
     if (els.playbackControls) els.playbackControls.classList.toggle('is-loop', playbackLoop);
 
+    playbackAudio.addEventListener('loadedmetadata', () => {
+        if (isFinite(playbackAudio.duration) && playbackAudio.duration > 0) {
+            playbackDurationSec = playbackAudio.duration;
+            if (els.pbTotalTime) els.pbTotalTime.textContent = playbackDurationSec.toFixed(1) + 's';
+        }
+    });
+    playbackAudio.addEventListener('ended', () => {
+        if (playbackLoop) {
+            playbackAudio.currentTime = playbackLoopA * pbDuration();
+            playbackAudio.play().catch(() => {});
+        } else {
+            stopPlayback();
+        }
+    });
+
     playbackRecId = id;
-    playbackPaused = false;
-    playbackEnded = false;
-    playbackPausedPos = 0;
     state.isMicActive = true;
     state.isMicPaused = false;
     if (els.btnMic) els.btnMic.classList.add('mic-active');
-
     if (els.pbRate) els.pbRate.value = String(playbackRate);
     if (els.playbackControls) els.playbackControls.style.display = 'flex';
 
-    startPlaybackSource(0);
+    // Play ASAP — still in the gesture-initiated task — so iOS allows it.
+    try {
+        await playbackAudio.play();
+    } catch (err) {
+        console.error('audio.play() failed:', err);
+        stopPlayback();
+        return;
+    }
 
     if (playbackUiRaf) cancelAnimationFrame(playbackUiRaf);
     playbackUiRaf = requestAnimationFrame(updatePlaybackUi);
-
     if (!isPlaying) {
         cancelAnimationFrame(animationId);
         drawVisualizer();
     }
     renderRecordingsList();
+
+    // After play(): set up the analysis pipeline, decode the buffer, build the formant
+    // track. Done off the gesture path so play() isn't blocked. Live path is used until ready.
+    ensureAnalysisPipeline()
+        .then(() => rec.blob.arrayBuffer())
+        .then(buf => audioCtx.decodeAudioData(buf.slice(0)))
+        .then(audioBuf => {
+            if (playbackRecId !== id || !playbackAudio) return; // playback changed
+            playbackBuffer = audioBuf;
+            if (audioBuf.duration > 0) {
+                playbackDurationSec = audioBuf.duration;
+                if (els.pbTotalTime) els.pbTotalTime.textContent = playbackDurationSec.toFixed(1) + 's';
+            }
+            return buildPlaybackFormantTrack(audioBuf);
+        })
+        .catch(err => console.warn('Playback analysis prep failed:', err));
 }
 
 function stopPlayback() {
-    stopPlaybackSource();
+    if (playbackAudio) {
+        try { playbackAudio.pause(); } catch (_) {}
+        try { playbackAudio.removeAttribute('src'); playbackAudio.load(); } catch (_) {}
+    }
+    if (playbackObjectUrl) { URL.revokeObjectURL(playbackObjectUrl); playbackObjectUrl = null; }
+    playbackAudio = null;
     playbackBuffer = null;
+    playbackFormantTrack = null;
     playbackDurationSec = 0;
-    playbackPaused = false;
-    playbackEnded = false;
-    playbackPausedPos = 0;
-    pbSeekTargetPos = null;
     if (playbackUiRaf) { cancelAnimationFrame(playbackUiRaf); playbackUiRaf = null; }
     if (els.playbackControls) els.playbackControls.style.display = 'none';
     cleanupPlayback();
@@ -4978,29 +5253,18 @@ function cleanupPlayback() {
     renderRecordingsList();
 }
 
-// Seek handler — preview while dragging, apply (recreate source) on release so we
-// don't rebuild the AudioBufferSourceNode on every input event.
+// Seek handler — <audio>.currentTime is cheap, so update directly on input.
 if (els.pbSeek) {
     els.pbSeek.addEventListener('input', () => {
         const dur = pbDuration();
-        if (!playbackBuffer || !dur) return;
-        pbSeekTargetPos = (Number(els.pbSeek.value) / 1000) * dur;
-        if (els.pbCurTime) els.pbCurTime.textContent = pbSeekTargetPos.toFixed(1) + 's';
+        if (!playbackAudio || !dur) return;
+        const pos = (Number(els.pbSeek.value) / 1000) * dur;
+        try { playbackAudio.currentTime = pos; } catch (_) {}
+        if (els.pbCurTime) els.pbCurTime.textContent = pos.toFixed(1) + 's';
     });
-    const applySeek = () => {
-        if (pbSeekTargetPos == null) return;
-        const pos = pbSeekTargetPos;
-        pbSeekTargetPos = null;
-        if (playbackPaused || playbackEnded) {
-            playbackPausedPos = pos;          // resume will start from here
-            playbackStartOffset = pos;
-        } else if (playbackBuffer) {
-            startPlaybackSource(pos);          // re-seek while playing
-        }
-    };
-    // Suppress the playhead auto-update only WHILE dragging; apply seek on release.
+    // Suppress the playhead auto-update only WHILE dragging (not merely focused).
     const seekStart = () => { pbSeeking = true; };
-    const seekEnd = () => { pbSeeking = false; applySeek(); };
+    const seekEnd = () => { pbSeeking = false; };
     els.pbSeek.addEventListener('pointerdown', seekStart);
     els.pbSeek.addEventListener('pointerup', seekEnd);
     els.pbSeek.addEventListener('pointercancel', seekEnd);
@@ -5008,19 +5272,12 @@ if (els.pbSeek) {
     els.pbSeek.addEventListener('blur', seekEnd);
 }
 
-// Speed handler — AudioBufferSourceNode has no preservesPitch, so this also
-// shifts pitch. Re-anchor the timing by restarting at the current position.
+// Speed handler — <audio>.preservesPitch keeps pitch constant across rate changes.
 if (els.pbRate) {
     els.pbRate.addEventListener('change', () => {
         const r = Number(els.pbRate.value);
-        const curPos = pbCurrentTime();
         playbackRate = r;
-        if (playbackSource && !playbackPaused) {
-            startPlaybackSource(curPos);       // restart at current pos with new rate
-        } else {
-            playbackStartOffset = curPos;
-            playbackPausedPos = curPos;
-        }
+        if (playbackAudio) playbackAudio.playbackRate = r;
     });
 }
 
@@ -5241,12 +5498,12 @@ function renderRecordingsList() {
         // Pause keeps the clip loaded so the next press resumes from the same
         // position; playRecording() always restarts from 0, so resume calls
         // the live element directly instead of re-entering playRecording().
-        const isCurrent = rec.id === playbackRecId && playbackBuffer && !playbackEnded;
-        const isPlayingThis = isCurrent && !playbackPaused;
+        const isCurrent = rec.id === playbackRecId && playbackAudio;
+        const isPlayingThis = isCurrent && !playbackAudio.paused;
         playBtn.textContent = isPlayingThis ? '⏸ Pause' : (isCurrent ? '▶ Resume' : '▶ Play');
         playBtn.addEventListener('click', () => {
-            if (rec.id === playbackRecId && playbackBuffer && !playbackEnded) {
-                if (playbackPaused) resumePlayback();
+            if (rec.id === playbackRecId && playbackAudio) {
+                if (playbackAudio.paused) resumePlayback();
                 else pausePlayback();
             } else {
                 playRecording(rec.id);
@@ -5397,7 +5654,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — shown in the bottom-right corner (bump on each release)
-const APP_VERSION = 'v1.10.2';
+const APP_VERSION = 'v1.11.0';
 (() => { const el = document.getElementById('app-version'); if (el) el.textContent = APP_VERSION; })();
 
 // Service Worker — enables offline use and "Add to Home Screen"
