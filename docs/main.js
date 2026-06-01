@@ -1832,7 +1832,7 @@ function initSpectrogramBuffer() {
 }
 
 function pickSpectrogramAnalyser() {
-    const playbackOn = (typeof playbackAudio !== 'undefined') && playbackAudio && !playbackAudio.paused;
+    const playbackOn = !!playbackSource && !playbackPaused;
     if ((state.isMicActive || playbackOn) && micAnalyser) return micAnalyser;
     if (isPlaying && analyser) return analyser;
     return null;
@@ -4647,26 +4647,93 @@ let recStartTs = 0;
 let recTimerId = null;
 let recAutoStopId = null;
 
-// Playback uses HTMLAudioElement so we get native pitch-preserving rate
-// changes and free seeking. The element is piped into the Web Audio graph
-// via createMediaElementSource so existing spectrum/formant analysis works.
-let playbackAudio = null;       // HTMLAudioElement
-let playbackMediaSrc = null;    // MediaElementAudioSourceNode
-let playbackObjectUrl = null;
+// Playback uses an AudioBufferSourceNode (decoded via decodeAudioData) so that
+// spectrum/formant analysis works on iOS Safari — where a MediaElementSource does
+// NOT feed an AnalyserNode (audio plays but the analyser stays silent).
+// Trade-off: AudioBufferSourceNode has no preservesPitch, so rate changes alter pitch.
+let playbackBuffer = null;      // decoded AudioBuffer
+let playbackSource = null;      // current AudioBufferSourceNode (recreated per start/seek/resume)
+let playbackStartCtxTime = 0;   // audioCtx.currentTime when the current source started
+let playbackStartOffset = 0;    // buffer offset (sec) at that start
+let playbackPaused = false;     // true while paused (source stopped, position retained)
+let playbackPausedPos = 0;      // retained position (sec) while paused / ended
+let playbackEnded = false;      // reached natural end (not looping)
 let playbackRecId = null;
 let playbackRate = 1.0;
 let playbackLoop = false;
 let playbackLoopA = 0;   // section-loop start, ratio [0,1]
 let playbackLoopB = 1;   // section-loop end, ratio [0,1]
-let playbackDurationSec = 0; // known duration from the record (WebM reports Infinity)
+let playbackDurationSec = 0; // duration (sec)
 let pbSeeking = false;       // true only while actively dragging the seek slider
+let pbSeekTargetPos = null;  // pending seek position (sec), applied on drag release
 
-// Effective duration: prefer the stored value (WebM blobs report Infinity),
-// fall back to the media element only when it's finite.
 function pbDuration() {
     if (playbackDurationSec > 0) return playbackDurationSec;
-    const d = playbackAudio ? playbackAudio.duration : 0;
-    return isFinite(d) ? d : 0;
+    return playbackBuffer ? playbackBuffer.duration : 0;
+}
+
+// Current playback position (sec), derived from the running source's elapsed time.
+function pbCurrentTime() {
+    if (!playbackBuffer) return 0;
+    if (playbackPaused || playbackEnded || !playbackSource) return playbackPausedPos || playbackStartOffset;
+    const t = playbackStartOffset + (audioCtx.currentTime - playbackStartCtxTime) * playbackRate;
+    return Math.max(0, Math.min(t, playbackBuffer.duration));
+}
+
+// (Re)create a source node and start playing at offsetSec.
+function startPlaybackSource(offsetSec) {
+    stopPlaybackSource();
+    const dur = playbackBuffer ? playbackBuffer.duration : 0;
+    const off = Math.max(0, Math.min(offsetSec, dur));
+    const src = audioCtx.createBufferSource();
+    src.buffer = playbackBuffer;
+    src.playbackRate.value = playbackRate;
+    if (micGainNode) src.connect(micGainNode);          // analysis branch (spectrum/formant)
+    if (playbackGainNode) src.connect(playbackGainNode); // audible branch
+    src.onended = onPlaybackSourceEnded;
+    src.start(0, off);
+    playbackSource = src;
+    playbackStartCtxTime = audioCtx.currentTime;
+    playbackStartOffset = off;
+    playbackPaused = false;
+    playbackEnded = false;
+}
+
+// Stop & detach the current source without clearing the retained position.
+function stopPlaybackSource() {
+    if (playbackSource) {
+        try { playbackSource.onended = null; playbackSource.stop(); } catch (_) {}
+        try { playbackSource.disconnect(); } catch (_) {}
+        playbackSource = null;
+    }
+}
+
+// Fires only on natural end (manual stops null out onended first).
+function onPlaybackSourceEnded() {
+    if (playbackLoop) {
+        startPlaybackSource(playbackLoopA * pbDuration());
+        if (!playbackUiRaf) playbackUiRaf = requestAnimationFrame(updatePlaybackUi);
+    } else {
+        playbackEnded = true;
+        playbackPausedPos = pbDuration();
+        stopPlayback();
+    }
+}
+
+function pausePlayback() {
+    if (!playbackSource || playbackPaused) return;
+    playbackPausedPos = pbCurrentTime();
+    playbackPaused = true;
+    stopPlaybackSource();
+    renderRecordingsList();
+}
+
+function resumePlayback() {
+    if (!playbackBuffer || !playbackPaused) return;
+    startPlaybackSource(playbackPausedPos);
+    if (playbackUiRaf) cancelAnimationFrame(playbackUiRaf);
+    playbackUiRaf = requestAnimationFrame(updatePlaybackUi);
+    renderRecordingsList();
 }
 let playbackGainNode = null;    // audible output branch
 let playbackUiRaf = null;
@@ -4796,14 +4863,14 @@ function ensurePlaybackGain() {
 }
 
 function updatePlaybackUi() {
-    if (!playbackAudio) { playbackUiRaf = null; return; }
+    if (!playbackBuffer || playbackPaused) { playbackUiRaf = null; return; }
     const dur = pbDuration();
-    const cur = playbackAudio.currentTime || 0;
+    const cur = pbCurrentTime();
     // Section loop: wrap back to A when the playhead reaches B (full-track loop
-    // with B≈1 is handled by the 'ended' listener instead).
+    // with B≈1 is handled by the source's onended instead).
     if (playbackLoop && dur > 0 && playbackLoopB < 0.999
         && cur >= playbackLoopB * dur - 0.02) {
-        playbackAudio.currentTime = playbackLoopA * dur;
+        startPlaybackSource(playbackLoopA * dur);
     }
     if (els.pbSeek && !pbSeeking) {
         els.pbSeek.value = String(dur > 0 ? Math.round((cur / dur) * 1000) : 0);
@@ -4823,13 +4890,14 @@ function updateLoopRegionUi() {
 }
 
 async function playRecording(id) {
-    if (playbackAudio) stopPlayback();
+    if (playbackBuffer || playbackSource) stopPlayback();
 
     const rec = await RecordingsDB.get(id);
     if (!rec) return;
 
     await ensureAnalysisPipeline();
     ensurePlaybackGain();
+    if (audioCtx.state === 'suspended') { try { await audioCtx.resume(); } catch (_) {} }
 
     // Detach live mic from analysis path during playback
     micWasActiveBeforePlayback = !!(micSource && state.isMicActive);
@@ -4837,18 +4905,20 @@ async function playRecording(id) {
         try { micSource.disconnect(micGainNode); } catch (_) {}
     }
 
-    playbackObjectUrl = URL.createObjectURL(rec.blob);
-    playbackAudio = new Audio();
-    playbackAudio.src = playbackObjectUrl;
-    playbackAudio.preservesPitch = true;
-    playbackAudio.mozPreservesPitch = true;
-    playbackAudio.webkitPreservesPitch = true;
-    playbackAudio.playbackRate = playbackRate;
-    playbackAudio.loop = false; // looping handled manually (section-aware)
-    playbackAudio.crossOrigin = 'anonymous';
+    // Decode the recording into an AudioBuffer — unlike MediaElementSource this
+    // feeds the AnalyserNode on iOS Safari, so spectrum/formant analysis works.
+    try {
+        const arrBuf = await rec.blob.arrayBuffer();
+        playbackBuffer = await audioCtx.decodeAudioData(arrBuf.slice(0));
+    } catch (err) {
+        console.error('decodeAudioData failed:', err);
+        alert('再生用のデコードに失敗しました');
+        playbackBuffer = null;
+        cleanupPlayback();
+        return;
+    }
 
-    // Known duration from the record (WebM blobs report Infinity via the element)
-    playbackDurationSec = (rec.durationMs || 0) / 1000;
+    playbackDurationSec = playbackBuffer.duration || ((rec.durationMs || 0) / 1000);
     if (els.pbTotalTime) els.pbTotalTime.textContent = playbackDurationSec.toFixed(1) + 's';
 
     // Reset the A–B region to full track for each new recording
@@ -4857,35 +4927,10 @@ async function playRecording(id) {
     updateLoopRegionUi();
     if (els.playbackControls) els.playbackControls.classList.toggle('is-loop', playbackLoop);
 
-    try {
-        playbackMediaSrc = audioCtx.createMediaElementSource(playbackAudio);
-    } catch (err) {
-        console.error('createMediaElementSource failed:', err);
-        alert('再生エンジンの初期化に失敗しました');
-        cleanupPlayback();
-        return;
-    }
-    playbackMediaSrc.connect(micGainNode);
-    playbackMediaSrc.connect(playbackGainNode);
-
-    playbackAudio.addEventListener('loadedmetadata', () => {
-        // Only trust the element's duration if it's finite (WebM often reports Infinity)
-        if (isFinite(playbackAudio.duration) && playbackAudio.duration > 0) {
-            playbackDurationSec = playbackAudio.duration;
-            if (els.pbTotalTime) els.pbTotalTime.textContent = playbackDurationSec.toFixed(1) + 's';
-        }
-    });
-    playbackAudio.addEventListener('ended', () => {
-        if (playbackLoop) {
-            // Reached the natural end while looping (region ends at the track end) → restart at A
-            playbackAudio.currentTime = playbackLoopA * pbDuration();
-            playbackAudio.play().catch(() => {});
-        } else {
-            stopPlayback();
-        }
-    });
-
     playbackRecId = id;
+    playbackPaused = false;
+    playbackEnded = false;
+    playbackPausedPos = 0;
     state.isMicActive = true;
     state.isMicPaused = false;
     if (els.btnMic) els.btnMic.classList.add('mic-active');
@@ -4893,13 +4938,7 @@ async function playRecording(id) {
     if (els.pbRate) els.pbRate.value = String(playbackRate);
     if (els.playbackControls) els.playbackControls.style.display = 'flex';
 
-    try {
-        await playbackAudio.play();
-    } catch (err) {
-        console.error('audio.play() failed:', err);
-        stopPlayback();
-        return;
-    }
+    startPlaybackSource(0);
 
     if (playbackUiRaf) cancelAnimationFrame(playbackUiRaf);
     playbackUiRaf = requestAnimationFrame(updatePlaybackUi);
@@ -4912,22 +4951,13 @@ async function playRecording(id) {
 }
 
 function stopPlayback() {
-    if (playbackAudio) {
-        try { playbackAudio.pause(); } catch (_) {}
-        playbackAudio.src = '';
-        playbackAudio.removeAttribute('src');
-        playbackAudio.load();
-    }
-    if (playbackMediaSrc) {
-        try { playbackMediaSrc.disconnect(); } catch (_) {}
-    }
-    if (playbackObjectUrl) {
-        URL.revokeObjectURL(playbackObjectUrl);
-        playbackObjectUrl = null;
-    }
-    playbackAudio = null;
-    playbackMediaSrc = null;
+    stopPlaybackSource();
+    playbackBuffer = null;
     playbackDurationSec = 0;
+    playbackPaused = false;
+    playbackEnded = false;
+    playbackPausedPos = 0;
+    pbSeekTargetPos = null;
     if (playbackUiRaf) { cancelAnimationFrame(playbackUiRaf); playbackUiRaf = null; }
     if (els.playbackControls) els.playbackControls.style.display = 'none';
     cleanupPlayback();
@@ -4948,20 +4978,29 @@ function cleanupPlayback() {
     renderRecordingsList();
 }
 
-// Seek handler — HTMLAudioElement supports currentTime directly
+// Seek handler — preview while dragging, apply (recreate source) on release so we
+// don't rebuild the AudioBufferSourceNode on every input event.
 if (els.pbSeek) {
     els.pbSeek.addEventListener('input', () => {
         const dur = pbDuration();
-        if (!playbackAudio || !dur) return;
-        const ratio = Number(els.pbSeek.value) / 1000;
-        const pos = ratio * dur;
-        playbackAudio.currentTime = pos;
-        if (els.pbCurTime) els.pbCurTime.textContent = pos.toFixed(1) + 's';
+        if (!playbackBuffer || !dur) return;
+        pbSeekTargetPos = (Number(els.pbSeek.value) / 1000) * dur;
+        if (els.pbCurTime) els.pbCurTime.textContent = pbSeekTargetPos.toFixed(1) + 's';
     });
-    // Suppress the playhead auto-update only WHILE dragging (not merely focused),
-    // otherwise the slider keeps focus after release and the bar freezes.
+    const applySeek = () => {
+        if (pbSeekTargetPos == null) return;
+        const pos = pbSeekTargetPos;
+        pbSeekTargetPos = null;
+        if (playbackPaused || playbackEnded) {
+            playbackPausedPos = pos;          // resume will start from here
+            playbackStartOffset = pos;
+        } else if (playbackBuffer) {
+            startPlaybackSource(pos);          // re-seek while playing
+        }
+    };
+    // Suppress the playhead auto-update only WHILE dragging; apply seek on release.
     const seekStart = () => { pbSeeking = true; };
-    const seekEnd = () => { pbSeeking = false; };
+    const seekEnd = () => { pbSeeking = false; applySeek(); };
     els.pbSeek.addEventListener('pointerdown', seekStart);
     els.pbSeek.addEventListener('pointerup', seekEnd);
     els.pbSeek.addEventListener('pointercancel', seekEnd);
@@ -4969,12 +5008,19 @@ if (els.pbSeek) {
     els.pbSeek.addEventListener('blur', seekEnd);
 }
 
-// Speed handler — preservesPitch keeps pitch constant
+// Speed handler — AudioBufferSourceNode has no preservesPitch, so this also
+// shifts pitch. Re-anchor the timing by restarting at the current position.
 if (els.pbRate) {
     els.pbRate.addEventListener('change', () => {
         const r = Number(els.pbRate.value);
+        const curPos = pbCurrentTime();
         playbackRate = r;
-        if (playbackAudio) playbackAudio.playbackRate = r;
+        if (playbackSource && !playbackPaused) {
+            startPlaybackSource(curPos);       // restart at current pos with new rate
+        } else {
+            playbackStartOffset = curPos;
+            playbackPausedPos = curPos;
+        }
     });
 }
 
@@ -5195,14 +5241,13 @@ function renderRecordingsList() {
         // Pause keeps the clip loaded so the next press resumes from the same
         // position; playRecording() always restarts from 0, so resume calls
         // the live element directly instead of re-entering playRecording().
-        const isCurrent = rec.id === playbackRecId && playbackAudio && !playbackAudio.ended;
-        const isPlayingThis = isCurrent && !playbackAudio.paused;
+        const isCurrent = rec.id === playbackRecId && playbackBuffer && !playbackEnded;
+        const isPlayingThis = isCurrent && !playbackPaused;
         playBtn.textContent = isPlayingThis ? '⏸ Pause' : (isCurrent ? '▶ Resume' : '▶ Play');
         playBtn.addEventListener('click', () => {
-            if (rec.id === playbackRecId && playbackAudio && !playbackAudio.ended) {
-                if (playbackAudio.paused) playbackAudio.play().catch(() => {});
-                else playbackAudio.pause();
-                renderRecordingsList();
+            if (rec.id === playbackRecId && playbackBuffer && !playbackEnded) {
+                if (playbackPaused) resumePlayback();
+                else pausePlayback();
             } else {
                 playRecording(rec.id);
             }
@@ -5352,7 +5397,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — shown in the bottom-right corner (bump on each release)
-const APP_VERSION = 'v1.10.1';
+const APP_VERSION = 'v1.10.2';
 (() => { const el = document.getElementById('app-version'); if (el) el.textContent = APP_VERSION; })();
 
 // Service Worker — enables offline use and "Add to Home Screen"
