@@ -157,6 +157,20 @@ function oneEuroStep(s, x, tMs) {
 
 // --- Environment ---
 const IS_MOBILE = location.pathname.endsWith('mobile.html');
+// iOS detection (incl. iPadOS posing as Macintosh). Recording-playback EQ relies on
+// createMediaElementSource(), which iOS Safari refuses to route into the Web Audio
+// graph (it would silence playback), so that feature is desktop-only.
+const IS_IOS = /iP(hone|ad|od)/.test(navigator.userAgent) ||
+    (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+const PLAYBACK_EQ_SUPPORTED = !IS_IOS;
+// Parametric playback EQ: points dragged directly on the spectrum (FabFilter-style).
+const REC_EQ_GAIN_RANGE = 18;   // ±18 dB — vertical extent of the EQ curve overlay
+const REC_EQ_Q_MIN = 0.3;
+const REC_EQ_Q_MAX = 12;
+const REC_EQ_DEFAULT_Q = 1.1;
+const REC_EQ_HANDLE_R = 7;      // px radius for point handles & hit-testing
+const REC_EQ_POINT_COLORS = ['#2EA39B', '#E68B30', '#8B5CF6', '#3B82F6', '#D24545', '#1F9E55', '#E84393'];
+let nextEqPointId = 1;
 const HARMONIC_LABEL = (h) => `H${h}`;
 const MAX_HARMONICS_ON_SPECTRUM = IS_MOBILE ? 10 : Infinity;
 // Harmonic EQ: per-harmonic gain offset (dB) for H1..H_EQ_HARMONIC_COUNT
@@ -201,6 +215,12 @@ const state = {
         // Per-harmonic user gain offset in dB (index 0 = H1). Added on top of the
         // natural spectral slope from calcHarmonicGainDb(). 0 = flat (no change).
         gains: new Array(EQ_HARMONIC_COUNT).fill(0),
+    },
+    recordingEq: {
+        // Parametric EQ on recording PLAYBACK (desktop only). Each point is a peaking
+        // filter dragged directly on the spectrum: { id, freq, gain(dB), q }.
+        enabled: false,
+        points: [],
     },
     formants: {
         f1: { freq: 500, q: 5, gain: 15, enabled: true },
@@ -272,6 +292,7 @@ const els = {
     importInput: document.getElementById('rec-import-input'),
     recordingsPanel: document.getElementById('recordings-panel'),
     playbackControls: document.getElementById('playback-controls'),
+    playbackEq: document.getElementById('playback-eq'),
     pbSeek: document.getElementById('pb-seek'),
     pbRate: document.getElementById('pb-rate'),
     pbLoop: document.getElementById('pb-loop'),
@@ -5126,7 +5147,96 @@ function drawVisualizer() {
         }
     }
 
+    // Parametric playback EQ overlay (desktop, recording playback only) — drawn on top.
+    drawRecEqOverlay(canvasCtx, width, height);
+
     animationId = requestAnimationFrame(drawVisualizer);
+}
+
+// --- Parametric playback EQ: geometry, drawing & interaction ---
+let eqDragPointId = null;   // id of the point being dragged (null = none)
+
+// gain(dB) ↔ y, with 0 dB at the vertical center of the spectrum canvas.
+function eqGainToY(gain, height) {
+    const center = height * 0.5;
+    const pxPerDb = (height * 0.42) / REC_EQ_GAIN_RANGE;
+    return center - gain * pxPerDb;
+}
+function eqYToGain(y, height) {
+    const center = height * 0.5;
+    const pxPerDb = (height * 0.42) / REC_EQ_GAIN_RANGE;
+    const g = (center - y) / pxPerDb;
+    return Math.max(-REC_EQ_GAIN_RANGE, Math.min(REC_EQ_GAIN_RANGE, g));
+}
+function recEqPointColor(p) {
+    return REC_EQ_POINT_COLORS[(p.id - 1) % REC_EQ_POINT_COLORS.length];
+}
+// Visible & interactive only while a recording is playing with EQ enabled (desktop).
+function isRecEqActive() {
+    return PLAYBACK_EQ_SUPPORTED && state.recordingEq.enabled &&
+        !!playbackAudio && !!playbackBuffer;
+}
+
+let _eqCurveFreqs = null, _eqCurveDb = null;
+function drawRecEqOverlay(ctx, width, height) {
+    if (!isRecEqActive()) return;
+    const pts = state.recordingEq.points;
+    const y0 = eqGainToY(0, height);
+
+    ctx.save();
+    // 0 dB reference line
+    ctx.strokeStyle = 'rgba(46, 163, 155, 0.30)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.moveTo(0, y0); ctx.lineTo(width, y0);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Combined EQ response sampled per ~2px column (exact, from the live filters)
+    const step = 2;
+    const cols = Math.ceil(width / step) + 1;
+    if (!_eqCurveFreqs || _eqCurveFreqs.length !== cols) {
+        _eqCurveFreqs = new Float32Array(cols);
+        _eqCurveDb = new Float32Array(cols);
+    }
+    for (let c = 0; c < cols; c++) _eqCurveFreqs[c] = Math.max(1, xToFreq(c * step, width));
+    computeEqCurveDb(_eqCurveFreqs, _eqCurveDb);
+
+    // Filled area between curve and 0 dB
+    ctx.beginPath();
+    ctx.moveTo(0, y0);
+    for (let c = 0; c < cols; c++) ctx.lineTo(c * step, eqGainToY(_eqCurveDb[c], height));
+    ctx.lineTo((cols - 1) * step, y0);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(46, 163, 155, 0.13)';
+    ctx.fill();
+
+    // Curve stroke
+    ctx.beginPath();
+    for (let c = 0; c < cols; c++) {
+        const x = c * step, y = eqGainToY(_eqCurveDb[c], height);
+        if (c === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.strokeStyle = 'rgba(46, 163, 155, 0.85)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Point handles
+    for (const p of pts) {
+        const px = freqToX(p.freq, width), py = eqGainToY(p.gain, height);
+        const col = recEqPointColor(p);
+        if (eqDragPointId === p.id) {
+            ctx.beginPath();
+            ctx.arc(px, py, REC_EQ_HANDLE_R + 5, 0, Math.PI * 2);
+            ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.stroke();
+        }
+        ctx.beginPath();
+        ctx.arc(px, py, REC_EQ_HANDLE_R, 0, Math.PI * 2);
+        ctx.fillStyle = col; ctx.fill();
+        ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.stroke();
+    }
+    ctx.restore();
 }
 
 // --- Event Listeners ---
@@ -5317,6 +5427,8 @@ function resumePlayback() {
     renderRecordingsList();
 }
 let playbackGainNode = null;    // audible output branch
+let playbackMediaSource = null; // MediaElementSourceNode for playback EQ (desktop only)
+let recEqFilters = [];          // peaking BiquadFilter chain for playback EQ
 let playbackUiRaf = null;
 let micWasActiveBeforePlayback = false;
 
@@ -5442,6 +5554,114 @@ function ensurePlaybackGain() {
         playbackGainNode.connect(audioCtx.destination);
     }
 }
+
+// --- Playback EQ (recording playback, parametric, desktop only) ---
+// Routes the <audio> element through a cascade of peaking BiquadFilters, one per EQ
+// point dragged on the spectrum. iOS Safari won't feed MediaElementSource into the
+// graph (it would silence playback), so PLAYBACK_EQ_SUPPORTED gates this entirely;
+// on iOS playback stays on the native <audio> path with no EQ.
+function defaultRecEqPoints() {
+    return [
+        { id: nextEqPointId++, freq: 300, gain: 0, q: REC_EQ_DEFAULT_Q },
+        { id: nextEqPointId++, freq: 1000, gain: 0, q: REC_EQ_DEFAULT_Q },
+        { id: nextEqPointId++, freq: 3000, gain: 0, q: REC_EQ_DEFAULT_Q },
+    ];
+}
+
+function setupPlaybackEqChain() {
+    teardownPlaybackEqChain();
+    if (!PLAYBACK_EQ_SUPPORTED || !audioCtx || !playbackAudio) return;
+    try {
+        playbackMediaSource = audioCtx.createMediaElementSource(playbackAudio);
+    } catch (e) {
+        // Element already routed, or unsupported — fall back to native output.
+        playbackMediaSource = null;
+        return;
+    }
+    rebuildRecEqChain();
+}
+
+// Rebuild the peaking-filter cascade from state.recordingEq.points. Called on setup
+// and whenever points are added/removed. Drag/param changes use updateRecEqPoint().
+function rebuildRecEqChain() {
+    if (!audioCtx || !playbackMediaSource) return;
+    recEqFilters.forEach(f => { try { f.disconnect(); } catch (_) {} });
+    try { playbackMediaSource.disconnect(); } catch (_) {}
+    recEqFilters = state.recordingEq.points.map(p => {
+        const flt = audioCtx.createBiquadFilter();
+        flt.type = 'peaking';
+        flt.frequency.value = p.freq;
+        flt.Q.value = p.q;
+        flt.gain.value = state.recordingEq.enabled ? p.gain : 0;
+        return flt;
+    });
+    // source → f0 → f1 → ... → destination
+    let node = playbackMediaSource;
+    recEqFilters.forEach(flt => { node.connect(flt); node = flt; });
+    node.connect(audioCtx.destination);
+}
+
+// Live parameter update for one point (no rewiring) — used while dragging a handle.
+function updateRecEqPoint(i) {
+    const p = state.recordingEq.points[i];
+    const flt = recEqFilters[i];
+    if (!p || !flt || !audioCtx) return;
+    const t = audioCtx.currentTime;
+    flt.frequency.setTargetAtTime(p.freq, t, 0.02);
+    flt.Q.setTargetAtTime(p.q, t, 0.02);
+    flt.gain.setTargetAtTime(state.recordingEq.enabled ? p.gain : 0, t, 0.02);
+}
+
+// Push all gains at once (e.g. when toggling enabled).
+function applyRecEqEnabled() {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    recEqFilters.forEach((flt, i) => {
+        const p = state.recordingEq.points[i];
+        flt.gain.setTargetAtTime(state.recordingEq.enabled && p ? p.gain : 0, t, 0.02);
+    });
+}
+
+function teardownPlaybackEqChain() {
+    recEqFilters.forEach(f => { try { f.disconnect(); } catch (_) {} });
+    recEqFilters = [];
+    if (playbackMediaSource) {
+        try { playbackMediaSource.disconnect(); } catch (_) {}
+        playbackMediaSource = null;
+    }
+}
+
+// Combined EQ magnitude response (dB) sampled at freqArray, for the curve overlay and
+// for tinting the offline playback spectrum. Uses the real BiquadFilter responses when
+// the chain is live (so the drawn curve matches the sound exactly); falls back to an
+// analytic peaking bell when no chain exists (e.g. drawing while not playing).
+let _eqMag = null, _eqPhase = null;
+function computeEqCurveDb(freqArray, out) {
+    const n = freqArray.length;
+    if (!out || out.length !== n) out = new Float32Array(n);
+    else out.fill(0);
+    if (!state.recordingEq.enabled) return out;
+    if (recEqFilters.length) {
+        if (!_eqMag || _eqMag.length !== n) { _eqMag = new Float32Array(n); _eqPhase = new Float32Array(n); }
+        for (const flt of recEqFilters) {
+            flt.getFrequencyResponse(freqArray, _eqMag, _eqPhase);
+            for (let i = 0; i < n; i++) out[i] += 20 * Math.log10(_eqMag[i] || 1e-9);
+        }
+    } else {
+        for (const p of state.recordingEq.points) {
+            if (!p.gain) continue;
+            const bw = 1 / Math.max(0.4, p.q); // ~octave half-width from Q
+            for (let i = 0; i < n; i++) {
+                const x = Math.log2(freqArray[i] / p.freq) / bw;
+                out[i] += p.gain * Math.exp(-0.5 * x * x);
+            }
+        }
+    }
+    return out;
+}
+
+// Reusable buffers for the offline-spectrum EQ overlay.
+let _pbEqFreqs = null, _pbEqDb = null;
 
 // ============================================================
 // Offline playback analysis (ported from 2ae0a1b). Lets spectrum / Vowel Space
@@ -5726,9 +5946,18 @@ function computePlaybackSpectrum(timeSec) {
     const norm = 2 / N;
     const minDb = micAnalyser.minDecibels, maxDb = micAnalyser.maxDecibels;
     const smooth = 0.6; // EMA to mimic AnalyserNode smoothingTimeConstant
+    // Overlay playback EQ (dB per bin) so the offline spectrum matches what is heard.
+    let eqDb = null;
+    if (state.recordingEq.enabled) {
+        if (!_pbEqFreqs || _pbEqFreqs.length !== bins) _pbEqFreqs = new Float32Array(bins);
+        for (let i = 0; i < bins; i++) _pbEqFreqs[i] = i * sr / N;
+        _pbEqDb = computeEqCurveDb(_pbEqFreqs, _pbEqDb);
+        eqDb = _pbEqDb;
+    }
     for (let i = 0; i < bins; i++) {
         const mag = Math.hypot(_pbSpecRe[i], _pbSpecIm[i]) * norm;
         let db = 20 * Math.log10(mag + 1e-9);
+        if (eqDb) db += eqDb[i];
         if (db < minDb) db = minDb; else if (db > maxDb) db = maxDb;
         arr[i] = (arr[i] && isFinite(arr[i])) ? (arr[i] * smooth + db * (1 - smooth)) : db;
     }
@@ -5831,6 +6060,7 @@ async function playRecording(id) {
     if (els.btnMic) els.btnMic.classList.add('mic-active');
     if (els.pbRate) els.pbRate.value = String(playbackRate);
     if (els.playbackControls) els.playbackControls.style.display = 'flex';
+    if (els.playbackEq) els.playbackEq.style.display = PLAYBACK_EQ_SUPPORTED ? 'block' : 'none';
 
     // Play ASAP — still in the gesture-initiated task — so iOS allows it.
     try {
@@ -5852,7 +6082,10 @@ async function playRecording(id) {
     // After play(): set up the analysis pipeline, decode the buffer, build the formant
     // track. Done off the gesture path so play() isn't blocked. Live path is used until ready.
     ensureAnalysisPipeline()
-        .then(() => rec.blob.arrayBuffer())
+        .then(() => {
+            setupPlaybackEqChain(); // desktop-only EQ routing (no-op on iOS)
+            return rec.blob.arrayBuffer();
+        })
         .then(buf => audioCtx.decodeAudioData(buf.slice(0)))
         .then(audioBuf => {
             if (playbackRecId !== id || !playbackAudio) return; // playback changed
@@ -5875,6 +6108,7 @@ function stopPlayback() {
         try { playbackAudio.pause(); } catch (_) {}
         try { playbackAudio.removeAttribute('src'); playbackAudio.load(); } catch (_) {}
     }
+    teardownPlaybackEqChain();
     if (playbackObjectUrl) { URL.revokeObjectURL(playbackObjectUrl); playbackObjectUrl = null; }
     playbackAudio = null;
     playbackBuffer = null;
@@ -5887,6 +6121,7 @@ function stopPlayback() {
     pitchView = null;
     if (playbackUiRaf) { cancelAnimationFrame(playbackUiRaf); playbackUiRaf = null; }
     if (els.playbackControls) els.playbackControls.style.display = 'none';
+    if (els.playbackEq) els.playbackEq.style.display = 'none';
     cleanupPlayback();
 }
 
@@ -6306,7 +6541,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — shown in the bottom-right corner (bump on each release)
-const APP_VERSION = 'v1.15.0';
+const APP_VERSION = 'v1.16.0';
 (() => { const el = document.getElementById('app-version'); if (el) el.textContent = APP_VERSION; })();
 
 // Service Worker — enables offline use and "Add to Home Screen"
@@ -6577,6 +6812,53 @@ if (eqPresetsEl) {
 
 buildHarmonicEqUI();
 updateEqBadge();
+
+// --- Playback EQ wiring (parametric, desktop only) ---
+function updateRecEqInfo() {
+    const note = document.getElementById('rec-eq-note');
+    if (!note) return;
+    if (!PLAYBACK_EQ_SUPPORTED) {
+        note.textContent = 'この機能は PC 専用です（iOS Safari は非対応）';
+        return;
+    }
+    const n = state.recordingEq.points.length;
+    note.textContent = `点 ${n} 個 — スペクトラム上をダブルクリックで追加 / ドラッグで移動 / ホイールで幅(Q) / 右クリック・枠外ドラッグで削除`;
+}
+
+function syncRecEqUI() {
+    const enableBtn = document.getElementById('rec-eq-enable');
+    if (enableBtn) {
+        enableBtn.textContent = state.recordingEq.enabled ? 'ON' : 'OFF';
+        enableBtn.classList.toggle('active', state.recordingEq.enabled);
+    }
+    updateRecEqInfo();
+}
+
+(function wireRecEq() {
+    if (!state.recordingEq.points.length) state.recordingEq.points = defaultRecEqPoints();
+    const enableBtn = document.getElementById('rec-eq-enable');
+    const resetBtn = document.getElementById('rec-eq-reset');
+    if (enableBtn) {
+        enableBtn.addEventListener('click', () => {
+            state.recordingEq.enabled = !state.recordingEq.enabled;
+            syncRecEqUI();
+            applyRecEqEnabled();
+        });
+    }
+    if (resetBtn) {
+        resetBtn.addEventListener('click', () => {
+            state.recordingEq.points = defaultRecEqPoints();
+            eqDragPointId = null;
+            rebuildRecEqChain();
+            syncRecEqUI();
+        });
+    }
+    if (!PLAYBACK_EQ_SUPPORTED && enableBtn) {
+        enableBtn.disabled = true;
+        enableBtn.textContent = 'N/A';
+    }
+    syncRecEqUI();
+})();
 
 // Vibrato controls
 function applyVibratoLive() {
@@ -7173,6 +7455,7 @@ function getNearestFormant(freq, y = 0, height = 1000) {
 }
 
 function handleCanvasInteraction(e) {
+    if (isRecEqActive()) { handleEqPointerInteraction(e); return; }
     if (!isPlaying) return;
 
     const rect = els.canvas.getBoundingClientRect();
@@ -7272,6 +7555,116 @@ els.canvas.addEventListener('touchstart', handleCanvasInteraction, { passive: fa
 els.canvas.addEventListener('touchmove', handleCanvasInteraction, { passive: false });
 els.canvas.addEventListener('touchend', handleCanvasInteraction);
 els.canvas.addEventListener('touchcancel', handleCanvasInteraction);
+
+// --- Parametric playback EQ interaction (drag / add / remove / Q) ---
+const REC_EQ_MAX_POINTS = 8;
+
+// Canvas pixel coords from a mouse/touch event (resizeCanvas keeps width≈clientWidth,
+// but scale defensively in case of fractional layout widths).
+function eqCanvasXY(e) {
+    const rect = els.canvas.getBoundingClientRect();
+    let cx = e.clientX, cy = e.clientY;
+    if (e.touches && e.touches.length) { cx = e.touches[0].clientX; cy = e.touches[0].clientY; }
+    else if (e.changedTouches && e.changedTouches.length) { cx = e.changedTouches[0].clientX; cy = e.changedTouches[0].clientY; }
+    const w = els.canvas.width || rect.width, h = els.canvas.height || rect.height;
+    return { x: (cx - rect.left) * (w / rect.width), y: (cy - rect.top) * (h / rect.height), width: w, height: h };
+}
+
+function eqHitTest(x, y, width, height) {
+    let hit = null, best = Infinity;
+    for (const p of state.recordingEq.points) {
+        const px = freqToX(p.freq, width), py = eqGainToY(p.gain, height);
+        const d = Math.hypot(x - px, y - py);
+        if (d <= REC_EQ_HANDLE_R + 7 && d < best) { best = d; hit = p; }
+    }
+    return hit;
+}
+
+function addRecEqPoint(freq, gain) {
+    if (state.recordingEq.points.length >= REC_EQ_MAX_POINTS) return null;
+    const p = {
+        id: nextEqPointId++,
+        freq: Math.max(20, Math.min(MAX_FREQ_DISPLAY, Math.round(freq))),
+        gain: Math.round(gain * 10) / 10,
+        q: REC_EQ_DEFAULT_Q,
+    };
+    state.recordingEq.points.push(p); // append (no sort → filter index stays stable)
+    rebuildRecEqChain();
+    updateRecEqInfo();
+    return p;
+}
+
+function removeRecEqPoint(id) {
+    const idx = state.recordingEq.points.findIndex(p => p.id === id);
+    if (idx < 0) return;
+    state.recordingEq.points.splice(idx, 1);
+    if (eqDragPointId === id) eqDragPointId = null;
+    rebuildRecEqChain();
+    updateRecEqInfo();
+}
+
+function handleEqPointerInteraction(e) {
+    const { x, y, width, height } = eqCanvasXY(e);
+    if (e.type === 'mousedown' || e.type === 'touchstart') {
+        const hit = eqHitTest(x, y, width, height);
+        if (hit) {
+            eqDragPointId = hit.id;
+            els.canvas.classList.add('grabbing');
+            if (e.cancelable) e.preventDefault();
+        }
+    } else if (e.type === 'mousemove' || e.type === 'touchmove') {
+        if (eqDragPointId != null) {
+            if (e.type === 'touchmove' && e.cancelable) e.preventDefault();
+            const idx = state.recordingEq.points.findIndex(p => p.id === eqDragPointId);
+            if (idx >= 0) {
+                const p = state.recordingEq.points[idx];
+                p.freq = Math.max(20, Math.min(MAX_FREQ_DISPLAY, Math.round(xToFreq(x, width))));
+                p.gain = Math.round(eqYToGain(y, height) * 10) / 10;
+                updateRecEqPoint(idx);
+            }
+        }
+    } else if (e.type === 'mouseup' || e.type === 'mouseleave' || e.type === 'touchend' || e.type === 'touchcancel') {
+        if (eqDragPointId != null) {
+            // Drag a handle well off the top/bottom edge to delete it (FabFilter-style)
+            if (y < -REC_EQ_HANDLE_R * 2 || y > height + REC_EQ_HANDLE_R * 2) {
+                removeRecEqPoint(eqDragPointId);
+            }
+            eqDragPointId = null;
+            els.canvas.classList.remove('grabbing');
+        }
+    }
+}
+
+// Double-click: empty area → add a point; on a handle → remove it.
+els.canvas.addEventListener('dblclick', (e) => {
+    if (!isRecEqActive()) return;
+    const { x, y, width, height } = eqCanvasXY(e);
+    const hit = eqHitTest(x, y, width, height);
+    if (hit) removeRecEqPoint(hit.id);
+    else addRecEqPoint(xToFreq(x, width), eqYToGain(y, height));
+    e.preventDefault();
+});
+
+// Wheel over a handle: adjust its Q (bandwidth).
+els.canvas.addEventListener('wheel', (e) => {
+    if (!isRecEqActive()) return;
+    const { x, y, width, height } = eqCanvasXY(e);
+    const hit = eqHitTest(x, y, width, height);
+    if (!hit) return;
+    e.preventDefault();
+    const idx = state.recordingEq.points.findIndex(p => p.id === hit.id);
+    const factor = Math.exp(-e.deltaY * 0.001);
+    hit.q = Math.max(REC_EQ_Q_MIN, Math.min(REC_EQ_Q_MAX, hit.q * factor));
+    updateRecEqPoint(idx);
+}, { passive: false });
+
+// Right-click a handle to delete it.
+els.canvas.addEventListener('contextmenu', (e) => {
+    if (!isRecEqActive()) return;
+    const { x, y, width, height } = eqCanvasXY(e);
+    const hit = eqHitTest(x, y, width, height);
+    if (hit) { e.preventDefault(); removeRecEqPoint(hit.id); }
+});
 
 // Init notes & analysis
 els.pitchNote.textContent = noteWithCents(state.pitch);

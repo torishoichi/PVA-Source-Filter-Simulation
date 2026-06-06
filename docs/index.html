@@ -765,6 +765,15 @@
                             <option value="2">2x</option>
                         </select>
                     </div>
+                    <div id="playback-eq" class="playback-eq" style="display:none;">
+                        <div class="pb-eq-head">
+                            <span class="pb-eq-title">Playback EQ <span class="tooltip"
+                                    data-tooltip="再生中の録音音声に、スペクトラム上で直接いじるパラメトリック EQ をかけます。基音や特定倍音(例:H2)を狙ってブースト/カットし、鳴りやフォルマント帯の効きを聴き比べできます。EQ カーブと Power Spectrum 表示は実際の音と一致。MediaElementSource を使うため PC 専用です。">[?]</span></span>
+                            <button id="rec-eq-enable" class="pb-eq-toggle" type="button">OFF</button>
+                            <button id="rec-eq-reset" class="pb-eq-reset" type="button">Reset</button>
+                        </div>
+                        <div class="pb-eq-note hint" id="rec-eq-note">スペクトラム上で操作します</div>
+                    </div>
                 </details>
 
                 </div>

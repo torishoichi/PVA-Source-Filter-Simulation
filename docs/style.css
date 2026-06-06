@@ -3687,3 +3687,60 @@ body.learn-drawer-open { overflow: hidden; }
     line-height: 1;
 }
 
+/* ===== Playback EQ (recording-playback graphic equalizer, desktop only) ===== */
+.playback-eq {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--glass-border);
+}
+
+.pb-eq-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.pb-eq-title {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.pb-eq-toggle,
+.pb-eq-reset {
+    padding: 3px 12px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: var(--bg-soft);
+    border: 1px solid var(--glass-border);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.12s ease;
+}
+
+.pb-eq-toggle { margin-left: auto; }
+
+.pb-eq-toggle:hover,
+.pb-eq-reset:hover {
+    color: var(--accent-color);
+    border-color: var(--accent-color);
+    background: var(--accent-soft);
+}
+
+.pb-eq-toggle.active {
+    color: #fff;
+    background: var(--accent-color);
+    border-color: var(--accent-hover);
+}
+
+.pb-eq-toggle:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.pb-eq-note {
+    margin-top: 6px;
+}
+
