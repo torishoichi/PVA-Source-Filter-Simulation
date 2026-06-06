@@ -159,6 +159,9 @@ function oneEuroStep(s, x, tMs) {
 const IS_MOBILE = location.pathname.endsWith('mobile.html');
 const HARMONIC_LABEL = (h) => `H${h}`;
 const MAX_HARMONICS_ON_SPECTRUM = IS_MOBILE ? 10 : Infinity;
+// Harmonic EQ: per-harmonic gain offset (dB) for H1..H_EQ_HARMONIC_COUNT
+const EQ_HARMONIC_COUNT = 10;
+const EQ_GAIN_RANGE = 18; // slider span: ±18 dB
 
 // --- State Variables ---
 const state = {
@@ -194,6 +197,11 @@ const state = {
     selectionActive: false,
     selectionMinFreq: 0,
     selectionMaxFreq: 0,
+    harmonicEq: {
+        // Per-harmonic user gain offset in dB (index 0 = H1). Added on top of the
+        // natural spectral slope from calcHarmonicGainDb(). 0 = flat (no change).
+        gains: new Array(EQ_HARMONIC_COUNT).fill(0),
+    },
     formants: {
         f1: { freq: 500, q: 5, gain: 15, enabled: true },
         f2: { freq: 1500, q: 6, gain: 12, enabled: true },
@@ -285,6 +293,11 @@ const els = {
     viewTabs: document.getElementById('view-tabs'),
     vibratoPanel: document.getElementById('vibrato-panel'),
     vibratoCanvas: document.getElementById('vibrato-canvas'),
+    pitchTrackPanel: document.getElementById('pitch-track-panel'),
+    pitchTrackCanvas: document.getElementById('pitch-track-canvas'),
+    pitchFollow: document.getElementById('pitch-follow'),
+    pitchDotSize: document.getElementById('pitch-dot-size'),
+    pitchDotSizeVal: document.getElementById('pitch-dot-size-val'),
     vibRate: document.getElementById('vib-rate'),
     vibExtent: document.getElementById('vib-extent'),
     vibRegularity: document.getElementById('vib-regularity'),
@@ -494,6 +507,14 @@ function calcHarmonicGainDb(harmonicNumber, mechanism, mode, airflow) {
 // Convert dB to linear amplitude
 function dbToLinear(db) {
     return Math.pow(10, db / 20);
+}
+
+// User-controlled harmonic EQ offset (dB) for harmonic h (1-based).
+// Returns 0 for harmonics outside the EQ band (H > EQ_HARMONIC_COUNT).
+function harmonicEqDb(h) {
+    const idx = h - 1;
+    if (idx < 0 || idx >= EQ_HARMONIC_COUNT) return 0;
+    return state.harmonicEq.gains[idx] || 0;
 }
 
 // --- Roughness / pitch-resolution helpers ---
@@ -786,7 +807,7 @@ function createSource() {
 
         // Calculate amplitude based on spectral slope (M1 vs M2) and Phonation Mode
         const dbGain = calcHarmonicGainDb(i, state.mechanism, state.phonationMode, state.airflow);
-        let linearGain = dbToLinear(dbGain) * (1 / Math.sqrt(maxHarmonics));
+        let linearGain = dbToLinear(dbGain + harmonicEqDb(i)) * (1 / Math.sqrt(maxHarmonics));
 
         // Always pass to visualizer
         gain.gain.value = linearGain;
@@ -953,7 +974,7 @@ function updateSourceParams() {
 
             // Calculate new amplitude based on current state
             const dbGain = calcHarmonicGainDb(h.harmonic, state.mechanism, state.phonationMode, state.airflow);
-            let linearGain = dbToLinear(dbGain) * (1 / Math.sqrt(maxHarmonics));
+            let linearGain = dbToLinear(dbGain + harmonicEqDb(h.harmonic)) * (1 / Math.sqrt(maxHarmonics));
 
             // Apply Frequency Selection Mute
             let muteVal = 1;
@@ -2285,6 +2306,577 @@ function drawVibratoTrace() {
 }
 
 // =====================================================================
+// Pitch Track — mic-detected F0 over time, plotted on a cents ladder.
+// Reuses state.vibratoAnalysis.pitchBuf (already filled every frame while mic
+// is active). Y axis is cents relative to an auto-anchored reference (nearest
+// semitone to the window median, with hysteresis) so melodies/scales read as
+// real pitch movement, not a flat line. X axis scrolls; right edge = now.
+// =====================================================================
+let pitchTrackCtx = null;
+let pitchTrackAnchorCents = null; // absolute cents (C0 ref), semitone-snapped
+const PITCH_TRACK_WINDOW_MS = 5000;              // matches pitchBuf retention
+const PITCH_TRACK_C0 = 440 * Math.pow(2, -4.75); // ≈16.3516 Hz, same C0 as freqToNote
+const PITCH_TRACK_MIN_HALFSPAN = 250;            // ¢ — always show ≥ ±250¢ around center
+const PITCH_TRACK_GAP_MS = 120;                  // break the line across gaps longer than this
+
+const absCentsFromC0 = (hz) => 1200 * Math.log2(hz / PITCH_TRACK_C0);
+const isVoicedSample = (s) => s.hz != null && s.hz > 0 &&
+    (s.clarity == null || s.clarity >= VIBRATO_CLARITY_GATE);
+
+function getPitchTrackCtx() {
+    if (!pitchTrackCtx && els.pitchTrackCanvas) {
+        pitchTrackCtx = els.pitchTrackCanvas.getContext('2d');
+    }
+    return pitchTrackCtx;
+}
+
+// --- Offline pitch contour for recordings ---------------------------------
+// For a recording the whole decoded buffer is available, so it can be analysed
+// non-causally at high temporal resolution and post-processed for accuracy:
+// dense-hop YIN → octave-continuity correction → median smoothing. The result is
+// a full {t, hz, clarity} contour the Pitch Track draws in one piece with a
+// moving playhead; playback itself then needs only a cheap lookup (no per-frame YIN).
+let playbackPitchContour = null;     // [{t: sec, hz: number|null, clarity}] | null
+let playbackContourHopSec = 0.01;    // uniform hop, set by the precompute
+let playbackContourComputing = false;
+let playbackContourToken = 0;        // invalidates an in-flight compute on stop/replace
+const PB_CONTOUR_HOP_MS = 5;          // 200 fps temporal resolution
+const PB_DECIM_TARGET_SR = 11025;     // decimate to ~11 kHz for f0 (voice f0 ≪ Nyquist)
+const PB_CONTOUR_N = 512;             // YIN window on the decimated signal (~46 ms @ 11 kHz)
+const PB_SHOWN_CLARITY = 0.62;        // floor so Viterbi-voiced frames always display
+let playbackContourProgress = 0;      // 0..1 during offline analysis
+
+function lookupPlaybackPitch(timeSec) {
+    const arr = playbackPitchContour;
+    if (!arr || !arr.length) return { hz: -1, clarity: 0 };
+    let i = Math.round(timeSec / playbackContourHopSec);
+    if (i < 0) i = 0; else if (i >= arr.length) i = arr.length - 1;
+    const s = arr[i];
+    return { hz: s.hz != null ? s.hz : -1, clarity: s.clarity };
+}
+
+// pYIN-lite candidate generator: several f0 candidates per frame with probabilities.
+// DC removal only — NO pre-emphasis. (Validated: 0.97 pre-emphasis crippled low-f0
+// accuracy — ~20¢ clean / up to ~1800¢ octave collapse under noise — while DC-only
+// gives ~0.5–2¢ and stays robust, because pre-emphasis guts the weak fundamental.)
+const PB_CAND_THRESH = 0.5;
+const PB_PRIOR_T = [0.05, 0.10, 0.15, 0.20, 0.30, 0.40, 0.50];
+const PB_PRIOR_W = [0.10, 0.30, 0.24, 0.14, 0.12, 0.06, 0.04];
+let _pbYinBuf = null, _pbYinDp = null;
+
+function yinCandidates(buf0, sr) {
+    const N = buf0.length;
+    if (!_pbYinBuf || _pbYinBuf.length !== N) _pbYinBuf = new Float32Array(N);
+    const buf = _pbYinBuf;
+    let mean = 0;
+    for (let i = 0; i < N; i++) mean += buf0[i];
+    mean /= N;
+    for (let i = 0; i < N; i++) buf[i] = buf0[i] - mean;
+    let rms = 0;
+    for (let i = 0; i < N; i++) rms += buf[i] * buf[i];
+    rms = Math.sqrt(rms / N);
+    if (rms < 0.004) return { voiced: false, voicedProb: 0, cands: [] };
+    const minP = Math.max(2, Math.floor(sr / 1000));
+    const maxP = Math.min(Math.floor(sr / 60), N >> 1);
+    if (maxP <= minP) return { voiced: false, voicedProb: 0, cands: [] };
+    if (!_pbYinDp || _pbYinDp.length < maxP + 1) _pbYinDp = new Float32Array(maxP + 1);
+    const dp = _pbYinDp;
+    dp[0] = 1;
+    let run = 0;
+    for (let tau = 1; tau <= maxP; tau++) {
+        let ds = 0; const W = N - tau;
+        for (let j = 0; j < W; j++) { const d = buf[j] - buf[j + tau]; ds += d * d; }
+        run += ds;
+        dp[tau] = run > 0 ? (ds * tau) / run : 1;
+    }
+    // All local minima below the (loose) candidate threshold, parabola-refined
+    const minima = [];
+    for (let tau = minP + 1; tau < maxP; tau++) {
+        if (dp[tau] < PB_CAND_THRESH && dp[tau] < dp[tau - 1] && dp[tau] <= dp[tau + 1]) {
+            let refined = tau;
+            const y0 = dp[tau - 1], y1 = dp[tau], y2 = dp[tau + 1], den = y0 - 2 * y1 + y2;
+            if (Math.abs(den) > 1e-12) { const dl = 0.5 * (y0 - y2) / den; if (dl > -1 && dl < 1) refined = tau + dl; }
+            minima.push({ tau: refined, d: dp[tau] });
+        }
+    }
+    if (!minima.length) return { voiced: false, voicedProb: 0, cands: [] };
+    // pYIN threshold prior: each threshold's mass goes to the first minimum below it
+    const prob = new Float64Array(minima.length);
+    let vMass = 0;
+    for (let k = 0; k < PB_PRIOR_T.length; k++) {
+        let chosen = -1;
+        for (let m = 0; m < minima.length; m++) { if (minima[m].d < PB_PRIOR_T[k]) { chosen = m; break; } }
+        if (chosen >= 0) { prob[chosen] += PB_PRIOR_W[k]; vMass += PB_PRIOR_W[k]; }
+    }
+    let cands = [];
+    for (let m = 0; m < minima.length; m++) if (prob[m] > 0)
+        cands.push({ f0: sr / minima[m].tau, prob: prob[m], clar: Math.max(0, 1 - minima[m].d) });
+    if (!cands.length) {
+        let bm = 0;
+        for (let m = 1; m < minima.length; m++) if (minima[m].d < minima[bm].d) bm = m;
+        cands = [{ f0: sr / minima[bm].tau, prob: 0.5, clar: Math.max(0, 1 - minima[bm].d) }];
+        vMass = 0.5;
+    }
+    cands.sort((a, b) => b.prob - a.prob);
+    if (cands.length > 8) cands = cands.slice(0, 8);
+    return { voiced: true, voicedProb: Math.min(1, vMass), cands };
+}
+
+// Viterbi over per-frame candidates: emission = -log(prob); transition penalises
+// pitch jumps (∝ |Δcents|, capped) so transient octave flips / spikes can't survive
+// (they'd pay the jump twice) while real legato leaps still pay a bounded cost.
+function viterbiPitchPath(frames) {
+    // CAP raised to 24 so an octave jump (1200¢ → 14.4) is NOT capped: a transient
+    // octave spike must pay ~14.4 in + ~14.4 out, beating almost any single-frame
+    // emission gain → the path stays put (or drops to unvoiced, then gets gap-filled).
+    const LAMBDA = 0.012, CAP = 24, SWITCH = 4, EPS = 1e-6;
+    const n = frames.length;
+    const backAll = new Array(n), f0All = new Array(n), clarAll = new Array(n);
+    let prevCost = null, prevCents = null;
+    for (let i = 0; i < n; i++) {
+        const fr = frames[i];
+        const ce = [], f0 = [], cl = [], emit = [];
+        if (fr.voiced) for (const cnd of fr.cands) {
+            ce.push(1200 * Math.log2(cnd.f0 / PITCH_TRACK_C0)); f0.push(cnd.f0); cl.push(cnd.clar);
+            emit.push(-Math.log(cnd.prob + EPS));
+        }
+        ce.push(null); f0.push(null); cl.push(0);               // unvoiced state
+        emit.push(-Math.log(fr.voiced ? Math.max(EPS, 1 - (fr.voicedProb || 0)) : 1));
+        const cost = new Float64Array(ce.length), back = new Int16Array(ce.length);
+        if (prevCost == null) {
+            for (let s = 0; s < ce.length; s++) { cost[s] = emit[s]; back[s] = -1; }
+        } else {
+            for (let s = 0; s < ce.length; s++) {
+                let best = Infinity, bi = 0;
+                for (let p = 0; p < prevCents.length; p++) {
+                    const a = prevCents[p], b = ce[s];
+                    let tr;
+                    if (a == null && b == null) tr = 0;
+                    else if (a == null || b == null) tr = SWITCH;
+                    else tr = Math.min(CAP, LAMBDA * Math.abs(a - b));
+                    const cc = prevCost[p] + tr;
+                    if (cc < best) { best = cc; bi = p; }
+                }
+                cost[s] = best + emit[s]; back[s] = bi;
+            }
+        }
+        backAll[i] = back; f0All[i] = f0; clarAll[i] = cl;
+        prevCost = cost; prevCents = ce;
+    }
+    const out = new Array(n);
+    let s = 0, bc = Infinity;
+    for (let k = 0; k < prevCost.length; k++) if (prevCost[k] < bc) { bc = prevCost[k]; s = k; }
+    for (let i = n - 1; i >= 0; i--) {
+        out[i] = { hz: f0All[i][s], clar: clarAll[i][s] };
+        const b = backAll[i][s];
+        s = b < 0 ? 0 : b;
+    }
+    return out;
+}
+
+// Octave-continuity safety + 3-tap median (Viterbi already removes most jumps).
+function postProcessPitchContour(raw) {
+    const n = raw.length;
+    const hz = new Array(n);
+    for (let i = 0; i < n; i++) hz[i] = raw[i].hz;
+
+    const localMedian = (i, R) => {
+        const v = [];
+        const a = Math.max(0, i - R), b = Math.min(n - 1, i + R);
+        for (let k = a; k <= b; k++) if (hz[k] != null) v.push(hz[k]);
+        if (!v.length) return null;
+        v.sort((x, y) => x - y);
+        return v[v.length >> 1];
+    };
+    for (let pass = 0; pass < 2; pass++) {
+        for (let i = 0; i < n; i++) {
+            if (hz[i] == null) continue;
+            const m = localMedian(i, 6);
+            if (!m) continue;
+            let f = hz[i];
+            for (let g = 0; g < 2; g++) {
+                const r = f / m;
+                if (r > 1.5) f /= 2;
+                else if (r < 0.6667) f *= 2;
+                else break;
+            }
+            hz[i] = f;
+        }
+    }
+    // 3-tap median (gentle — preserves vibrato at 5 ms hop)
+    const out = new Array(n);
+    for (let i = 0; i < n; i++) {
+        if (hz[i] == null) { out[i] = null; continue; }
+        const v = [];
+        for (let k = Math.max(0, i - 1); k <= Math.min(n - 1, i + 1); k++) if (hz[k] != null) v.push(hz[k]);
+        v.sort((x, y) => x - y);
+        out[i] = v[v.length >> 1];
+    }
+    const res = new Array(n);
+    for (let i = 0; i < n; i++) res[i] = { t: raw[i].t, hz: out[i], clarity: raw[i].clarity };
+    return res;
+}
+
+// Bridge short unvoiced gaps (a held note briefly dropping below threshold) by
+// interpolating in cents between the voiced neighbours.
+function fillPitchGaps(arr, maxGapSec) {
+    const n = arr.length;
+    let i = 0;
+    while (i < n) {
+        if (arr[i].hz != null) { i++; continue; }
+        let j = i;
+        while (j < n && arr[j].hz == null) j++;
+        const L = i - 1, R = j;
+        if (L >= 0 && R < n && arr[L].hz != null && arr[R].hz != null && (arr[R].t - arr[L].t) <= maxGapSec) {
+            const cL = 1200 * Math.log2(arr[L].hz / PITCH_TRACK_C0);
+            const cR = 1200 * Math.log2(arr[R].hz / PITCH_TRACK_C0);
+            const gap = arr[R].t - arr[L].t;
+            for (let k = i; k < j; k++) {
+                const f = (arr[k].t - arr[L].t) / gap;
+                arr[k] = { t: arr[k].t, hz: PITCH_TRACK_C0 * Math.pow(2, (cL + (cR - cL) * f) / 1200), clarity: PB_SHOWN_CLARITY };
+            }
+        }
+        i = j;
+    }
+}
+
+// Final safety net: null out short isolated runs (≤ ~7 frames) that deviate >550¢
+// from the stable pitch on BOTH shoulders (computed excluding ±4 frames so the
+// spike can't contaminate its own reference). Long real notes — even octave leaps —
+// are untouched: an interior frame's shoulders sit inside the same note. Nulled
+// spikes are then bridged by fillPitchGaps at the correct pitch.
+function removeOctaveSpikes(arr) {
+    const n = arr.length;
+    const cents = new Array(n);
+    for (let i = 0; i < n; i++) cents[i] = arr[i].hz != null ? 1200 * Math.log2(arr[i].hz / PITCH_TRACK_C0) : null;
+    const IN = 4, OUT = 12, THRESH = 550;
+    const shoulderMed = (lo, hi) => {
+        const v = [];
+        for (let k = Math.max(0, lo); k <= Math.min(n - 1, hi); k++) if (cents[k] != null) v.push(cents[k]);
+        if (!v.length) return null;
+        v.sort((a, b) => a - b);
+        return v[v.length >> 1];
+    };
+    for (let i = 0; i < n; i++) {
+        if (cents[i] == null) continue;
+        const L = shoulderMed(i - OUT, i - IN), R = shoulderMed(i + IN, i + OUT);
+        let ref = (L != null && R != null) ? (L + R) / 2 : (L != null ? L : R);
+        if (ref != null && Math.abs(cents[i] - ref) > THRESH) arr[i] = { t: arr[i].t, hz: null, clarity: 0 };
+    }
+}
+
+// Analyse the whole decoded buffer offline (pYIN-lite). Decimate to ~11 kHz, run
+// multi-candidate YIN at a dense hop, Viterbi for continuity, then octave/median/
+// spike-removal/gap-fill. Chunked so the UI stays responsive; reports progress.
+async function computePlaybackPitchContour(buffer) {
+    const token = ++playbackContourToken;
+    playbackPitchContour = null;
+    playbackContourComputing = true;
+    playbackContourProgress = 0;
+    pitchTrackAnchorCents = null;
+    pitchView = null;
+
+    const sr0 = buffer.sampleRate;
+    const ch0 = buffer.getChannelData(0);
+    // Decimate (boxcar anti-alias) — voice f0 is far below Nyquist, big speedup
+    const dec = Math.max(1, Math.round(sr0 / PB_DECIM_TARGET_SR));
+    const sr = sr0 / dec;
+    const total = Math.floor(ch0.length / dec);
+    const ds = new Float32Array(total);
+    for (let i = 0; i < total; i++) {
+        let s = 0; const base = i * dec;
+        for (let k = 0; k < dec; k++) s += ch0[base + k];
+        ds[i] = s / dec;
+    }
+
+    const N = PB_CONTOUR_N;
+    const hop = Math.max(1, Math.round(sr * PB_CONTOUR_HOP_MS / 1000));
+    playbackContourHopSec = hop / sr;
+    const win = new Float32Array(N);
+
+    const frames = [], tArr = [];
+    let fc = 0;
+    for (let center = 0; center < total; center += hop) {
+        const start = center - (N >> 1);
+        for (let i = 0; i < N; i++) {
+            const idx = start + i;
+            win[i] = (idx >= 0 && idx < total) ? ds[idx] : 0;
+        }
+        frames.push(yinCandidates(win, sr));
+        tArr.push(center / sr);
+        if ((++fc % 150) === 0) {
+            playbackContourProgress = center / total;
+            await new Promise(r => setTimeout(r, 0));
+            if (token !== playbackContourToken) return; // stopped / replaced
+        }
+    }
+    if (token !== playbackContourToken) return;
+
+    const path = viterbiPitchPath(frames);
+    const raw = new Array(frames.length);
+    for (let i = 0; i < frames.length; i++) {
+        const p = path[i];
+        raw[i] = (p && p.hz)
+            ? { t: tArr[i], hz: p.hz, clarity: Math.max(PB_SHOWN_CLARITY, p.clar || 0) }
+            : { t: tArr[i], hz: null, clarity: 0 };
+    }
+    const smoothed = postProcessPitchContour(raw);
+    removeOctaveSpikes(smoothed);     // kill isolated octave spikes (safety net)
+    fillPitchGaps(smoothed, 0.05);    // bridge ≤50 ms gaps (incl. removed spikes)
+    if (token !== playbackContourToken) return;
+
+    playbackPitchContour = smoothed;
+    playbackContourComputing = false;
+    pitchTrackAnchorCents = null;
+    if (els.pitchTrackPanel && els.pitchTrackPanel.open) drawPitchTrack();
+}
+
+// Pitch Track renderer — two modes:
+//   • Recording playback with a ready contour → draw the WHOLE contour + a red
+//     playhead at the current position (X = full recording duration).
+//   • Live mic (or contour not ready) → the rolling last-5 s scroll.
+// Pitch-class → black key? (C C# D D# E F F# G G# A A# B)
+const PITCH_BLACK_PC = [false, true, false, true, false, false, true, false, true, false, true, false];
+
+// Zoom/pan view for the recording contour. null = auto-fit (whole recording).
+// {t0,t1} in seconds, {cLo,cHi} in cents relative to the (stable) anchor.
+let pitchView = null;
+let pitchTrackViewport = null;  // last-drawn mapping, for wheel/drag hit-testing
+let pitchDragging = false;
+let pitchDragMode = null;       // 'pan' | 'scroll' while a drag is in progress
+let pitchScrollbar = null;      // {sbY, sbH, x0, w} of the bottom time-scrollbar
+let pitchFollowPlayhead = true; // auto-scroll the zoomed view to track the playhead
+let pitchHeadDotR = 6;          // red playhead dot radius (px), user-adjustable
+
+// Pitch Track renderer. Vertical axis is a piano-keyboard ladder (note names,
+// black/white key cells, C lines emphasised). Two modes:
+//   • Recording playback with a ready contour → whole contour + red playhead,
+//     zoomable/pannable in time and pitch (wheel / Shift+wheel / drag / dbl-click),
+//     with a bottom time-scrollbar and optional auto-follow of the playhead.
+//   • Live mic (or contour not ready) → rolling last-5 s scroll (no zoom).
+function drawPitchTrack() {
+    const c = els.pitchTrackCanvas;
+    const ctx = getPitchTrackCtx();
+    if (!c || !ctx) return;
+    const w = c.clientWidth || 600;
+    const h = c.clientHeight || 300;
+    if (c.width !== w) c.width = w;
+    if (c.height !== h) c.height = h;
+
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#fdfcf6';
+    ctx.fillRect(0, 0, w, h);
+
+    const padTop = 6;
+    const GUT = 36;                       // left piano-keyboard gutter
+    const plotX0 = GUT, plotX1 = w - 6;
+    const plotW = Math.max(1, plotX1 - plotX0);
+
+    const hintMsg = (msg) => {
+        pitchTrackAnchorCents = null;
+        pitchTrackViewport = null;
+        pitchScrollbar = null;
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.font = '11px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(msg, w / 2, h / 2);
+    };
+
+    // --- Data source + time view by mode ---
+    const pbActive = !!playbackAudio && !!playbackBuffer;
+    const dur = pbActive ? pbDuration() : 0;
+    const useContour = pbActive && playbackPitchContour && dur > 0;
+
+    let samples, vt0, vt1, gapThresh, footerText, playheadT = null, zoomable = false;
+    if (useContour) {
+        samples = playbackPitchContour;                  // whole recording
+        if (pitchView) { vt0 = Math.max(0, pitchView.t0); vt1 = Math.min(dur, pitchView.t1); }
+        else { vt0 = 0; vt1 = dur; }
+        if (vt1 - vt0 < 0.05) vt1 = vt0 + 0.05;
+        gapThresh = playbackContourHopSec * 3.5;         // seconds
+        playheadT = playbackAudio.currentTime || 0;
+        zoomable = true;
+
+        // Auto-follow: while zoomed and playing, keep the playhead centred.
+        if (pitchView && pitchFollowPlayhead && !playbackAudio.paused) {
+            const span = vt1 - vt0;
+            let t0 = playheadT - span / 2, t1 = t0 + span;
+            if (t0 < 0) { t0 = 0; t1 = span; }
+            if (t1 > dur) { t1 = dur; t0 = Math.max(0, dur - span); }
+            vt0 = t0; vt1 = t1;
+            pitchView = { t0, t1, cLo: pitchView.cLo, cHi: pitchView.cHi };
+        }
+        footerText = pitchView ? `${vt0.toFixed(1)}–${vt1.toFixed(1)} / ${dur.toFixed(1)}s`
+                               : `${dur.toFixed(1)}s（録音全体）`;
+    } else if (pbActive && playbackContourComputing) {
+        hintMsg(`高精度ピッチ解析中… ${Math.round(playbackContourProgress * 100)}%`);
+        return;
+    } else {
+        const now = performance.now();
+        vt0 = now - PITCH_TRACK_WINDOW_MS; vt1 = now;     // rolling 5 s
+        samples = [];
+        for (const s of state.vibratoAnalysis.pitchBuf) if (s.t >= vt0) samples.push(s);
+        gapThresh = PITCH_TRACK_GAP_MS;                  // ms
+        footerText = `${(PITCH_TRACK_WINDOW_MS / 1000).toFixed(0)}s`;
+    }
+
+    // Reserve bottom space for the time-scrollbar only when zoomed in
+    const showScroll = zoomable && (vt0 > 0.001 || vt1 < dur - 0.001);
+    const padBot = showScroll ? 26 : 14;
+    const plotH = Math.max(1, h - padTop - padBot);
+    const xFor = (t) => plotX0 + ((t - vt0) / (vt1 - vt0)) * plotW;
+
+    // Voiced absolute cents over the data → stable anchor + auto range
+    const voiced = [];
+    for (const s of samples) if (isVoicedSample(s)) voiced.push(absCentsFromC0(s.hz));
+    if (voiced.length < 2) {
+        hintMsg(pbActive ? 'この録音から有声のピッチを検出できませんでした'
+                         : 'マイクをON → 発声するとピッチの軌跡が表示されます');
+        return;
+    }
+    const sorted = voiced.slice().sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)];
+    if (pitchTrackAnchorCents == null || Math.abs(median - pitchTrackAnchorCents) > 70) {
+        pitchTrackAnchorCents = Math.round(median / 100) * 100;
+    }
+    const anchor = pitchTrackAnchorCents;
+
+    let lo = Infinity, hi = -Infinity;
+    for (const ac of voiced) { const r = ac - anchor; if (r < lo) lo = r; if (r > hi) hi = r; }
+    const mid = (lo + hi) / 2;
+    const half = Math.max(PITCH_TRACK_MIN_HALFSPAN, (hi - lo) / 2 + 120);
+    let rangeLo = mid - half, rangeHi = mid + half;
+    if (zoomable && pitchView) { rangeLo = pitchView.cLo; rangeHi = pitchView.cHi; }
+    const yFor = (cents) => padTop + (1 - (cents - rangeLo) / (rangeHi - rangeLo)) * plotH;
+
+    // --- Piano-roll vertical axis ---
+    const rowPx = (100 / (rangeHi - rangeLo)) * plotH;     // px per semitone
+    const gStart = Math.ceil((rangeLo - 50) / 100) * 100;
+    const gEnd = Math.floor((rangeHi + 50) / 100) * 100;
+    const labelEverySemi = rowPx >= 11;
+
+    // Key cells (gutter) + faint black-key lanes across the plot
+    if (rowPx >= 4) {
+        for (let g = gStart; g <= gEnd; g += 100) {
+            const pc = (((Math.round((anchor + g) / 100)) % 12) + 12) % 12;
+            const yTop = yFor(g + 50), yBot = yFor(g - 50);
+            if (PITCH_BLACK_PC[pc]) {
+                ctx.fillStyle = 'rgba(0,0,0,0.12)';
+                ctx.fillRect(0, yTop, GUT, yBot - yTop);
+                ctx.fillStyle = 'rgba(0,0,0,0.022)';
+                ctx.fillRect(plotX0, yTop, plotW, yBot - yTop);
+            } else {
+                ctx.fillStyle = 'rgba(0,0,0,0.015)';
+                ctx.fillRect(0, yTop, GUT, yBot - yTop);
+            }
+        }
+    }
+    // Gutter border
+    ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(GUT + 0.5, padTop); ctx.lineTo(GUT + 0.5, h - padBot); ctx.stroke();
+
+    // Semitone gridlines + note-name labels
+    ctx.textBaseline = 'middle';
+    for (let g = gStart; g <= gEnd; g += 100) {
+        const y = yFor(g);
+        if (y < padTop - 1 || y > h - padBot + 1) continue;
+        const isC = ((((Math.round((anchor + g) / 100)) % 12) + 12) % 12) === 0;
+        ctx.strokeStyle = isC ? 'rgba(0,0,0,0.22)' : 'rgba(0,0,0,0.06)';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(plotX0, y); ctx.lineTo(plotX1, y); ctx.stroke();
+
+        if (labelEverySemi || (isC && rowPx * 12 >= 12)) {
+            const noteFreq = PITCH_TRACK_C0 * Math.pow(2, (anchor + g) / 1200);
+            ctx.fillStyle = isC ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.4)';
+            ctx.textAlign = 'left';
+            ctx.font = isC ? '700 9px Inter, sans-serif' : '9px Inter, sans-serif';
+            ctx.fillText(freqToNote(noteFreq), 3, y);
+        }
+    }
+
+    // --- Pitch curve (clipped to the plot area) ---
+    ctx.save();
+    ctx.beginPath(); ctx.rect(plotX0, padTop, plotW, plotH); ctx.clip();
+    ctx.strokeStyle = '#1e88e5';
+    ctx.lineWidth = 1.8;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    let started = false, lastT = null, lastPoint = null;
+    for (const s of samples) {
+        if (!isVoicedSample(s)) { started = false; lastT = s.t; continue; }
+        if (lastT != null && s.t - lastT > gapThresh) started = false;
+        const x = xFor(s.t);
+        const y = yFor(absCentsFromC0(s.hz) - anchor);
+        if (!started) { ctx.moveTo(x, y); started = true; }
+        else ctx.lineTo(x, y);
+        lastT = s.t;
+        lastPoint = { x, y };
+    }
+    ctx.stroke();
+
+    if (useContour && playheadT != null) {
+        const px = xFor(Math.max(vt0, Math.min(vt1, playheadT)));
+        ctx.strokeStyle = 'rgba(210, 69, 69, 0.85)';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.moveTo(px, padTop); ctx.lineTo(px, h - padBot); ctx.stroke();
+        const cur = lookupPlaybackPitch(playheadT);
+        if (cur.hz > 0 && (cur.clarity == null || cur.clarity >= VIBRATO_CLARITY_GATE)) {
+            const cy = yFor(absCentsFromC0(cur.hz) - anchor);
+            ctx.beginPath(); ctx.arc(px, cy, pitchHeadDotR, 0, Math.PI * 2);
+            ctx.fillStyle = '#d24545'; ctx.fill();
+            ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.stroke();
+        }
+    } else if (lastPoint) {
+        ctx.fillStyle = '#1e88e5';
+        ctx.beginPath(); ctx.arc(lastPoint.x, lastPoint.y, 3, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+
+    // Bottom time-scrollbar (only when zoomed in)
+    if (showScroll) {
+        const sbH = 6, sbY = h - padBot + 6;
+        ctx.fillStyle = 'rgba(0,0,0,0.06)';
+        ctx.fillRect(plotX0, sbY, plotW, sbH);
+        const thumbW = Math.max(18, ((vt1 - vt0) / dur) * plotW);
+        let thumbX = plotX0 + (vt0 / dur) * plotW;
+        thumbX = Math.max(plotX0, Math.min(plotX0 + plotW - thumbW, thumbX));
+        ctx.fillStyle = pitchDragMode === 'scroll' ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.26)';
+        ctx.fillRect(thumbX, sbY, thumbW, sbH);
+        pitchScrollbar = { sbY, sbH, x0: plotX0, w: plotW };
+    } else {
+        pitchScrollbar = null;
+    }
+
+    // Footer
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.font = '9px Inter, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(footerText, plotX1, h - 2);
+
+    // Expose mapping for interaction (recording contour only)
+    pitchTrackViewport = zoomable
+        ? { plotX0, plotW, padTop, plotH, vt0, vt1, rangeLo, rangeHi, dur }
+        : null;
+    if (zoomable && !pitchDragging) c.style.cursor = 'grab';
+    else if (!zoomable) c.style.cursor = 'default';
+}
+
+let lastPitchTrackMicState = null;
+function updatePitchTrackVisibility() {
+    // Repaint the empty-state hint when mic transitions off (mirrors vibrato).
+    if (state.isMicActive !== lastPitchTrackMicState) {
+        if (!state.isMicActive) {
+            pitchTrackAnchorCents = null;
+            if (els.pitchTrackPanel && els.pitchTrackPanel.open) drawPitchTrack();
+        }
+        lastPitchTrackMicState = state.isMicActive;
+    }
+}
+
+// =====================================================================
 // Vowel Space (F1 × F2 chart, uses LPC v3 cached formant data)
 // =====================================================================
 // Cardinal vowel reference values, adult-male baseline (IPA convention).
@@ -3129,8 +3721,30 @@ function resizeCanvas() {
 function drawVisualizer() {
     if (!isPlaying && !state.isMicActive) return;
 
-    // Pitch sampling + vibrato analysis (independent of view mode)
-    if (state.isMicActive && micAnalyser) {
+    // Pitch sampling + vibrato analysis (independent of view mode).
+    // During recording playback state.isMicActive is true but the live mic is
+    // detached, so detect pitch from the decoded playback buffer at the current
+    // position instead of the (silent) mic analyser. Both paths feed the same
+    // pitchBuf → Pitch Track / Vibrato. Speed-independent & iOS-safe.
+    const pbPitchOn = !!playbackAudio && !playbackAudio.paused && !!playbackBuffer;
+    if (pbPitchOn) {
+        if (!state.isMicPaused) {
+            let pbHz, pbClar;
+            if (playbackPitchContour) {
+                // High-accuracy precomputed contour → cheap lookup (no per-frame YIN)
+                const s = lookupPlaybackPitch(playbackAudio.currentTime);
+                pbHz = s.hz; pbClar = s.clarity;
+            } else {
+                // Contour not ready yet → live per-frame YIN as a stopgap
+                const N = (micAnalyser && micAnalyser.fftSize) || 2048;
+                const win = getPlaybackTimeWindow(playbackAudio.currentTime, N);
+                pbHz = win ? detectPitchYIN(win, playbackBuffer.sampleRate) : -1;
+                pbClar = _yinClarity;
+            }
+            state.cachedMicPitch = pbHz;
+            pushPitchSample(pbHz, pbClar);
+        }
+    } else if (state.isMicActive && micAnalyser) {
         if (!state.isMicPaused) {
             const micPitch = detectPitchFromMic();
             state.cachedMicPitch = micPitch;
@@ -3148,6 +3762,12 @@ function drawVisualizer() {
         drawVibratoTrace();
     }
     updateVibratoPanelVisibility();
+
+    // Pitch Track: redraw every frame while panel open + mic active (smooth scroll)
+    if (state.isMicActive && els.pitchTrackPanel && els.pitchTrackPanel.open) {
+        drawPitchTrack();
+    }
+    updatePitchTrackVisibility();
 
     // Vowel Space: push F1/F2 sample every frame, redraw if panel open (~30fps)
     if (state.isMicActive) pushVowelSample();
@@ -5243,6 +5863,9 @@ async function playRecording(id) {
             }
             // playbackBuffer ready → drawVisualizer analyses windows from it directly
             // (both markers and the LPC envelope curve), so no precomputed track needed.
+            // Pitch Track, however, gets a high-accuracy offline contour of the whole
+            // recording (chunked so the UI stays responsive).
+            computePlaybackPitchContour(audioBuf);
         })
         .catch(err => console.warn('Playback analysis prep failed:', err));
 }
@@ -5257,6 +5880,11 @@ function stopPlayback() {
     playbackBuffer = null;
     playbackFormantTrack = null;
     playbackDurationSec = 0;
+    playbackPitchContour = null;
+    playbackContourComputing = false;
+    playbackContourToken++;   // cancel any in-flight offline analysis
+    pitchTrackAnchorCents = null;
+    pitchView = null;
     if (playbackUiRaf) { cancelAnimationFrame(playbackUiRaf); playbackUiRaf = null; }
     if (els.playbackControls) els.playbackControls.style.display = 'none';
     cleanupPlayback();
@@ -5678,7 +6306,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — shown in the bottom-right corner (bump on each release)
-const APP_VERSION = 'v1.11.1';
+const APP_VERSION = 'v1.15.0';
 (() => { const el = document.getElementById('app-version'); if (el) el.textContent = APP_VERSION; })();
 
 // Service Worker — enables offline use and "Add to Home Screen"
@@ -5844,6 +6472,111 @@ els.spectrumSlopeSlider.addEventListener('input', (e) => {
     if (els.slopeVal) els.slopeVal.textContent = state.spectrumSlope + 'dB';
     updateSpectralTilt();
 });
+
+// --- Harmonic EQ (per-harmonic graphic equalizer, H1..H_EQ_HARMONIC_COUNT) ---
+// Offsets are added on top of the natural spectral slope and applied to the
+// shared `gain` node, so they affect BOTH the audio output and the power
+// spectrum visualizer (which reads the synthesized signal's FFT).
+const EQ_PRESETS = {
+    flat: () => new Array(EQ_HARMONIC_COUNT).fill(0),
+    // Gentle high-harmonic boost → brighter / more ring
+    bright: () => [0, 0, 1, 2, 3, 4, 5, 6, 6, 6].slice(0, EQ_HARMONIC_COUNT),
+    // Gentle high-harmonic cut → darker / warmer
+    dark: () => [0, 0, -1, -2, -3, -4, -5, -6, -6, -6].slice(0, EQ_HARMONIC_COUNT),
+};
+
+function fmtEqGain(g) {
+    return (g > 0 ? '+' : '') + g;
+}
+
+function updateEqBadge() {
+    const badge = document.getElementById('he-badge');
+    if (!badge) return;
+    const custom = state.harmonicEq.gains.some(g => g !== 0);
+    badge.textContent = custom ? 'Custom' : 'Flat';
+    badge.classList.toggle('flow', !custom); // accent tint when flat
+}
+
+function syncEqFadersUI() {
+    for (let h = 1; h <= EQ_HARMONIC_COUNT; h++) {
+        const slider = document.getElementById(`he-slider-${h}`);
+        const val = document.getElementById(`he-val-${h}`);
+        const g = state.harmonicEq.gains[h - 1] || 0;
+        if (slider) slider.value = String(g);
+        if (val) val.textContent = fmtEqGain(g);
+    }
+}
+
+function applyEqPreset(name) {
+    const fn = EQ_PRESETS[name];
+    if (!fn) return;
+    state.harmonicEq.gains = fn();
+    syncEqFadersUI();
+    updateEqBadge();
+    updateSourceParams();
+}
+
+function buildHarmonicEqUI() {
+    const container = document.getElementById('he-faders');
+    if (!container) return; // PC-only panel; absent on mobile.html
+    container.innerHTML = '';
+    for (let h = 1; h <= EQ_HARMONIC_COUNT; h++) {
+        const fader = document.createElement('div');
+        fader.className = 'he-fader';
+
+        const val = document.createElement('span');
+        val.className = 'he-val';
+        val.id = `he-val-${h}`;
+        val.textContent = fmtEqGain(state.harmonicEq.gains[h - 1] || 0);
+
+        const slider = document.createElement('input');
+        slider.type = 'range';
+        slider.className = 'he-slider';
+        slider.id = `he-slider-${h}`;
+        slider.min = String(-EQ_GAIN_RANGE);
+        slider.max = String(EQ_GAIN_RANGE);
+        slider.step = '1';
+        slider.value = String(state.harmonicEq.gains[h - 1] || 0);
+        slider.setAttribute('orient', 'vertical');
+        slider.setAttribute('aria-label', `H${h} gain (dB)`);
+
+        const label = document.createElement('span');
+        label.className = 'he-label';
+        label.textContent = `H${h}`;
+
+        slider.addEventListener('input', (e) => {
+            const g = parseFloat(e.target.value);
+            state.harmonicEq.gains[h - 1] = g;
+            val.textContent = fmtEqGain(g);
+            updateEqBadge();
+            updateSourceParams();
+        });
+        // Double-click resets a single harmonic to 0 dB (desktop convenience)
+        slider.addEventListener('dblclick', () => {
+            state.harmonicEq.gains[h - 1] = 0;
+            slider.value = '0';
+            val.textContent = '0';
+            updateEqBadge();
+            updateSourceParams();
+        });
+
+        fader.appendChild(val);
+        fader.appendChild(slider);
+        fader.appendChild(label);
+        container.appendChild(fader);
+    }
+}
+
+const eqPresetsEl = document.getElementById('he-presets');
+if (eqPresetsEl) {
+    eqPresetsEl.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-eq-preset]');
+        if (btn) applyEqPreset(btn.dataset.eqPreset);
+    });
+}
+
+buildHarmonicEqUI();
+updateEqBadge();
 
 // Vibrato controls
 function applyVibratoLive() {
@@ -6093,6 +6826,152 @@ if (els.vibratoPanel) {
     });
     // Initial paint to show the empty-state hint without needing mic
     setTimeout(() => { if (els.vibratoPanel.open) drawVibratoTrace(); }, 0);
+}
+
+// Repaint pitch track when its <details> panel is expanded (0-layout when collapsed)
+if (els.pitchTrackPanel) {
+    els.pitchTrackPanel.addEventListener('toggle', () => {
+        if (els.pitchTrackPanel.open) drawPitchTrack();
+    });
+    setTimeout(() => { if (els.pitchTrackPanel.open) drawPitchTrack(); }, 0);
+}
+
+// Auto-follow toggle (also restores the persisted setting)
+const setPitchFollow = (on) => {
+    pitchFollowPlayhead = on;
+    if (els.pitchFollow) els.pitchFollow.checked = on;
+    try { localStorage.setItem('pitchFollow', on ? '1' : '0'); } catch (_) {}
+};
+if (els.pitchFollow) {
+    try {
+        const saved = localStorage.getItem('pitchFollow');
+        if (saved != null) pitchFollowPlayhead = saved === '1';
+    } catch (_) {}
+    els.pitchFollow.checked = pitchFollowPlayhead;
+    els.pitchFollow.addEventListener('change', () => {
+        setPitchFollow(els.pitchFollow.checked);
+        drawPitchTrack();
+    });
+}
+
+// Red playhead dot size (persisted)
+if (els.pitchDotSize) {
+    try {
+        const saved = parseInt(localStorage.getItem('pitchDotR'), 10);
+        if (saved >= 2 && saved <= 14) pitchHeadDotR = saved;
+    } catch (_) {}
+    els.pitchDotSize.value = String(pitchHeadDotR);
+    if (els.pitchDotSizeVal) els.pitchDotSizeVal.textContent = String(pitchHeadDotR);
+    els.pitchDotSize.addEventListener('input', () => {
+        pitchHeadDotR = Number(els.pitchDotSize.value) || 6;
+        if (els.pitchDotSizeVal) els.pitchDotSizeVal.textContent = String(pitchHeadDotR);
+        try { localStorage.setItem('pitchDotR', String(pitchHeadDotR)); } catch (_) {}
+        drawPitchTrack();
+    });
+}
+
+// Pitch Track zoom / pan / scroll (recording contour only — pitchTrackViewport is
+// null in live mode, so these are no-ops there and the page scrolls normally).
+if (els.pitchTrackCanvas) {
+    const cv = els.pitchTrackCanvas;
+    const curView = (vp) => pitchView || { t0: vp.vt0, t1: vp.vt1, cLo: vp.rangeLo, cHi: vp.rangeHi };
+    const panTime = (vp, deltaSec) => {           // shift time window, clamp to [0,dur]
+        const v = curView(vp);
+        let t0 = v.t0 + deltaSec, t1 = v.t1 + deltaSec;
+        if (t0 < 0) { t1 -= t0; t0 = 0; }
+        if (t1 > vp.dur) { t0 -= (t1 - vp.dur); t1 = vp.dur; if (t0 < 0) t0 = 0; }
+        return { t0, t1, cLo: v.cLo, cHi: v.cHi };
+    };
+
+    cv.addEventListener('wheel', (e) => {
+        const vp = pitchTrackViewport;
+        if (!vp) return;
+        e.preventDefault();
+        // Trackpad horizontal swipe → scroll time (don't zoom)
+        if (Math.abs(e.deltaX) > Math.abs(e.deltaY) * 1.4) {
+            setPitchFollow(false);
+            pitchView = panTime(vp, (e.deltaX / vp.plotW) * (vp.vt1 - vp.vt0));
+            drawPitchTrack();
+            return;
+        }
+        const rect = cv.getBoundingClientRect();
+        const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+        const factor = Math.exp(e.deltaY * 0.0015);   // up = zoom in, down = zoom out
+        const v = curView(vp);
+        const nv = { t0: v.t0, t1: v.t1, cLo: v.cLo, cHi: v.cHi };
+        if (e.shiftKey) {                              // vertical (pitch) zoom
+            const c0 = vp.rangeLo + (1 - (my - vp.padTop) / vp.plotH) * (vp.rangeHi - vp.rangeLo);
+            const span = v.cHi - v.cLo;
+            const ns = Math.max(200, Math.min(7200, span * factor));
+            nv.cLo = c0 - (c0 - v.cLo) * (ns / span);
+            nv.cHi = nv.cLo + ns;
+        } else {                                       // horizontal (time) zoom
+            const t = vp.vt0 + ((mx - vp.plotX0) / vp.plotW) * (vp.vt1 - vp.vt0);
+            const span = v.t1 - v.t0;
+            const ns = Math.max(0.2, Math.min(vp.dur, span * factor));
+            let t0 = t - (t - v.t0) * (ns / span), t1 = t0 + ns;
+            if (t0 < 0) { t0 = 0; t1 = ns; }
+            if (t1 > vp.dur) { t1 = vp.dur; t0 = Math.max(0, t1 - ns); }
+            nv.t0 = t0; nv.t1 = t1;
+        }
+        pitchView = nv;
+        drawPitchTrack();
+    }, { passive: false });
+
+    let lastX = 0, lastY = 0;
+    cv.addEventListener('mousedown', (e) => {
+        const vp = pitchTrackViewport;
+        if (!vp) return;
+        const rect = cv.getBoundingClientRect();
+        const my = e.clientY - rect.top;
+        // Grab the scrollbar thumb/track if the press is on it, else pan the plot.
+        if (pitchScrollbar && my >= pitchScrollbar.sbY - 4 && my <= pitchScrollbar.sbY + pitchScrollbar.sbH + 4) {
+            pitchDragMode = 'scroll';
+        } else {
+            pitchDragMode = 'pan';
+            cv.style.cursor = 'grabbing';
+        }
+        pitchDragging = true;
+        setPitchFollow(false);            // manual scroll/pan disengages auto-follow
+        lastX = e.clientX; lastY = e.clientY;
+        e.preventDefault();
+    });
+    window.addEventListener('mousemove', (e) => {
+        if (!pitchDragging) return;
+        const vp = pitchTrackViewport;
+        if (!vp) { pitchDragging = false; pitchDragMode = null; return; }
+        const dx = e.clientX - lastX, dy = e.clientY - lastY;
+        lastX = e.clientX; lastY = e.clientY;
+        if (pitchDragMode === 'scroll') {
+            // Thumb follows the cursor → content moves the same direction
+            pitchView = panTime(vp, (dx / (pitchScrollbar ? pitchScrollbar.w : vp.plotW)) * vp.dur);
+        } else {
+            const v = curView(vp);
+            const moved = panTime(vp, -(dx / vp.plotW) * (v.t1 - v.t0));
+            const dc = (dy / vp.plotH) * (v.cHi - v.cLo);
+            pitchView = { t0: moved.t0, t1: moved.t1, cLo: v.cLo + dc, cHi: v.cHi + dc };
+        }
+        drawPitchTrack();
+    });
+    window.addEventListener('mouseup', () => {
+        if (pitchDragging) {
+            pitchDragging = false; pitchDragMode = null;
+            cv.style.cursor = pitchTrackViewport ? 'grab' : 'default';
+        }
+    });
+    cv.addEventListener('dblclick', (e) => {
+        if (!pitchTrackViewport) return;
+        e.preventDefault();
+        pitchView = null;             // reset to full recording
+        drawPitchTrack();
+    });
+
+    // Repaint when the panel is resized via the CSS resize handle
+    if (window.ResizeObserver) {
+        new ResizeObserver(() => {
+            if (els.pitchTrackPanel && els.pitchTrackPanel.open) drawPitchTrack();
+        }).observe(cv);
+    }
 }
 
 // Log/Linear Frequency Scale Toggle

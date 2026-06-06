@@ -261,6 +261,23 @@
                     </div>
                 </details>
 
+                <details class="harmonic-eq-panel glass-dark collapsible">
+                    <summary class="collapsible-summary">
+                        <h3 class="tracker-title">Harmonic EQ <span class="tooltip"
+                                data-tooltip="各倍音（H1〜H10）の強度を個別に増減するイコライザーです。声帯波形が生み出す自然なスペクトル傾斜の上に補正をかけ、特定の倍音を強調・抑制した時に音色とパワースペクトルがどう変わるかを学べます。H1-H2 バランスや Singer's Formant 帯の倍音強調などの実験に。">[?]</span></h3>
+                        <span class="status-badge he-summary-badge" id="he-badge">Flat</span>
+                    </summary>
+                    <div class="collapsible-body">
+                        <div class="he-presets" id="he-presets">
+                            <button type="button" class="he-preset-btn" data-eq-preset="flat">Flat</button>
+                            <button type="button" class="he-preset-btn" data-eq-preset="bright">明るい</button>
+                            <button type="button" class="he-preset-btn" data-eq-preset="dark">暗い</button>
+                        </div>
+                        <div class="he-faders" id="he-faders"></div>
+                        <div class="hint">各倍音バーをドラッグで増減。音色とパワースペクトル表示に即反映。Flat で全体リセット（PC はバーをダブルクリックで個別リセット）</div>
+                    </div>
+                </details>
+
             </section>
 
             <!-- Filter Panel -->
@@ -620,6 +637,32 @@
                         <div class="vib-analysis-canvas-wrap">
                             <canvas id="vibrato-canvas"></canvas>
                         </div>
+                    </div>
+                </details>
+
+                <!-- Pitch Track — mic-detected F0 over time (cents ladder) -->
+                <details id="pitch-track-panel" class="vib-analysis-panel">
+                    <summary class="vib-analysis-summary">
+                        <span class="vib-analysis-disclosure" aria-hidden="true">▸</span>
+                        <span class="vib-analysis-title">Pitch Track</span>
+                        <span class="vib-analysis-summary-hint">マイクONで音高の軌跡を表示</span>
+                    </summary>
+                    <div class="vib-analysis-body">
+                        <div class="pitch-track-controls">
+                            <label class="pitch-follow-toggle" title="再生位置を自動で追いかけてスクロール">
+                                <input type="checkbox" id="pitch-follow" checked>
+                                <span>再生に追尾</span>
+                            </label>
+                            <label class="pitch-dot-size" title="再生ヘッド（赤丸）の大きさ">
+                                <span class="pitch-dot-mark">●</span>
+                                <input type="range" id="pitch-dot-size" min="2" max="14" value="6" step="1">
+                                <span class="pitch-dot-size-val"><span id="pitch-dot-size-val">6</span>px</span>
+                            </label>
+                        </div>
+                        <div class="pitch-track-canvas-wrap">
+                            <canvas id="pitch-track-canvas"></canvas>
+                        </div>
+                        <p class="pitch-track-hint">縦軸＝ピアノ鍵盤（音名）、横軸＝時間。ライブは直近5秒スクロール。録音再生中は全体の輪郭＋赤い再生ヘッドを表示。ホイール=時間ズーム / Shift+ホイール=音高ズーム / ドラッグ=移動 / 横スワイプ・下部バー=横スクロール / ダブルクリック=全体に戻す。枠の下端ドラッグで縦に拡大。「再生に追尾」ONで再生位置を自動追尾します。</p>
                     </div>
                 </details>
 
