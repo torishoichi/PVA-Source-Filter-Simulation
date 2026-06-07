@@ -6541,7 +6541,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — shown in the bottom-right corner (bump on each release)
-const APP_VERSION = 'v1.17.0';
+const APP_VERSION = 'v1.18.0';
 (() => { const el = document.getElementById('app-version'); if (el) el.textContent = APP_VERSION; })();
 
 // Service Worker — enables offline use and "Add to Home Screen"
@@ -7672,6 +7672,17 @@ updatePitchRangeHint();
 reorderFormantBounds();
 analyzeAcoustics();
 drawGlottalWaveform(); // Initial render
+
+// Re-render glottal canvas when a collapsible Source/Filter panel is expanded (PC only).
+// These panels start collapsed (display:none content → canvas has zero size on init).
+['.source-panel', '.filter-panel'].forEach(sel => {
+    const panel = document.querySelector(sel);
+    if (panel && panel.tagName === 'DETAILS') {
+        panel.addEventListener('toggle', () => {
+            if (panel.open) drawGlottalWaveform();
+        });
+    }
+});
 
 // Guide panel toggle
 const guideToggle = document.getElementById('lf-guide-toggle');

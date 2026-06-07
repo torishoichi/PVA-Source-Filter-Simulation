@@ -34,8 +34,8 @@
 
         <main class="dashboard">
             <!-- Source Panel -->
-            <section class="panel source-panel glass">
-                <h2>The Voice Source</h2>
+            <details class="panel source-panel glass collapsible-panel">
+                <summary class="panel-summary"><span class="panel-disclosure" aria-hidden="true">▸</span><h2>The Voice Source</h2></summary>
                 <div class="control-group">
                     <div class="pitch-header">
                         <label for="pitch-slider" class="label-main">
@@ -278,13 +278,14 @@
                     </div>
                 </details>
 
-            </section>
+            </details>
 
             <!-- Filter Panel -->
-            <section class="panel filter-panel glass">
+            <details class="panel filter-panel glass collapsible-panel">
+                <summary class="panel-summary"><span class="panel-disclosure" aria-hidden="true">▸</span>
                 <h2>The Filter (Vocal Tract) <span class="tooltip"
                         data-tooltip="声道を1/4波長共鳴管として扱う音響伝達特性（フィルター機能）です。声帯原音の音響エネルギーのうち、声道の形状によって決まる特定の周波数（共鳴ピーク）に近い成分を選択的に強化し、それ以外を減衰させます。">[?]</span>
-                </h2>
+                </h2></summary>
 
                 <div class="formant-grid">
                 <!-- F1 Control -->
@@ -385,7 +386,7 @@
                     <button class="preset-btn" data-preset="open">Open Timbre</button>
                     <button class="preset-btn" data-preset="close">Close Timbre</button>
                 </div>
-            </section>
+            </details>
 
             <!-- Visualizer Panel -->
             <section class="panel visualizer-panel glass">
@@ -503,7 +504,7 @@
                 </div>
 
                 <!-- Mic Analysis group: Vibrato / Vowel Space / Recordings -->
-                <details class="mic-analysis-group" id="mic-analysis-group" open>
+                <details class="mic-analysis-group" id="mic-analysis-group">
                 <summary class="mic-analysis-summary">
                     <span class="mic-analysis-disclosure" aria-hidden="true">▸</span>
                     <span class="mic-analysis-title">Mic Analysis</span>
@@ -511,7 +512,7 @@
                 <div class="mic-analysis-body">
 
                 <!-- Loudness Ceiling — guard against over-singing / pressed-loud phonation -->
-                <details id="loudness-panel" class="vib-analysis-panel" open>
+                <details id="loudness-panel" class="vib-analysis-panel">
                     <summary class="vib-analysis-summary">
                         <span class="vib-analysis-disclosure" aria-hidden="true">▸</span>
                         <span class="vib-analysis-title">Loudness Ceiling</span>
