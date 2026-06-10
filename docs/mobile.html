@@ -531,6 +531,32 @@
             </div>
         </details>
 
+        <details class="card vibrato-card" id="voice-quality-panel">
+            <summary class="vibrato-summary">
+                <span class="vibrato-title">Voice Quality</span>
+                <span class="vibrato-chevron" aria-hidden="true">▾</span>
+            </summary>
+            <div class="vibrato-body">
+                <div class="vib-analysis-stats">
+                    <div class="vstat vstat-primary">
+                        <span class="vstat-label">CPP <span class="tooltip" data-tooltip="Cepstral Peak Prominence (dB)。声の周期性・発声効率の指標。高い=クリアで効率的、低い=息漏れ・かすれ。">[?]</span></span>
+                        <span class="vstat-val" id="vq-cpp">—</span>
+                        <span class="vstat-unit">dB</span>
+                    </div>
+                    <div class="vstat vstat-primary">
+                        <span class="vstat-label">H1–H2 <span class="tooltip" data-tooltip="第1・第2倍音の振幅差 (dB)。声門開大率の代理。正で大=息漏れ (breathy)、小/負=押し込み (pressed)。">[?]</span></span>
+                        <span class="vstat-val" id="vq-h1h2">—</span>
+                        <span class="vstat-unit">dB</span>
+                    </div>
+                    <div class="vstat vstat-verdict">
+                        <span class="vstat-label">Tendency</span>
+                        <span class="vstat-val" id="vq-verdict">—</span>
+                    </div>
+                </div>
+                <p class="loud-hint">絶対値はマイク・距離で変わります。同じ条件で発声を変えたときの相対的な動きを見てください。</p>
+            </div>
+        </details>
+
         <details id="recordings-panel" class="recordings-panel" open>
             <summary class="recordings-head">
                 <span class="recordings-disclosure" aria-hidden="true">▸</span>
@@ -783,6 +809,7 @@
         })();
     </script>
     <script src="recordings-db.js"></script>
+    <script src="dsp-core.js"></script>
     <script src="main.js"></script>
     <script>
         // Learn tab updater — independent of state.roughnessVisible

@@ -2,12 +2,13 @@
  * Source-Filter Voice Studio — Service Worker
  * Cache-first for the app shell so the app loads offline once visited.
  */
-const VERSION = 'v1.19.0';
+const VERSION = 'v1.20.0';
 const CACHE = `sf-voice-studio-${VERSION}`;
 const SHELL = [
     './',
     './index.html',
     './main.js',
+    './dsp-core.js',
     './style.css',
     './recordings-db.js',
     './manifest.json',

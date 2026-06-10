@@ -765,6 +765,11 @@ input[type=range]::-moz-range-track {
     color: #ef6c00;
 }
 
+/* Voice Quality (CPP / H1–H2) phonation-tendency chip colors */
+.vstat-val.vq-flow { background: rgba(76, 175, 80, 0.18); color: #2e7d32; }
+.vstat-val.vq-pressed { background: rgba(255, 152, 0, 0.18); color: #ef6c00; }
+.vstat-val.vq-breathy { background: rgba(33, 150, 243, 0.14); color: #1976d2; }
+
 /* Low-confidence: neutralise the verdict chip and dim primary numbers
    so a shaky estimate never reads as an assertion. */
 .vib-analysis-body.is-lowconf .vstat-verdict .vstat-val {

@@ -193,6 +193,8 @@ const state = {
     cachedMicPitch: -1,
     cachedMicLevel: 0,         // mic RMS amplitude (0..~0.5), drives Vowel Space dot size
     cachedMicFormantConfidence: 1, // 0..1 confidence of the latest v3 formant frame
+    cachedCPP: null,           // EMA-smoothed Cepstral Peak Prominence (dB) — clarity/efficiency
+    cachedH1H2: null,          // EMA-smoothed H1–H2 (dB) — open-quotient / breathiness correlate
     cachedMicFormants: null, // Per-formant snapshot (preserved during pause and brief live dropouts)
     cachedMicFormantsTime: null, // Per-formant last-update timestamp (ms)
     loudnessCeilingDb: -18,    // user-set loudness ceiling (dB RMS); guards over-singing / pressed-loud
@@ -326,6 +328,9 @@ const els = {
     vibVerdict: document.getElementById('vib-verdict'),
     vibVerdictBox: document.getElementById('vib-verdict-box'),
     vibF0: document.getElementById('vib-f0'),
+    vqCpp: document.getElementById('vq-cpp'),
+    vqH1h2: document.getElementById('vq-h1h2'),
+    vqVerdict: document.getElementById('vq-verdict'),
     vibAnalysisBody: document.getElementById('vib-analysis-body'),
     vibQualityFill: document.getElementById('vib-quality-fill'),
     vibModeTabs: document.getElementById('vib-mode-tabs'),
@@ -1947,6 +1952,82 @@ function applyViewMode(mode) {
         initSpectrogramBuffer();
         renderSpectrogram();
     }
+}
+
+// ---------- Voice quality: CPP & H1–H2 (dsp-core.js) ----------
+// CPP (Cepstral Peak Prominence): higher = clearer/more periodic phonation; lower =
+// breathy/dysphonic. H1–H2: amplitude difference of the first two harmonics, an
+// open-quotient correlate — large positive = breathy/abducted, small/negative =
+// pressed/adducted. Together they give the Flow/Pressed/Breathy axis an objective,
+// validated measurement. Throttled (~120 ms); results EMA-smoothed for a stable read.
+const VQ_INTERVAL_MS = 120;
+let _vqLastAt = 0;
+let _vqWin = null;
+
+function updateVoiceQuality() {
+    if (typeof DSP === 'undefined' || !DSP.cpps) return; // dsp-core not loaded
+    if (state.isMicPaused) return;
+    const f0 = state.cachedMicPitch;
+
+    // Time-domain window + sample rate: playback reads the decoded buffer (iOS-safe),
+    // live mic reads the analyser. Both at the analyser's FFT size.
+    let frame = null, sr = 0;
+    const pbActive = !!playbackAudio && !playbackAudio.paused && !!playbackBuffer;
+    if (pbActive) {
+        const N = (micAnalyser && micAnalyser.fftSize) || 4096;
+        frame = getPlaybackTimeWindow(playbackAudio.currentTime, N);
+        sr = playbackBuffer.sampleRate;
+    } else if (state.isMicActive && micAnalyser && audioCtx) {
+        const N = micAnalyser.fftSize;
+        if (!_vqWin || _vqWin.length !== N) _vqWin = new Float32Array(N);
+        micAnalyser.getFloatTimeDomainData(_vqWin);
+        frame = _vqWin;
+        sr = audioCtx.sampleRate;
+    }
+    if (!frame || !sr) return;
+
+    // RMS gate — don't update on silence (keeps the last reading visible).
+    let rms = 0;
+    for (let i = 0; i < frame.length; i++) rms += frame[i] * frame[i];
+    rms = Math.sqrt(rms / frame.length);
+    if (rms < 0.006) return;
+
+    const cppRes = DSP.cpps(frame, sr);
+    const cpp = cppRes ? cppRes.cpp : null;
+    const h = (f0 > 0) ? DSP.h1h2(frame, sr, f0) : null;
+    const A = 0.35; // EMA weight on the new value
+    if (cpp != null && isFinite(cpp)) {
+        state.cachedCPP = (state.cachedCPP == null) ? cpp : (1 - A) * state.cachedCPP + A * cpp;
+    }
+    if (h && isFinite(h.h1h2)) {
+        state.cachedH1H2 = (state.cachedH1H2 == null) ? h.h1h2 : (1 - A) * state.cachedH1H2 + A * h.h1h2;
+    }
+    updateVoiceQualityReadout();
+}
+
+// Classify the phonation tendency from CPP + H1–H2 for a plain-language label.
+function phonationLabel(cpp, h1h2) {
+    if (cpp == null || h1h2 == null) return { txt: '—', cls: '' };
+    if (cpp < 4 && h1h2 > 4) return { txt: 'Breathy 寄り', cls: 'vq-breathy' };
+    if (cpp > 9 && h1h2 < 1) return { txt: 'Pressed 寄り', cls: 'vq-pressed' };
+    return { txt: 'Flow（バランス）', cls: 'vq-flow' };
+}
+
+function updateVoiceQualityReadout() {
+    const cpp = state.cachedCPP, h = state.cachedH1H2;
+    if (els.vqCpp) els.vqCpp.textContent = (cpp == null) ? '—' : cpp.toFixed(1);
+    if (els.vqH1h2) els.vqH1h2.textContent = (h == null) ? '—' : (h >= 0 ? '+' : '') + h.toFixed(1);
+    if (els.vqVerdict) {
+        const v = phonationLabel(cpp, h);
+        els.vqVerdict.textContent = v.txt;
+        els.vqVerdict.className = 'vstat-val ' + v.cls;
+    }
+}
+
+function resetVoiceQuality() {
+    state.cachedCPP = null;
+    state.cachedH1H2 = null;
+    updateVoiceQualityReadout();
 }
 
 // ---------- Vibrato analysis ----------
@@ -3803,6 +3884,12 @@ function drawVisualizer() {
     }
     updateVibratoPanelVisibility();
 
+    // Voice quality (CPP / H1–H2) — throttled, runs for both live mic and playback.
+    if (state.isMicActive && nowT - _vqLastAt >= VQ_INTERVAL_MS) {
+        _vqLastAt = nowT;
+        updateVoiceQuality();
+    }
+
     // Pitch Track: redraw every frame while panel open + mic active (smooth scroll)
     if (state.isMicActive && els.pitchTrackPanel && els.pitchTrackPanel.open) {
         drawPitchTrack();
@@ -5294,6 +5381,7 @@ els.btnMic.addEventListener('click', async () => {
         els.btnMic.classList.remove('mic-active');
         updateVibratoPanelVisibility();
         resetLoudnessMeter();
+        resetVoiceQuality();
         // Stop any in-progress recording when mic is turned off
         if (mediaRecorder && mediaRecorder.state === 'recording') stopRecording();
         if (els.btnMicRecord) {
@@ -6570,7 +6658,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — shown in the bottom-right corner (bump on each release)
-const APP_VERSION = 'v1.19.0';
+const APP_VERSION = 'v1.20.0';
 (() => { const el = document.getElementById('app-version'); if (el) el.textContent = APP_VERSION; })();
 
 // Service Worker — enables offline use and "Add to Home Screen"

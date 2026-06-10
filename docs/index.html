@@ -548,6 +548,40 @@
                     </div>
                 </details>
 
+                <!-- Voice Quality — CPP & H1–H2 (objective Flow/Pressed/Breathy correlates) -->
+                <details id="voice-quality-panel" class="vib-analysis-panel">
+                    <summary class="vib-analysis-summary">
+                        <span class="vib-analysis-disclosure" aria-hidden="true">▸</span>
+                        <span class="vib-analysis-title">Voice Quality</span>
+                        <span class="vib-analysis-summary-hint">マイク/再生で発声の質を実測 (CPP・H1–H2)</span>
+                    </summary>
+                    <div class="vib-analysis-body">
+                        <div class="vib-section">
+                            <div class="vib-section-head">
+                                <span class="vib-section-icon" aria-hidden="true">🎤</span>
+                                <span class="vib-section-title">Detected — mic / playback</span>
+                            </div>
+                            <div class="vib-analysis-stats">
+                                <div class="vstat vstat-primary">
+                                    <span class="vstat-label">CPP <span class="tooltip" data-tooltip="Cepstral Peak Prominence (dB)。声の周期性・発声効率の指標で、音声医学・歌唱研究で最も検証されている測度。高い=クリアで効率的な発声、低い=息漏れ・かすれ・不安定。ケプストラムのピーク突出度から算出。">[?]</span></span>
+                                    <span class="vstat-val" id="vq-cpp">—</span>
+                                    <span class="vstat-unit">dB</span>
+                                </div>
+                                <div class="vstat vstat-primary">
+                                    <span class="vstat-label">H1–H2 <span class="tooltip" data-tooltip="第1倍音と第2倍音の振幅差 (dB)。声門の開大率 (Open Quotient) の代理指標。大きい正の値=息漏れ・外転 (breathy)、小さい/負=押し込み・内転 (pressed)。シンセ側の Rd/OQ と対応させて読む。">[?]</span></span>
+                                    <span class="vstat-val" id="vq-h1h2">—</span>
+                                    <span class="vstat-unit">dB</span>
+                                </div>
+                                <div class="vstat vstat-verdict">
+                                    <span class="vstat-label">Tendency <span class="tooltip" data-tooltip="CPP と H1–H2 からの発声傾向の目安。Pressed=効率高いが押し込み気味、Flow=バランス、Breathy=息漏れ多め。絶対値はマイク・距離・部屋に依存するので、自分の中での相対変化を見る。">[?]</span></span>
+                                    <span class="vstat-val" id="vq-verdict">—</span>
+                                </div>
+                            </div>
+                            <p class="loud-hint">CPP・H1–H2 はマイク感度や距離で絶対値が変わります。<strong>同じ条件で発声モードを変えたときの相対的な動き</strong>を観察してください。Source パネルの Rd/OQ（理論値）と H1–H2（実測）を見比べると、狙った発声に近づけているか分かります。</p>
+                        </div>
+                    </div>
+                </details>
+
                 <!-- Vibrato analysis panel (visible when mic active) -->
                 <details id="vibrato-panel" class="vib-analysis-panel">
                     <summary class="vib-analysis-summary">
@@ -941,6 +975,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
     <script src="recordings-db.js"></script>
+    <script src="dsp-core.js"></script>
     <script src="main.js"></script>
     <script>
         // ============================================================
