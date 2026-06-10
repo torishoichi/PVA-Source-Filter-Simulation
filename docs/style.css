@@ -765,6 +765,21 @@ input[type=range]::-moz-range-track {
     color: #ef6c00;
 }
 
+/* Measured glottal source (IAIF) block in the Glottal Waveform panel */
+.glottal-measured {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--border-color, rgba(255, 255, 255, 0.15));
+}
+.glottal-measured-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+    font-size: 0.78rem;
+    color: var(--text-secondary, #9aa0a6);
+}
+
 /* Voice Quality (CPP / H1–H2) phonation-tendency chip colors */
 .vstat-val.vq-flow { background: rgba(76, 175, 80, 0.18); color: #2e7d32; }
 .vstat-val.vq-pressed { background: rgba(255, 152, 0, 0.18); color: #ef6c00; }

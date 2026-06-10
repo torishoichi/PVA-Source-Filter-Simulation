@@ -284,6 +284,23 @@
                     <input type="range" id="rd-slider" min="0.3" max="2.7" value="1.0" step="0.01" class="mobile-range">
                     <small class="vibrato-hint">声門波形の形。低い=圧迫的 / 中央=均衡 / 高い=息漏れ</small>
                 </div>
+                <div class="glottal-measured" id="glottal-measured" style="display:none; margin-top:10px;">
+                    <div class="vib-analysis-stats">
+                        <div class="vstat vstat-primary">
+                            <span class="vstat-label">Rd≈ <span class="tooltip" data-tooltip="逆フィルタ(IAIF)で推定したあなたの声の Rd 概算。上のスライダー(理論)と一致させる練習に。">[?]</span></span>
+                            <span class="vstat-val" id="meas-rd">—</span>
+                        </div>
+                        <div class="vstat vstat-primary">
+                            <span class="vstat-label">NAQ <span class="tooltip" data-tooltip="Normalized Amplitude Quotient。Pressed=小(~0.1) / Breathy=大(~0.3+)。逆フィルタで実測。">[?]</span></span>
+                            <span class="vstat-val" id="meas-naq">—</span>
+                        </div>
+                        <div class="vstat">
+                            <span class="vstat-label">OQ</span>
+                            <span class="vstat-val" id="meas-oq">—</span>
+                        </div>
+                    </div>
+                    <small class="vibrato-hint">マイク/再生中にあなたの声門音源を推定。絶対値より相対変化を見てください。</small>
+                </div>
                 <div style="margin-top:10px;">
                     <span class="guide-toggle" id="lf-guide-toggle">[??] Show Guide</span>
                 </div>

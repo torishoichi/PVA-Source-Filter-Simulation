@@ -271,6 +271,29 @@
                         <span class="legend-item closed-legend">Closed <span class="tooltip"
                                 data-tooltip="声門閉鎖相（Closed Phase）。声帯が完全に（または部分的に）閉じ、気流がゼロになる区間です。Pressed発声ではこの区間が長く、Breathy発声では短いか不完全閉鎖となります。">[?]</span></span>
                     </div>
+
+                    <!-- Measured glottal source (IAIF inverse filtering) — appears with mic/playback -->
+                    <div class="glottal-measured" id="glottal-measured" style="display:none;">
+                        <div class="glottal-measured-head">
+                            <span class="vib-section-icon" aria-hidden="true">🎤</span>
+                            <span class="vib-section-title">Measured source — あなたの声 (IAIF逆フィルタ)</span>
+                        </div>
+                        <div class="vib-analysis-stats">
+                            <div class="vstat vstat-primary">
+                                <span class="vstat-label">Rd≈ <span class="tooltip" data-tooltip="逆フィルタリング(IAIF)で推定したあなたの声の声門波形形状パラメータ Rd の概算。上のスライダー(理論値)と見比べて、狙った声帯振動に近づけているか確認できます。NAQ から換算した近似値です。">[?]</span></span>
+                                <span class="vstat-val" id="meas-rd">—</span>
+                            </div>
+                            <div class="vstat vstat-primary">
+                                <span class="vstat-label">NAQ <span class="tooltip" data-tooltip="Normalized Amplitude Quotient (Alku 2002)。声門流の交流振幅 ÷ (微分の負ピーク × 基本周期)。声門閉鎖の急峻さの指標で、Pressed=小さい(~0.1)、Breathy=大きい(~0.3+)。逆フィルタで実測。">[?]</span></span>
+                                <span class="vstat-val" id="meas-naq">—</span>
+                            </div>
+                            <div class="vstat">
+                                <span class="vstat-label">OQ <span class="tooltip" data-tooltip="推定 Open Quotient（声門が開いている時間の割合）。Breathy で大きく、Pressed で小さい。推定声門流波形の50%閾値から算出。">[?]</span></span>
+                                <span class="vstat-val" id="meas-oq">—</span>
+                            </div>
+                        </div>
+                        <p class="loud-hint">マイクONまたは録音再生中に、あなたの声を逆フィルタリングして声門音源を推定します。上の <strong>Rd スライダー（理論）</strong> と <strong>Rd≈（実測）</strong> を一致させる練習で、狙った発声に近づけられます。逆フィルタは難問なので、絶対値より相対変化を重視してください。</p>
+                    </div>
                     </div>
                 </details>
 

@@ -195,6 +195,9 @@ const state = {
     cachedMicFormantConfidence: 1, // 0..1 confidence of the latest v3 formant frame
     cachedCPP: null,           // EMA-smoothed Cepstral Peak Prominence (dB) — clarity/efficiency
     cachedH1H2: null,          // EMA-smoothed H1–H2 (dB) — open-quotient / breathiness correlate
+    cachedNAQ: null,           // EMA-smoothed Normalized Amplitude Quotient (IAIF inverse filtering)
+    cachedRdMeas: null,        // EMA-smoothed measured Rd estimate (from NAQ)
+    cachedOQMeas: null,        // EMA-smoothed measured Open Quotient
     cachedMicFormants: null, // Per-formant snapshot (preserved during pause and brief live dropouts)
     cachedMicFormantsTime: null, // Per-formant last-update timestamp (ms)
     loudnessCeilingDb: -18,    // user-set loudness ceiling (dB RMS); guards over-singing / pressed-loud
@@ -331,6 +334,10 @@ const els = {
     vqCpp: document.getElementById('vq-cpp'),
     vqH1h2: document.getElementById('vq-h1h2'),
     vqVerdict: document.getElementById('vq-verdict'),
+    glottalMeasured: document.getElementById('glottal-measured'),
+    measRd: document.getElementById('meas-rd'),
+    measNaq: document.getElementById('meas-naq'),
+    measOq: document.getElementById('meas-oq'),
     vibAnalysisBody: document.getElementById('vib-analysis-body'),
     vibQualityFill: document.getElementById('vib-quality-fill'),
     vibModeTabs: document.getElementById('vib-mode-tabs'),
@@ -1996,11 +2003,22 @@ function updateVoiceQuality() {
     const cpp = cppRes ? cppRes.cpp : null;
     const h = (f0 > 0) ? DSP.h1h2(frame, sr, f0) : null;
     const A = 0.35; // EMA weight on the new value
-    if (cpp != null && isFinite(cpp)) {
-        state.cachedCPP = (state.cachedCPP == null) ? cpp : (1 - A) * state.cachedCPP + A * cpp;
-    }
-    if (h && isFinite(h.h1h2)) {
-        state.cachedH1H2 = (state.cachedH1H2 == null) ? h.h1h2 : (1 - A) * state.cachedH1H2 + A * h.h1h2;
+    const ema = (prev, x) => (prev == null ? x : (1 - A) * prev + A * x);
+    if (cpp != null && isFinite(cpp)) state.cachedCPP = ema(state.cachedCPP, cpp);
+    if (h && isFinite(h.h1h2)) state.cachedH1H2 = ema(state.cachedH1H2, h.h1h2);
+
+    // IAIF glottal-source estimation on a ~40 ms sub-window (kept local so the
+    // vocal-tract estimate is stationary). Voiced frames only.
+    if (DSP.iaifGlottal && f0 > 0) {
+        const subN = Math.min(frame.length, Math.max(256, Math.round(0.04 * sr)));
+        const off = (frame.length - subN) >> 1;
+        const sub = frame.subarray ? frame.subarray(off, off + subN) : frame.slice(off, off + subN);
+        const g = DSP.iaifGlottal(sub, sr);
+        if (g) {
+            if (g.naq != null && isFinite(g.naq) && g.naq > 0.02 && g.naq < 0.6) state.cachedNAQ = ema(state.cachedNAQ, g.naq);
+            if (g.rdEst != null && isFinite(g.rdEst) && g.rdEst > 0.2 && g.rdEst < 4) state.cachedRdMeas = ema(state.cachedRdMeas, g.rdEst);
+            if (g.oq != null && isFinite(g.oq) && g.oq > 0.1 && g.oq < 0.95) state.cachedOQMeas = ema(state.cachedOQMeas, g.oq);
+        }
     }
     updateVoiceQualityReadout();
 }
@@ -2022,11 +2040,19 @@ function updateVoiceQualityReadout() {
         els.vqVerdict.textContent = v.txt;
         els.vqVerdict.className = 'vstat-val ' + v.cls;
     }
+    // Measured glottal source (IAIF)
+    if (els.glottalMeasured) els.glottalMeasured.style.display = state.isMicActive ? 'block' : 'none';
+    if (els.measRd) els.measRd.textContent = (state.cachedRdMeas == null) ? '—' : state.cachedRdMeas.toFixed(2);
+    if (els.measNaq) els.measNaq.textContent = (state.cachedNAQ == null) ? '—' : state.cachedNAQ.toFixed(3);
+    if (els.measOq) els.measOq.textContent = (state.cachedOQMeas == null) ? '—' : (state.cachedOQMeas * 100).toFixed(0) + '%';
 }
 
 function resetVoiceQuality() {
     state.cachedCPP = null;
     state.cachedH1H2 = null;
+    state.cachedNAQ = null;
+    state.cachedRdMeas = null;
+    state.cachedOQMeas = null;
     updateVoiceQualityReadout();
 }
 
@@ -6658,7 +6684,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — shown in the bottom-right corner (bump on each release)
-const APP_VERSION = 'v1.20.0';
+const APP_VERSION = 'v1.21.0';
 (() => { const el = document.getElementById('app-version'); if (el) el.textContent = APP_VERSION; })();
 
 // Service Worker — enables offline use and "Add to Home Screen"
