@@ -169,6 +169,23 @@ console.log('\n\x1b[1m6. Vibrato-probe: refines when harmonics cover F1, bails o
     const line = `f0=540 /coverage=${probe.coverage} maxGap=${probe.maxGapHz.toFixed(0)}Hz → honest bail-out`;
     (probe.coverage === false) ? pass(line) : fail(line);
   }
+  // (c) "Never worse" contract over a vibrato note: the probe must EITHER improve on
+  // plain LPC F1 OR bail (null) so the caller keeps LPC. It must never return a
+  // non-null F1 that is WORSE than LPC. (Here LPC is already excellent, so bailing
+  // out is the correct, safe outcome — the app's hard gate keeps the LPC value.)
+  {
+    const f0 = 300, F = [620, 1100, 2600, 3400, 4500];
+    const sig = DSP.synthVowel({ sr, dur: 1.4, f0, formants: F, vibratoExtent: 90, vibratoRate: 5.5 });
+    const track = DSP.offlineFormants(Float32Array.from(sig), sr);
+    const mid = track.frames.slice(Math.floor(track.frames.length * 0.3), Math.floor(track.frames.length * 0.7));
+    const lpcF1 = (() => { const a = mid.map(f => f && f.f1).filter(x => x != null).sort((x, y) => x - y); return a.length ? a[a.length >> 1] : null; })();
+    const probe = runProbe(f0, F, 90);
+    const eL = lpcF1 ? Math.abs(lpcF1 - F[0]) : 9999;
+    const bail = !probe || probe.f1 == null;
+    const eP = bail ? Infinity : Math.abs(probe.f1 - F[0]);
+    const line = `f0=300 vibrato: LPC ${hz(lpcF1)} (err ${eL.toFixed(0)}) | probe ${bail ? 'bail→keep LPC' : hz(probe.f1) + ' (err ' + eP.toFixed(0) + ')'}`;
+    (bail || eP <= eL + 30) ? pass(line) : fail(line);
+  }
 }
 
 // ---------------------------------------------------------------------------

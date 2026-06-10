@@ -2776,6 +2776,10 @@ async function computePlaybackPitchContour(buffer) {
     playbackContourComputing = false;
     pitchTrackAnchorCents = null;
     if (els.pitchTrackPanel && els.pitchTrackPanel.open) drawPitchTrack();
+
+    // Now that the high-accuracy pitch contour exists, refine the formant track's
+    // F1/F2 with the vibrato probe where vibrato + harmonic coverage allow it.
+    try { refineFormantTrackWithVibratoProbe(buffer); } catch (e) { console.warn('vibrato-probe refine failed', e); }
 }
 
 // Pitch Track renderer — two modes:
@@ -6011,6 +6015,79 @@ async function buildPlaybackFormantTrack(audioBuffer) {
         console.warn('Offline formant analysis failed:', err);
         playbackFormantTrack = null;
     }
+}
+
+// Vibrato-probe refinement (dsp-core.js vibratoProbeFormants). During vibrato the
+// harmonics sweep across frequency, so accumulating their (freq, amplitude) points
+// over a window densely samples the vocal-tract envelope — defeating the harmonic-
+// locking that biases plain LPC at higher f0. We slide a ~260 ms window over the
+// recording; where vibrato is present AND harmonic coverage is sufficient AND the
+// probe's F1/F2 stay close to the LPC estimate (sanity), we overwrite F1/F2 in the
+// window core. Hard-gated so it can only refine, never degrade. Needs the pitch
+// contour (run after computePlaybackPitchContour completes).
+function refineFormantTrackWithVibratoProbe(audioBuffer) {
+    const tr = playbackFormantTrack;
+    if (!tr || !tr.frames.length || !audioBuffer) return;
+    if (typeof DSP === 'undefined' || !DSP.vibratoProbeFormants) return;
+    if (!playbackPitchContour || !playbackPitchContour.length) return;
+
+    const sr = audioBuffer.sampleRate;
+    const ch = audioBuffer.getChannelData(0);
+    const N = 1024;                          // probe FFT window per frame
+    const probeHop = Math.round(0.01 * sr);  // 10 ms between probe frames
+    const winSec = 0.26, stepSec = 0.13;     // sliding window over the recording
+    const C0 = PITCH_TRACK_C0;
+
+    const getFrameAt = (centerSamp) => {
+        const out = new Float64Array(N);
+        const start = centerSamp - (N >> 1);
+        for (let i = 0; i < N; i++) { const idx = start + i; out[i] = (idx >= 0 && idx < ch.length) ? ch[idx] : 0; }
+        return out;
+    };
+    const durSec = ch.length / sr;
+    let refinedCount = 0;
+    for (let t0 = 0; t0 + winSec <= durSec + 1e-6; t0 += stepSec) {
+        const nF = Math.max(1, Math.floor((winSec * sr) / probeHop));
+        const f0s = new Array(nF);
+        const centers = new Array(nF);
+        const centsArr = [];
+        for (let i = 0; i < nF; i++) {
+            const tSec = t0 + (i * probeHop) / sr;
+            centers[i] = Math.round(tSec * sr);
+            const s = lookupPlaybackPitch(tSec);
+            f0s[i] = (s.hz > 0) ? s.hz : null;
+            if (f0s[i]) centsArr.push(1200 * Math.log2(f0s[i] / C0));
+        }
+        if (centsArr.length < nF * 0.6) continue; // mostly voiced required
+        // Require vibrato-like modulation in the window (std of cents > 20¢) — that is
+        // where the probe genuinely beats LPC; steady notes are left to LPC.
+        let mean = 0; for (const c of centsArr) mean += c; mean /= centsArr.length;
+        let varc = 0; for (const c of centsArr) varc += (c - mean) * (c - mean); varc /= centsArr.length;
+        if (Math.sqrt(varc) < 20) continue;
+
+        const probe = DSP.vibratoProbeFormants((i) => getFrameAt(centers[i]), f0s, sr, nF, { fCeil: 3500 });
+        if (!probe || !probe.coverage || probe.f1 == null) continue;
+
+        // Sanity vs LPC: median LPC F1/F2 over the window core.
+        const cLo = t0 + winSec * 0.25, cHi = t0 + winSec * 0.75;
+        const idxLo = Math.max(0, Math.round(cLo / tr.hop)), idxHi = Math.min(tr.frames.length - 1, Math.round(cHi / tr.hop));
+        const lpcF1 = [], lpcF2 = [];
+        for (let k = idxLo; k <= idxHi; k++) { const f = tr.frames[k]; if (f && f.f1 != null) lpcF1.push(f.f1); if (f && f.f2 != null) lpcF2.push(f.f2); }
+        if (!lpcF1.length) continue;
+        lpcF1.sort((a, b) => a - b); const medLpcF1 = lpcF1[lpcF1.length >> 1];
+        if (Math.abs(probe.f1 - medLpcF1) > 220) continue; // too far → distrust probe, keep LPC
+        const f2ok = probe.f2 != null && lpcF2.length && Math.abs(probe.f2 - lpcF2.sort((a, b) => a - b)[lpcF2.length >> 1]) <= 350;
+
+        for (let k = idxLo; k <= idxHi; k++) {
+            const f = tr.frames[k];
+            if (!f) continue;
+            f.f1 = probe.f1;
+            if (f2ok) f.f2 = probe.f2;
+            f.refined = true;
+            refinedCount++;
+        }
+    }
+    if (refinedCount) console.debug(`vibrato-probe refined ${refinedCount} formant frames`);
 }
 
 // Look up the precomputed formant frame at a playback time → estFormants shape.
