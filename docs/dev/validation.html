@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>DSP Accuracy Validation — Source-Filter</title>
+<style>
+  body { font: 14px/1.5 -apple-system, system-ui, sans-serif; margin: 0; padding: 24px; background: #0f1115; color: #e6e6e6; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  p.sub { color: #9aa0a6; margin: 0 0 20px; }
+  .sec { margin: 22px 0 8px; font-weight: 600; color: #8fd2ff; }
+  table { border-collapse: collapse; width: 100%; max-width: 980px; margin-bottom: 8px; }
+  th, td { text-align: left; padding: 5px 10px; border-bottom: 1px solid #23262d; font-variant-numeric: tabular-nums; }
+  th { color: #9aa0a6; font-weight: 500; }
+  .pass { color: #5ad17a; } .fail { color: #ff6b6b; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+  .badge.ok { background: #143d22; color: #5ad17a; } .badge.ng { background: #401717; color: #ff6b6b; }
+  code { background: #1a1d24; padding: 1px 5px; border-radius: 4px; }
+  #summary { font-size: 16px; margin: 8px 0 16px; }
+  footer { color: #6b7280; margin-top: 28px; font-size: 12px; }
+</style>
+</head>
+<body>
+<h1>DSP Accuracy Validation</h1>
+<p class="sub">Synthesizes source-filter vowels with <em>known</em> f0 / formants and measures the production DSP error.
+Mirrors <code>dev/validate.mjs</code> (run that in CI: <code>node docs/dev/validate.mjs</code>). No mic, no audio device.</p>
+<div id="summary">Running…</div>
+<div id="out"></div>
+<footer>dsp-core.js — Source-Filter accuracy suite. Open with a local server: <code>cd docs &amp;&amp; python3 -m http.server 8081</code> → <code>/dev/validation.html</code></footer>
+
+<script src="../dsp-core.js"></script>
+<script>
+(function () {
+  const out = document.getElementById('out');
+  let pass = 0, fail = 0;
+  const cents = (a, b) => 1200 * Math.log2(a / b);
+  const hz = (x) => (x == null ? 'null' : x.toFixed(1) + ' Hz');
+  function section(title) { const d = document.createElement('div'); d.className = 'sec'; d.textContent = title; out.appendChild(d); }
+  function table(rows) {
+    const t = document.createElement('table');
+    t.innerHTML = '<tr><th>case</th><th>result</th><th>status</th></tr>' +
+      rows.map(r => { (r.ok ? pass++ : fail++); return `<tr><td>${r.name}</td><td>${r.detail}</td><td class="${r.ok ? 'pass' : 'fail'}">${r.ok ? '✓ PASS' : '✗ FAIL'}</td></tr>`; }).join('');
+    out.appendChild(t);
+  }
+  function frameAt(sig, sr, t, N) { const s = Math.round(t * sr) - (N >> 1); const o = new Float64Array(N); for (let i = 0; i < N; i++) { const k = s + i; o[i] = (k >= 0 && k < sig.length) ? sig[k] : 0; } return o; }
+
+  // 1. YIN steady tones
+  section('1. YIN pitch accuracy (steady tones, 44.1 kHz, gate <15¢)');
+  {
+    const sr = 44100, rows = [];
+    for (const f0 of [82.41, 110, 146.83, 220, 329.63, 440, 660, 880]) {
+      const sig = DSP.synthVowel({ sr, dur: 0.4, f0, formants: [520, 1700, 2600, 3400, 4500] });
+      const { hz: est } = DSP.yin(frameAt(sig, sr, 0.2, 2048), sr);
+      const err = est > 0 ? Math.abs(cents(est, f0)) : 9999;
+      rows.push({ name: `f0 = ${f0.toFixed(1)} Hz`, detail: `${hz(est)} (${err.toFixed(1)}¢)`, ok: err < 15 });
+    }
+    table(rows);
+  }
+
+  // 2. Offline contour octave robustness
+  section('2. Offline pitch contour (Viterbi) — octave-error robustness (gate ≥95% within ±50¢)');
+  {
+    const sr = 44100, rows = [];
+    const check = (f0, F, asp, label) => {
+      const sig = DSP.synthVowel({ sr, dur: 1.0, f0, formants: F, aspiration: asp });
+      const contour = DSP.pitchContour(Float32Array.from(sig), sr);
+      let bad = 0, tot = 0;
+      for (const fr of contour) { if (fr.t < 0.15 || fr.t > 0.85 || fr.hz == null) continue; tot++; if (Math.abs(cents(fr.hz, f0)) > 50) bad++; }
+      const rate = tot ? 100 * (tot - bad) / tot : 0;
+      rows.push({ name: label, detail: `${rate.toFixed(0)}% within ±50¢ (${tot} voiced)`, ok: rate >= 95 });
+    };
+    check(196, [400, 800, 2600, 3400, 4500], 0.4, 'G3 held + aspiration');
+    check(330, [700, 1220, 2600, 3400, 4500], 0.2, 'E4, F1 on H2 (octave trap)');
+    check(262, [600, 1500, 2600, 3400, 4500], 0.0, 'C4 clean (no over-collapse)');
+    table(rows);
+  }
+
+  // 3. Formant accuracy
+  section('3. Offline formant accuracy — male & female vowels');
+  {
+    const sr = 44100, rows = [];
+    const vowels = {
+      'ɑ (male, f0 120)': { f0: 120, F: [730, 1090, 2440, 3400, 4500] },
+      'i (male, f0 120)': { f0: 120, F: [270, 2290, 3010, 3700, 4500] },
+      'u (male, f0 120)': { f0: 120, F: [300, 870, 2240, 3400, 4500] },
+      'ɛ (fem, f0 220)': { f0: 220, F: [600, 2350, 2900, 3600, 4700] },
+      'ɑ (fem, f0 260)': { f0: 260, F: [850, 1220, 2810, 3600, 4700] },
+    };
+    for (const [name, v] of Object.entries(vowels)) {
+      const sig = DSP.synthVowel({ sr, dur: 0.6, f0: v.f0, formants: v.F });
+      const track = DSP.offlineFormants(Float32Array.from(sig), sr);
+      const mid = track.frames.slice(Math.floor(track.frames.length * 0.3), Math.floor(track.frames.length * 0.7));
+      const med = (k) => { const a = mid.map(f => f && f[k]).filter(x => x != null).sort((x, y) => x - y); return a.length ? a[a.length >> 1] : null; };
+      const e1 = med('f1'), e2 = med('f2');
+      const err1 = e1 ? Math.abs(e1 - v.F[0]) : 9999, err2 = e2 ? Math.abs(e2 - v.F[1]) : 9999;
+      const g1 = v.f0 >= 220 ? 90 : 60, g2 = v.f0 >= 220 ? 180 : 120;
+      rows.push({ name, detail: `F1 ${hz(e1)} (err ${err1.toFixed(0)}/${g1}) · F2 ${hz(e2)} (err ${err2.toFixed(0)}/${g2})`, ok: err1 < g1 && err2 < g2 });
+    }
+    table(rows);
+  }
+
+  // 4. CPP & H1-H2 ordinal
+  section('4. CPP & H1–H2 — ordinal validity (pressed vs breathy)');
+  {
+    const sr = 44100, f0 = 180, F = [600, 1000, 2500, 3400, 4500], rows = [];
+    const P = DSP.synthVowel({ sr, dur: 0.5, f0, formants: F, oq: 0.4, aspiration: 0 });
+    const B = DSP.synthVowel({ sr, dur: 0.5, f0, formants: F, oq: 0.85, aspiration: 0.5 });
+    const frP = frameAt(P, sr, 0.25, 4096), frB = frameAt(B, sr, 0.25, 4096);
+    const cppP = DSP.cpps(frP, sr).cpp, cppB = DSP.cpps(frB, sr).cpp;
+    const hP = DSP.h1h2(frP, sr, f0).h1h2, hB = DSP.h1h2(frB, sr, f0).h1h2;
+    rows.push({ name: 'CPP pressed > breathy', detail: `${cppP.toFixed(2)} vs ${cppB.toFixed(2)}`, ok: cppP > cppB });
+    rows.push({ name: 'H1–H2 breathy > pressed', detail: `${hB.toFixed(1)} dB vs ${hP.toFixed(1)} dB`, ok: hB > hP });
+    table(rows);
+  }
+
+  // 5. IAIF NAQ
+  section('5. IAIF glottal source — NAQ tracks open quotient');
+  {
+    const sr = 44100, f0 = 130, F = [650, 1080, 2500, 3400, 4500], rows = [];
+    const naq = (sig) => { const v = []; for (let t = 0.15; t < 0.4; t += 0.03) { const r = DSP.iaifGlottal(frameAt(sig, sr, t, Math.round(sr * 0.04)), sr); if (r && r.naq != null && isFinite(r.naq) && r.naq > 0 && r.naq < 1) v.push(r.naq); } v.sort((a, b) => a - b); return v.length ? v[v.length >> 1] : null; };
+    const nA = naq(DSP.synthVowel({ sr, dur: 0.5, f0, formants: F, oq: 0.45 }));
+    const nB = naq(DSP.synthVowel({ sr, dur: 0.5, f0, formants: F, oq: 0.85 }));
+    rows.push({ name: 'NAQ adducted < breathy', detail: `${nA == null ? 'null' : nA.toFixed(3)} vs ${nB == null ? 'null' : nB.toFixed(3)}`, ok: nA != null && nB != null && nB > nA });
+    table(rows);
+  }
+
+  // 6. Vibrato probe
+  section('6. Vibrato-probe: refines when harmonics cover F1, bails out otherwise');
+  {
+    const sr = 44100, rows = [];
+    const run = (f0, F, ext) => {
+      const sig = DSP.synthVowel({ sr, dur: 1.2, f0, formants: F, vibratoExtent: ext, vibratoRate: 5.5 });
+      const N = 1024, hop = Math.round(sr * 0.01), nF = Math.floor((sig.length - N) / hop);
+      const getFrame = (i) => frameAt(sig, sr, (i * hop + (N >> 1)) / sr, N);
+      const f0s = []; for (let i = 0; i < nF; i++) { const { hz: e } = DSP.yin(getFrame(i), sr, { fMax: 1100 }); f0s.push(e > 0 ? e : null); }
+      return DSP.vibratoProbeFormants(getFrame, f0s, sr, nF, { fCeil: 3500 });
+    };
+    const a = run(240, [650, 1100, 2600, 3400, 4500], 80);
+    const errA = a && a.f1 ? Math.abs(a.f1 - 650) : 9999;
+    rows.push({ name: 'f0 240 — harmonics cover F1', detail: `coverage=${a.coverage}, F1 ${hz(a.f1)} (true 650, err ${errA.toFixed(0)})`, ok: a.coverage && errA < 160 });
+    const b = run(540, [800, 1150, 2800, 3500, 4700], 50);
+    rows.push({ name: 'f0 540 — too sparse → bail out', detail: `coverage=${b.coverage} (LPC kept)`, ok: b.coverage === false });
+    table(rows);
+  }
+
+  const sum = document.getElementById('summary');
+  sum.innerHTML = fail === 0
+    ? `<span class="badge ok">ALL ${pass} GATES PASSED</span>`
+    : `<span class="badge ng">${fail} FAILED</span> &nbsp; ${pass} passed`;
+})();
+</script>
+</body>
+</html>

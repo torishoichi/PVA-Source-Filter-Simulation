@@ -2429,6 +2429,25 @@ function yinCandidates(buf0, sr) {
         for (let m = 0; m < minima.length; m++) { if (minima[m].d < PB_PRIOR_T[k]) { chosen = m; break; } }
         if (chosen >= 0) { prob[chosen] += PB_PRIOR_W[k]; vMass += PB_PRIOR_W[k]; }
     }
+    // Octave-up correction (see dsp-core.js yinCandidates for the rationale + test):
+    // a formant on an even harmonic makes the signal look periodic at half the true
+    // period. The artifact's difference value is non-trivial (d≈0.1) while the true
+    // period at ~2× the lag is a far cleaner dip (d≈0). Move mass DOWN to the 2×
+    // sibling only when the source dip is imperfect (d>0.03 — leaves clean tones
+    // alone, also makes it single-step) AND the longer dip is clearly deeper (≤0.5×).
+    const OCT_SRC_FLOOR = 0.03, OCT_DEPTH = 0.5;
+    for (let m = 0; m < minima.length; m++) {
+        if (prob[m] <= 0 || minima[m].d <= OCT_SRC_FLOOR) continue;
+        const want = minima[m].tau * 2;
+        let loi = -1;
+        for (let q = 0; q < minima.length; q++) {
+            if (Math.abs(minima[q].tau - want) <= want * 0.04) { loi = q; break; }
+        }
+        if (loi >= 0 && minima[loi].d <= minima[m].d * OCT_DEPTH) {
+            const moved = prob[m] * 0.8;
+            prob[loi] += moved; prob[m] -= moved;
+        }
+    }
     let cands = [];
     for (let m = 0; m < minima.length; m++) if (prob[m] > 0)
         cands.push({ f0: sr / minima[m].tau, prob: prob[m], clar: Math.max(0, 1 - minima[m].d) });
@@ -5740,31 +5759,41 @@ function _offlineDecimate(mono, srOrig, targetSr) {
     return { data: out, sr: srOrig / factor };
 }
 
-// Assign F1–F5 across frames by continuity + band priors, then median-smooth.
+// Assign F1–F5 across frames by per-slot search bands + continuity, then median-smooth.
+// The bands are wide enough for extreme vowels (front /i/ F2≈2300, back /u/ F2≈870):
+// the old tight tolerance-from-prior dropped /i/,/u/ F2 entirely because they sit far
+// from the generic 1500 Hz prior. Tie-break pulls toward (prior+previous-frame)/2 for
+// temporal stability; order + a 150 Hz min-gap are enforced. (Validated in
+// dev/validate.mjs test 3.)
 function _trackAndSmooth(frames, hopSec) {
     const SLOTS = 5;
-    const priors = [500, 1500, 2500, 3500, 4500];
-    const tol = [350, 500, 650, 800, 950]; // max Hz from anchor for assignment
+    const BANDS = [[180, 1100], [550, 3000], [1400, 3500], [2600, 4600], [3200, 5600]];
+    const PRIORS = [500, 1500, 2500, 3500, 4500];
+    const MINGAP = 150;
     const assignedAll = new Array(frames.length);
-    let anchor = priors.slice();
+    let prevAssigned = [null, null, null, null, null];
     for (let fi = 0; fi < frames.length; fi++) {
         const cands = frames[fi];
         const assigned = [null, null, null, null, null];
         if (cands && cands.length) {
             const used = new Array(cands.length).fill(false);
             for (let s = 0; s < SLOTS; s++) {
+                const [lo, hi] = BANDS[s];
+                const target = prevAssigned[s] != null ? 0.5 * PRIORS[s] + 0.5 * prevAssigned[s] : PRIORS[s];
+                const floor = (s > 0 && assigned[s - 1] != null) ? assigned[s - 1] + MINGAP : lo;
                 let best = -1, bd = Infinity;
                 for (let j = 0; j < cands.length; j++) {
                     if (used[j]) continue;
-                    if (s > 0 && assigned[s - 1] != null && cands[j].freq <= assigned[s - 1] + 30) continue;
-                    const d = Math.abs(cands[j].freq - anchor[s]);
+                    const f = cands[j].freq;
+                    if (f < lo || f > hi || f < floor) continue;
+                    const d = Math.abs(f - target);
                     if (d < bd) { bd = d; best = j; }
                 }
-                if (best >= 0 && bd <= tol[s]) { assigned[s] = cands[best].freq; used[best] = true; }
+                if (best >= 0) { assigned[s] = cands[best].freq; used[best] = true; }
             }
         }
         assignedAll[fi] = assigned;
-        anchor = assigned.map((v, s) => (v != null ? v : priors[s]));
+        prevAssigned = assigned.map((v, s) => (v != null ? v : prevAssigned[s]));
     }
     const W = 2; // ±2 frames (5-tap) median
     const res = new Array(frames.length);

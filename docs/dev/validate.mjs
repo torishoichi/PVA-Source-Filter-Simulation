@@ -1,0 +1,177 @@
+#!/usr/bin/env node
+/*
+ * validate.mjs — accuracy regression harness for dsp-core.js.
+ *
+ * Synthesizes source-filter vowels with KNOWN f0 and formants, then measures the
+ * error of the production DSP routines. No browser, no audio device. Run:
+ *     node docs/dev/validate.mjs
+ * Exit code 0 if all gates pass, 1 otherwise (CI-friendly).
+ */
+import { createRequire } from 'module';
+import { fileURLToPath } from 'url';
+import path from 'path';
+const require = createRequire(import.meta.url);
+const here = path.dirname(fileURLToPath(import.meta.url));
+const DSP = require(path.join(here, '..', 'dsp-core.js'));
+
+let failures = 0;
+const pass = (s) => console.log('  \x1b[32m✓\x1b[0m ' + s);
+const fail = (s) => { console.log('  \x1b[31m✗ ' + s + '\x1b[0m'); failures++; };
+const hz = (x) => (x == null ? 'null' : x.toFixed(1) + 'Hz');
+const cents = (a, b) => 1200 * Math.log2(a / b);
+
+// Frame extractor centered at time t (sec) of length N from a signal.
+function frameAt(sig, sr, tSec, N) {
+  const start = Math.round(tSec * sr) - (N >> 1);
+  const out = new Float64Array(N);
+  for (let i = 0; i < N; i++) { const idx = start + i; out[i] = (idx >= 0 && idx < sig.length) ? sig[idx] : 0; }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+console.log('\n\x1b[1m1. YIN pitch accuracy (steady tones, 44.1 kHz)\x1b[0m');
+{
+  const sr = 44100;
+  const cases = [82.41, 110, 146.83, 220, 329.63, 440, 660, 880];
+  let worst = 0;
+  // Neutral formants kept clear of 2×f0 for the tested notes — this isolates the
+  // core detector. The formant-on-harmonic octave trap is exercised in test 2,
+  // where the contour's multi-candidate + Viterbi stage is responsible for it.
+  for (const f0 of cases) {
+    const sig = DSP.synthVowel({ sr, dur: 0.4, f0, formants: [520, 1700, 2600, 3400, 4500] });
+    const frame = frameAt(sig, sr, 0.2, 2048);
+    const { hz: est } = DSP.yin(frame, sr);
+    const err = est > 0 ? Math.abs(cents(est, f0)) : 9999;
+    worst = Math.max(worst, err);
+    const line = `f0=${f0.toFixed(1)}Hz → ${hz(est)}  (${err.toFixed(1)}¢)`;
+    err < 15 ? pass(line) : fail(line);
+  }
+  console.log(`  worst-case error: ${worst.toFixed(1)}¢ (gate: <15¢)`);
+}
+
+// ---------------------------------------------------------------------------
+console.log('\n\x1b[1m2. Offline pitch contour (Viterbi) — octave-error robustness\x1b[0m');
+{
+  const sr = 44100;
+  // Two notes prone to octave traps: G3 with a formant on H2, plus aspiration.
+  const checkContour = (f0, F, asp, label) => {
+    const sig = DSP.synthVowel({ sr, dur: 1.0, f0, formants: F, aspiration: asp });
+    const contour = DSP.pitchContour(Float32Array.from(sig), sr);
+    let bad = 0, tot = 0;
+    for (const fr of contour) {
+      if (fr.t < 0.15 || fr.t > 0.85 || fr.hz == null) continue;
+      tot++; if (Math.abs(cents(fr.hz, f0)) > 50) bad++;
+    }
+    const rate = tot ? (100 * (tot - bad) / tot) : 0;
+    const line = `${label}: ${rate.toFixed(0)}% frames within ±50¢ (${tot} voiced)`;
+    rate >= 95 ? pass(line) : fail(line);
+  };
+  checkContour(196, [400, 800, 2600, 3400, 4500], 0.4, 'G3 held + 0.4 aspiration');
+  checkContour(330, [700, 1220, 2600, 3400, 4500], 0.2, 'E4 with F1 on H2 (octave trap)');
+  // Guard against over-collapse: a clean tone whose 2× period is NOT a real dip
+  // must stay on f0, not drop an octave.
+  checkContour(262, [600, 1500, 2600, 3400, 4500], 0.0, 'C4 clean (no over-collapse)');
+}
+
+// ---------------------------------------------------------------------------
+console.log('\n\x1b[1m3. Offline formant accuracy — male & female vowels\x1b[0m');
+{
+  const sr = 44100;
+  // Hillenbrand-ish reference formants
+  const vowels = {
+    'ɑ (male, f0=120)':  { f0: 120, F: [730, 1090, 2440, 3400, 4500] },
+    'i (male, f0=120)':  { f0: 120, F: [270, 2290, 3010, 3700, 4500] },
+    'u (male, f0=120)':  { f0: 120, F: [300,  870, 2240, 3400, 4500] },
+    'ɛ (fem,  f0=220)':  { f0: 220, F: [600, 2350, 2900, 3600, 4700] },
+    'ɑ (fem,  f0=260)':  { f0: 260, F: [850, 1220, 2810, 3600, 4700] },
+  };
+  for (const [name, v] of Object.entries(vowels)) {
+    const sig = DSP.synthVowel({ sr, dur: 0.6, f0: v.f0, formants: v.F });
+    const mono = Float32Array.from(sig);
+    const track = DSP.offlineFormants(mono, sr);
+    // median of middle frames
+    const mid = track.frames.slice(Math.floor(track.frames.length * 0.3), Math.floor(track.frames.length * 0.7));
+    const med = (key) => { const a = mid.map(f => f && f[key]).filter(x => x != null).sort((x, y) => x - y); return a.length ? a[a.length >> 1] : null; };
+    const e1 = med('f1'), e2 = med('f2');
+    const err1 = e1 ? Math.abs(e1 - v.F[0]) : 9999;
+    const err2 = e2 ? Math.abs(e2 - v.F[1]) : 9999;
+    // F1 gate scales a little with f0 (sparser harmonics at high f0)
+    const g1 = v.f0 >= 220 ? 90 : 60;
+    const g2 = v.f0 >= 220 ? 180 : 120;
+    const line = `${name}: F1 ${hz(e1)} (err ${err1.toFixed(0)}, gate ${g1}) | F2 ${hz(e2)} (err ${err2.toFixed(0)}, gate ${g2})`;
+    (err1 < g1 && err2 < g2) ? pass(line) : fail(line);
+  }
+}
+
+// ---------------------------------------------------------------------------
+console.log('\n\x1b[1m4. CPP & H1–H2 — ordinal validity (pressed vs breathy)\x1b[0m');
+{
+  const sr = 44100, f0 = 180, F = [600, 1000, 2500, 3400, 4500];
+  const pressed = DSP.synthVowel({ sr, dur: 0.5, f0, formants: F, oq: 0.4, aspiration: 0.0 });
+  const breathy = DSP.synthVowel({ sr, dur: 0.5, f0, formants: F, oq: 0.85, aspiration: 0.5 });
+  const frP = frameAt(pressed, sr, 0.25, 4096), frB = frameAt(breathy, sr, 0.25, 4096);
+  const cppP = DSP.cpps(frP, sr).cpp, cppB = DSP.cpps(frB, sr).cpp;
+  const hP = DSP.h1h2(frP, sr, f0).h1h2, hB = DSP.h1h2(frB, sr, f0).h1h2;
+  let line = `CPP: pressed ${cppP.toFixed(2)} > breathy ${cppB.toFixed(2)}`;
+  cppP > cppB ? pass(line) : fail(line);
+  line = `H1–H2: breathy ${hB.toFixed(1)}dB > pressed ${hP.toFixed(1)}dB`;
+  hB > hP ? pass(line) : fail(line);
+}
+
+// ---------------------------------------------------------------------------
+console.log('\n\x1b[1m5. IAIF glottal source — NAQ tracks open quotient\x1b[0m');
+{
+  const sr = 44100, f0 = 130, F = [650, 1080, 2500, 3400, 4500];
+  // Low OQ (adducted/pressed) should give a LOWER NAQ than high OQ (breathy).
+  const adduct = DSP.synthVowel({ sr, dur: 0.5, f0, formants: F, oq: 0.45 });
+  const abduct = DSP.synthVowel({ sr, dur: 0.5, f0, formants: F, oq: 0.85 });
+  const naq = (sig) => {
+    const vals = [];
+    for (let t = 0.15; t < 0.4; t += 0.03) {
+      const fr = frameAt(sig, sr, t, Math.round(sr * 0.04));
+      const r = DSP.iaifGlottal(fr, sr);
+      if (r && r.naq != null && isFinite(r.naq) && r.naq > 0 && r.naq < 1) vals.push(r.naq);
+    }
+    vals.sort((a, b) => a - b);
+    return vals.length ? vals[vals.length >> 1] : null;
+  };
+  const nA = naq(adduct), nB = naq(abduct);
+  const line = `NAQ: adducted ${nA == null ? 'null' : nA.toFixed(3)} < breathy ${nB == null ? 'null' : nB.toFixed(3)}`;
+  (nA != null && nB != null && nB > nA) ? pass(line) : fail(line);
+}
+
+// ---------------------------------------------------------------------------
+console.log('\n\x1b[1m6. Vibrato-probe: refines when harmonics cover F1, bails out otherwise\x1b[0m');
+{
+  const sr = 44100;
+  const runProbe = (f0, F, vibExtent) => {
+    const sig = DSP.synthVowel({ sr, dur: 1.2, f0, formants: F, vibratoExtent: vibExtent, vibratoRate: 5.5 });
+    const N = 1024, hop = Math.round(sr * 0.01);
+    const nF = Math.floor((sig.length - N) / hop);
+    const getFrame = (i) => frameAt(sig, sr, (i * hop + (N >> 1)) / sr, N);
+    const f0s = [];
+    for (let i = 0; i < nF; i++) { const { hz: e } = DSP.yin(getFrame(i), sr, { fMax: 1100 }); f0s.push(e > 0 ? e : null); }
+    return DSP.vibratoProbeFormants(getFrame, f0s, sr, nF, { fCeil: 3500 });
+  };
+  // (a) Mid f0 where harmonics densely cover F1 → probe should resolve F1 well.
+  {
+    const f0 = 240, F = [650, 1100, 2600, 3400, 4500]; // H2≈480,H3≈720 straddle F1
+    const probe = runProbe(f0, F, 80);
+    const err = (probe && probe.f1) ? Math.abs(probe.f1 - F[0]) : 9999;
+    const line = `f0=240 /coverage=${probe.coverage} maxGap=${probe.maxGapHz.toFixed(0)}Hz → F1 ${hz(probe.f1)} (true ${F[0]}, err ${err.toFixed(0)})`;
+    (probe.coverage && err < 160) ? pass(line) : fail(line);
+  }
+  // (b) High f0 soprano: harmonics too sparse → MUST report coverage:false so the
+  // caller keeps its LPC estimate (the probe never makes things worse).
+  {
+    const f0 = 540, F = [800, 1150, 2800, 3500, 4700];
+    const probe = runProbe(f0, F, 50);
+    const line = `f0=540 /coverage=${probe.coverage} maxGap=${probe.maxGapHz.toFixed(0)}Hz → honest bail-out`;
+    (probe.coverage === false) ? pass(line) : fail(line);
+  }
+}
+
+// ---------------------------------------------------------------------------
+console.log('');
+if (failures === 0) { console.log('\x1b[32m\x1b[1mALL GATES PASSED\x1b[0m\n'); process.exit(0); }
+else { console.log(`\x1b[31m\x1b[1m${failures} GATE(S) FAILED\x1b[0m\n`); process.exit(1); }
