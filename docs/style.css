@@ -3283,8 +3283,9 @@ body.learn-drawer-open { overflow: hidden; }
 }
 .recordings-item {
     display: flex;
-    align-items: center;
-    gap: 8px;
+    flex-direction: column;     /* row 1 = clip meta, row 2 = inline transport */
+    align-items: stretch;
+    gap: 6px;
     padding: 6px 4px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.04);
     font-size: 0.8rem;
@@ -3293,6 +3294,16 @@ body.learn-drawer-open { overflow: hidden; }
 .recordings-item.is-playing {
     background: rgba(79, 150, 80, 0.12);
     border-radius: var(--radius-xs);
+    padding: 8px 8px;
+    border: 1px solid rgba(79, 150, 80, 0.25);
+    border-bottom: 1px solid rgba(79, 150, 80, 0.25);
+}
+/* Row 1: the clip's meta + actions */
+.rec-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
 }
 .rec-time {
     flex: 1 1 auto;
@@ -3333,6 +3344,29 @@ body.learn-drawer-open { overflow: hidden; }
 .rec-btn:hover { background: rgba(255, 255, 255, 0.06); color: var(--text-primary); }
 .rec-btn.danger:hover { background: rgba(220, 60, 60, 0.18); color: #ff7676; border-color: rgba(220, 60, 60, 0.4); }
 
+/* Primary play/pause toggle — single-glyph circular button (no width jump) */
+.rec-play-btn {
+    flex: 0 0 auto;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    line-height: 1;
+    border-radius: 50%;
+    border: 1px solid rgba(79, 150, 80, 0.5);
+    color: #4f9650;
+    background: rgba(79, 150, 80, 0.08);
+}
+.rec-play-btn:hover { background: rgba(79, 150, 80, 0.18); color: var(--text-primary); }
+.rec-play-btn.is-playing {
+    background: #4f9650;
+    color: #fff;
+    border-color: #4f9650;
+}
+
 /* Record button (Rec) — red dot accent when recording */
 #mic-record.is-recording {
     color: #ff5252;
@@ -3371,14 +3405,50 @@ body.learn-drawer-open { overflow: hidden; }
     flex: 1 1 auto;
     display: flex;
     align-items: center;
-    height: 18px;
+    height: 22px;
 }
 .pb-seek {
     width: 100%;
-    height: 3px;
+    height: 22px;
     cursor: pointer;
     position: relative;
     z-index: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    margin: 0;
+}
+/* Thicker, grabbable track + visible thumb (default range is a 3px hairline) */
+.pb-seek::-webkit-slider-runnable-track {
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.16);
+}
+.pb-seek::-moz-range-track {
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.16);
+}
+.pb-seek::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    margin-top: -4px;
+    border-radius: 50%;
+    background: #4f9650;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+    cursor: pointer;
+}
+.pb-seek::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #4f9650;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+    cursor: pointer;
 }
 /* A–B loop region highlight overlaid on the seek track */
 .pb-region {
@@ -3395,13 +3465,13 @@ body.learn-drawer-open { overflow: hidden; }
     display: none;          /* shown only while section loop is active */
 }
 .playback-controls.is-loop .pb-region { display: block; }
-/* Draggable A / B handles */
+/* Draggable A / B handles — labelled, larger hit target */
 .pb-handle {
     position: absolute;
     top: 50%;
-    width: 10px;
-    height: 16px;
-    margin-left: -5px;       /* center on its position */
+    width: 16px;
+    height: 20px;
+    margin-left: -8px;       /* center on its position */
     transform: translateY(-50%);
     background: #4f9650;
     border: 1px solid #fff;
@@ -3412,19 +3482,17 @@ body.learn-drawer-open { overflow: hidden; }
     display: none;           /* shown only while section loop is active */
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
 }
-.playback-controls.is-loop .pb-handle { display: block; }
+.playback-controls.is-loop .pb-handle { display: flex; align-items: center; justify-content: center; }
 .pb-handle::after {
-    content: '';
-    position: absolute;
-    left: 50%;
-    top: 3px;
-    bottom: 3px;
-    width: 1px;
-    transform: translateX(-50%);
-    background: rgba(255, 255, 255, 0.7);
+    font-size: 0.6rem;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1;
 }
 .pb-handle.pb-handle-a { left: 0%; }
 .pb-handle.pb-handle-b { left: 100%; }
+.pb-handle.pb-handle-a::after { content: 'A'; }
+.pb-handle.pb-handle-b::after { content: 'B'; }
 .pb-rate-select {
     flex: 0 0 auto;
     background: transparent;

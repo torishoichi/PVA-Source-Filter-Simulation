@@ -6644,14 +6644,17 @@ function renderRecordingsList() {
         durEl.textContent = fmtDuration(rec.durationMs);
 
         const playBtn = document.createElement('button');
-        playBtn.className = 'rec-btn';
+        playBtn.className = 'rec-btn rec-play-btn';
         playBtn.type = 'button';
         // Pause keeps the clip loaded so the next press resumes from the same
         // position; playRecording() always restarts from 0, so resume calls
         // the live element directly instead of re-entering playRecording().
         const isCurrent = rec.id === playbackRecId && playbackAudio;
         const isPlayingThis = isCurrent && !playbackAudio.paused;
-        playBtn.textContent = isPlayingThis ? '⏸ Pause' : (isCurrent ? '▶ Resume' : '▶ Play');
+        playBtn.textContent = isPlayingThis ? '⏸' : '⏵';   // single-glyph toggle (no width jump)
+        playBtn.classList.toggle('is-playing', !!isPlayingThis);
+        playBtn.setAttribute('aria-label', isPlayingThis ? 'Pause' : (isCurrent ? 'Resume' : 'Play'));
+        playBtn.title = isPlayingThis ? '一時停止' : (isCurrent ? '再開' : '再生');
         playBtn.addEventListener('click', () => {
             if (rec.id === playbackRecId && playbackAudio) {
                 if (playbackAudio.paused) resumePlayback();
@@ -6679,7 +6682,21 @@ function renderRecordingsList() {
         delBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>';
         delBtn.addEventListener('click', () => deleteRecording(rec.id));
 
-        li.append(timeEl, labelInput, durEl, playBtn, dlBtn, delBtn);
+        // Row 1: play | timestamp | label | duration | download | delete
+        const row = document.createElement('div');
+        row.className = 'rec-row';
+        row.append(playBtn, timeEl, labelInput, durEl, dlBtn, delBtn);
+        li.appendChild(row);
+
+        // Row 2 (active item only): move the shared transport + EQ INLINE under this
+        // recording, so the controls always sit with the clip they operate on instead
+        // of as a detached bar below the whole list. appendChild moves the singletons
+        // (their event bindings & els references survive the move).
+        if (isCurrent) {
+            if (els.playbackControls) li.appendChild(els.playbackControls);
+            if (els.playbackEq) li.appendChild(els.playbackEq);
+        }
+
         els.recordingsList.appendChild(li);
     }
 }
@@ -6805,7 +6822,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — shown in the bottom-right corner (bump on each release)
-const APP_VERSION = 'v1.22.0';
+const APP_VERSION = 'v1.23.0';
 (() => {
     // The #app-version element is parsed AFTER this script tag, so on first run
     // getElementById returns null. Defer to DOMContentLoaded if the DOM isn't ready.

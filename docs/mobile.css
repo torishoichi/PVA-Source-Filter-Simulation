@@ -1500,15 +1500,20 @@ input[type="range"]::-moz-range-thumb {
 }
 .recordings-item {
     display: flex;
-    align-items: center;
+    flex-direction: column;
+    align-items: stretch;
     gap: 6px;
     padding: 6px 4px;
     border-bottom: 1px solid var(--glass-border);
     font-size: 0.8rem;
 }
 .recordings-item:last-child { border-bottom: none; }
-.recordings-item.is-playing { background: rgba(79, 150, 80, 0.12); border-radius: var(--radius-xs); }
-.rec-time { flex: 0 0 auto; min-width: 110px; color: var(--text-primary); font-variant-numeric: tabular-nums; font-size: 0.74rem; }
+.recordings-item.is-playing {
+    background: rgba(79, 150, 80, 0.12); border-radius: var(--radius-xs);
+    padding: 8px; border: 1px solid rgba(79, 150, 80, 0.25);
+}
+.rec-row { display: flex; align-items: center; gap: 6px; width: 100%; }
+.rec-time { flex: 0 0 auto; min-width: 96px; color: var(--text-primary); font-variant-numeric: tabular-nums; font-size: 0.74rem; }
 .rec-dur { flex: 0 0 auto; color: var(--text-secondary); font-variant-numeric: tabular-nums; opacity: 0.7; min-width: 42px; text-align: right; }
 .rec-btn {
     flex: 0 0 auto;
@@ -1522,6 +1527,14 @@ input[type="range"]::-moz-range-thumb {
 }
 .rec-btn:active { background: rgba(0, 0, 0, 0.05); color: var(--text-primary); }
 .rec-btn.danger:active { background: rgba(220, 60, 60, 0.18); color: #c62828; border-color: rgba(220, 60, 60, 0.4); }
+/* Primary play/pause toggle — circular, larger tap target on mobile */
+.rec-play-btn {
+    width: 38px; height: 38px; padding: 0; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 1rem; line-height: 1;
+    border: 1px solid rgba(79, 150, 80, 0.5); color: #4f9650; background: rgba(79, 150, 80, 0.08);
+}
+.rec-play-btn.is-playing { background: #4f9650; color: #fff; border-color: #4f9650; }
 #mic-record.is-recording {
     color: #e53935;
     border-color: rgba(229, 57, 53, 0.5);
@@ -1540,8 +1553,12 @@ input[type="range"]::-moz-range-thumb {
     gap: 8px;
 }
 .pb-time { font-size: 0.7rem; color: var(--text-secondary); font-variant-numeric: tabular-nums; min-width: 32px; text-align: center; }
-.pb-seek-wrap { position: relative; flex: 1 1 auto; display: flex; align-items: center; height: 22px; }
-.pb-seek { width: 100%; height: 3px; cursor: pointer; position: relative; z-index: 1; }
+.pb-seek-wrap { position: relative; flex: 1 1 auto; display: flex; align-items: center; height: 26px; }
+.pb-seek { width: 100%; height: 26px; cursor: pointer; position: relative; z-index: 1; -webkit-appearance: none; appearance: none; background: transparent; margin: 0; }
+.pb-seek::-webkit-slider-runnable-track { height: 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.16); }
+.pb-seek::-moz-range-track { height: 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.16); }
+.pb-seek::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; margin-top: -6px; border-radius: 50%; background: #4f9650; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
+.pb-seek::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: #4f9650; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
 .pb-region {
     position: absolute; top: 50%; transform: translateY(-50%);
     height: 6px; background: rgba(79, 150, 80, 0.28); border-radius: var(--radius-xs);
@@ -1554,13 +1571,12 @@ input[type="range"]::-moz-range-thumb {
     border-radius: var(--radius-xs); cursor: ew-resize; z-index: 2; touch-action: none;
     display: none; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
 }
-.playback-controls.is-loop .pb-handle { display: block; }
-.pb-handle::after {
-    content: ''; position: absolute; left: 50%; top: 3px; bottom: 3px;
-    width: 1px; transform: translateX(-50%); background: rgba(255, 255, 255, 0.7);
-}
+.playback-controls.is-loop .pb-handle { display: flex; align-items: center; justify-content: center; }
+.pb-handle::after { font-size: 0.62rem; font-weight: 700; color: #fff; line-height: 1; }
 .pb-handle.pb-handle-a { left: 0%; }
 .pb-handle.pb-handle-b { left: 100%; }
+.pb-handle.pb-handle-a::after { content: 'A'; }
+.pb-handle.pb-handle-b::after { content: 'B'; }
 .pb-rate-select {
     flex: 0 0 auto; background: var(--bg-elev); color: var(--text-primary);
     border: 1px solid var(--glass-border); border-radius: var(--radius-xs); padding: 2px 4px;
