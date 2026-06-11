@@ -6806,7 +6806,13 @@ if (window.RecordingsDB) {
 
 // App version — shown in the bottom-right corner (bump on each release)
 const APP_VERSION = 'v1.22.0';
-(() => { const el = document.getElementById('app-version'); if (el) el.textContent = APP_VERSION; })();
+(() => {
+    // The #app-version element is parsed AFTER this script tag, so on first run
+    // getElementById returns null. Defer to DOMContentLoaded if the DOM isn't ready.
+    const setVer = () => { const el = document.getElementById('app-version'); if (el) el.textContent = APP_VERSION; };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', setVer);
+    else setVer();
+})();
 
 // Service Worker — enables offline use and "Add to Home Screen"
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
