@@ -2024,11 +2024,21 @@ function updateVoiceQuality() {
 
     const cppRes = DSP.cpps(frame, sr);
     const cpp = cppRes ? cppRes.cpp : null;
-    const h = (f0 > 0) ? DSP.h1h2(frame, sr, f0) : null;
+    // Formant-corrected H1*–H2*: raw H1–H2 swings ~10 dB with the vowel (a formant
+    // near H1/H2 boosts it), which would read as a phonation change when it isn't.
+    // Feed the live formant track so the displayed value reflects the source, not
+    // the vowel. Falls back to raw H1–H2 when formants aren't available yet.
+    let formants = null;
+    const cf = state.cachedMicFormants;
+    if (cf) {
+        const arr = ['f1', 'f2', 'f3', 'f4', 'f5'].map(k => cf[k] && cf[k].freq).filter(x => x > 0);
+        if (arr.length >= 2) formants = arr;
+    }
+    const h = (f0 > 0) ? DSP.h1h2(frame, sr, f0, formants ? { formants } : undefined) : null;
     const A = 0.35; // EMA weight on the new value
     const ema = (prev, x) => (prev == null ? x : (1 - A) * prev + A * x);
     if (cpp != null && isFinite(cpp)) state.cachedCPP = ema(state.cachedCPP, cpp);
-    if (h && isFinite(h.h1h2)) state.cachedH1H2 = ema(state.cachedH1H2, h.h1h2);
+    if (h && isFinite(h.h1h2c)) state.cachedH1H2 = ema(state.cachedH1H2, h.h1h2c);
 
     // IAIF glottal-source estimation on a ~40 ms sub-window (kept local so the
     // vocal-tract estimate is stationary). Voiced frames only.
@@ -2046,11 +2056,12 @@ function updateVoiceQuality() {
     updateVoiceQualityReadout();
 }
 
-// Classify the phonation tendency from CPP + H1–H2 for a plain-language label.
-function phonationLabel(cpp, h1h2) {
-    if (cpp == null || h1h2 == null) return { txt: '—', cls: '' };
-    if (cpp < 4 && h1h2 > 4) return { txt: 'Breathy 寄り', cls: 'vq-breathy' };
-    if (cpp > 9 && h1h2 < 1) return { txt: 'Pressed 寄り', cls: 'vq-pressed' };
+// Classify phonation tendency from the formant-corrected H1*–H2* (vowel-independent,
+// so a fixed threshold is meaningful). breathy ≈ +6 dB and up, pressed ≈ 0 and below.
+function phonationLabel(cpp, h1h2c) {
+    if (h1h2c == null) return { txt: '—', cls: '' };
+    if (h1h2c >= 5) return { txt: 'Breathy 寄り', cls: 'vq-breathy' };
+    if (h1h2c <= 0) return { txt: 'Pressed 寄り', cls: 'vq-pressed' };
     return { txt: 'Flow（バランス）', cls: 'vq-flow' };
 }
 
@@ -6834,7 +6845,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — shown in the bottom-right corner (bump on each release)
-const APP_VERSION = 'v1.24.0';
+const APP_VERSION = 'v1.25.0';
 (() => {
     // The #app-version element is parsed AFTER this script tag, so on first run
     // getElementById returns null. Defer to DOMContentLoaded if the DOM isn't ready.

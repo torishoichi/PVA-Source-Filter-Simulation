@@ -119,6 +119,24 @@ console.log('\n\x1b[1m4. CPP & H1–H2 — ordinal validity (pressed vs breathy)
 }
 
 // ---------------------------------------------------------------------------
+console.log('\n\x1b[1m4b. H1*–H2* formant correction — vowel-independence\x1b[0m');
+{
+  const sr = 44100, f0 = 150;
+  const vowels = { 'ɑ': [730, 1090, 2440, 3400, 4500], 'i': [270, 2290, 3010, 3700, 4500], 'u': [300, 870, 2240, 3400, 4500], 'e': [530, 1840, 2480, 3500, 4500], 'o': [570, 840, 2410, 3400, 4500] };
+  const med = (a) => { const v = a.filter(x => x != null && isFinite(x)).sort((x, y) => x - y); return v.length ? v[v.length >> 1] : null; };
+  const raw = [], cor = [];
+  for (const F of Object.values(vowels)) {
+    const sig = DSP.synthVowel({ sr, dur: 0.6, f0, formants: F, oq: 0.6 });
+    const rr = [], cc = [];
+    for (let t = 0.15; t < 0.45; t += 0.04) { const h = DSP.h1h2(frameAt(sig, sr, t, 4096), sr, f0, { formants: F }); if (h) { rr.push(h.h1h2); cc.push(h.h1h2c); } }
+    raw.push(med(rr)); cor.push(med(cc));
+  }
+  const sRaw = Math.max(...raw) - Math.min(...raw), sCor = Math.max(...cor) - Math.min(...cor);
+  const line = `vowel spread: raw H1–H2 ${sRaw.toFixed(1)} dB → corrected H1*–H2* ${sCor.toFixed(1)} dB`;
+  (sCor < sRaw * 0.4 && sCor < 4) ? pass(line) : fail(line);
+}
+
+// ---------------------------------------------------------------------------
 console.log('\n\x1b[1m5. IAIF glottal source — NAQ tracks open quotient\x1b[0m');
 {
   const sr = 44100, f0 = 130, F = [650, 1080, 2500, 3400, 4500];
@@ -138,6 +156,16 @@ console.log('\n\x1b[1m5. IAIF glottal source — NAQ tracks open quotient\x1b[0m
   const nA = naq(adduct), nB = naq(abduct);
   const line = `NAQ: adducted ${nA == null ? 'null' : nA.toFixed(3)} < breathy ${nB == null ? 'null' : nB.toFixed(3)}`;
   (nA != null && nB != null && nB > nA) ? pass(line) : fail(line);
+
+  // NAQ must be available for ALL vowels incl. close /i/,/u/ (the order-1 LPC
+  // pre-whitening used to abort on their low F1 → null source readout).
+  const vw = { 'ɑ': [730, 1090, 2440, 3400, 4500], 'i': [270, 2290, 3010, 3700, 4500], 'u': [300, 870, 2240, 3400, 4500], 'e': [530, 1840, 2480, 3500, 4500], 'o': [570, 840, 2410, 3400, 4500] };
+  const missing = [];
+  for (const [v, F] of Object.entries(vw)) {
+    if (naq(DSP.synthVowel({ sr, dur: 0.5, f0: 150, formants: F, oq: 0.6 })) == null) missing.push(v);
+  }
+  const l2 = missing.length ? `NAQ null for: ${missing.join(',')}` : 'NAQ available for all 5 vowels (ɑ i u e o)';
+  missing.length === 0 ? pass(l2) : fail(l2);
 }
 
 // ---------------------------------------------------------------------------

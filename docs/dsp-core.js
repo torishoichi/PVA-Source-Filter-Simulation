@@ -307,12 +307,35 @@
     return { cpp, f0: sr / pk };
   }
 
+  // Iseli–Alwan formant correction: the dB boost a 2-pole formant (Fi, bandwidth Bi)
+  // imparts to a sinusoid at frequency f, normalised so the DC boost is 0. Summed
+  // over formants and subtracted from a harmonic's amplitude, it removes the vocal
+  // tract's contribution → the residual reflects the SOURCE. (Analog 2-pole model,
+  // Iseli & Alwan 2004.)
+  function formantBoostDb(f, formants, bandwidths) {
+    let c = 0;
+    for (let i = 0; i < formants.length; i++) {
+      const Fi = formants[i];
+      if (!Fi || Fi <= 0) continue;
+      const half = (bandwidths[i] || 120) / 2;
+      const num = Fi * Fi + half * half;
+      const d1 = (f - Fi) * (f - Fi) + half * half;
+      const d2 = (f + Fi) * (f + Fi) + half * half;
+      c += 10 * Math.log10((num * num) / (d1 * d2));
+    }
+    return c;
+  }
+
   // ----------------------------------------------------------------------------
   // H1–H2 — amplitude difference (dB) between the 1st and 2nd voice harmonics.
-  // Classic open-quotient / breathiness correlate: breathy/abducted (high OQ) →
-  // large positive H1–H2; pressed/adducted (low OQ) → small or negative.
-  // Searches a small neighbourhood around k*f0 for the true harmonic peak.
-  // Returns { h1h2: dB, h1: dB, h2: dB } or null when f0 invalid.
+  // Open-quotient / breathiness correlate: breathy/abducted (high OQ) → large
+  // positive H1–H2; pressed/adducted (low OQ) → small/negative. Searches a small
+  // neighbourhood around k*f0 for the true harmonic peak.
+  //
+  // RAW H1–H2 is heavily vowel-dependent (a formant near H1 or H2 boosts it). Pass
+  // opts.formants (and optionally opts.bandwidths) to also get the formant-corrected
+  // H1*–H2* (h1h2c) — the vowel-independent, source-relevant value to display.
+  // Returns { h1h2, h1, h2, h1h2c, h1c, h2c } or null when f0 invalid.
   // ----------------------------------------------------------------------------
   function h1h2(frame, sr, f0, opts) {
     if (!f0 || f0 <= 0) return null;
@@ -338,7 +361,14 @@
     const h1 = peakDbNear(f0);
     const h2 = peakDbNear(2 * f0);
     if (!isFinite(h1) || !isFinite(h2)) return null;
-    return { h1h2: h1 - h2, h1, h2 };
+    const out = { h1h2: h1 - h2, h1, h2, h1h2c: h1 - h2, h1c: h1, h2c: h2 };
+    if (opts.formants && opts.formants.length) {
+      const bw = opts.bandwidths || opts.formants.map((F, i) => [80, 120, 160, 200, 240][i] || 200);
+      const h1c = h1 - formantBoostDb(f0, opts.formants, bw);
+      const h2c = h2 - formantBoostDb(2 * f0, opts.formants, bw);
+      out.h1c = h1c; out.h2c = h2c; out.h1h2c = h1c - h2c;
+    }
+    return out;
   }
 
   // ----------------------------------------------------------------------------
@@ -384,9 +414,12 @@
       return out;
     };
 
-    // Step 1: first glottal estimate via order-1 LPC, inverse-filter to flatten tilt
-    const g1 = burgLPC(xw, 1);
-    if (!g1) return null;
+    // Step 1: first glottal estimate via order-1 LPC, inverse-filter to flatten tilt.
+    // Close vowels (low F1) make the lag-1 correlation ≈1, so the order-1 Burg step
+    // can hit the reflection-coefficient instability guard and return null. That step
+    // only roughly removes the source+lip tilt, so fall back to a fixed pre-emphasis
+    // (a[1]=0.97) instead of aborting the whole estimate (was nulling /i/,/u/ source).
+    const g1 = burgLPC(xw, 1) || new Float64Array([1, 0.97]);
     let s1 = inverseFilter(xw, g1, 1);
     // Step 2: first vocal-tract estimate
     let vt1 = burgLPC(s1, pVT);
@@ -413,14 +446,16 @@
     for (let n = 1; n < N; n++) dflow[n] = flow[n] - flow[n - 1];
     dflow[0] = dflow[1];
 
-    // AC flow amplitude (peak-to-peak of flow), and peak negative derivative (d_min)
-    let fmax = -Infinity, fmin = Infinity, dmin = Infinity;
-    for (let n = 0; n < N; n++) {
-      if (flow[n] > fmax) fmax = flow[n];
-      if (flow[n] < fmin) fmin = flow[n];
-      if (dflow[n] < dmin) dmin = dflow[n];
-    }
-    const fAC = fmax - fmin;
+    // AC flow amplitude (peak-to-peak of flow), and peak negative derivative (d_min).
+    // Normalize by the flow peak-to-peak first: NAQ is scale-invariant (fAC/dPeak both
+    // scale together), and close vowels yield a tiny-amplitude flow that would
+    // otherwise trip the absolute dPeak guard below and drop the reading.
+    let fmax = -Infinity, fmin = Infinity;
+    for (let n = 0; n < N; n++) { if (flow[n] > fmax) fmax = flow[n]; if (flow[n] < fmin) fmin = flow[n]; }
+    const pp = (fmax - fmin) || 1;
+    let dmin = Infinity;
+    for (let n = 0; n < N; n++) { const d = dflow[n] / pp; if (d < dmin) dmin = d; }
+    const fAC = 1;            // normalized peak-to-peak
     const dPeak = -dmin;
     let naq = null, rdEst = null;
     if (dPeak > 1e-9 && T0samp > 0) {
@@ -957,7 +992,7 @@
   const api = {
     fftRadix2, nextPow2, hann,
     burgLPC, durandKerner, lpcFormants, decimate,
-    yin, cpps, h1h2, iaifGlottal, autocorrF0, estimateOpenQuotient,
+    yin, cpps, h1h2, formantBoostDb, iaifGlottal, autocorrF0, estimateOpenQuotient,
     yinCandidates, viterbiPitchPath, pitchContour, octaveSnap,
     offlineFormants, trackAndSmooth, vibratoProbeFormants,
     synthVowel,
