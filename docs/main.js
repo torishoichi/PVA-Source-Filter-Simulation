@@ -5673,6 +5673,7 @@ async function startRecording() {
                 sampleRate: audioCtx ? audioCtx.sampleRate : null
             });
             await refreshRecordingsList();
+            highlightNewestRecording();
         } catch (err) {
             console.error('Failed to save recording:', err);
             alert('録音の保存に失敗しました: ' + err.message);
@@ -6607,6 +6608,17 @@ async function refreshRecordingsList() {
     renderRecordingsList();
 }
 
+// Draw the eye to a just-saved/imported clip: open the panel, scroll the newest
+// item (list is newest-first) into view, and flash it green briefly.
+function highlightNewestRecording() {
+    if (els.recordingsPanel) els.recordingsPanel.open = true;
+    const first = els.recordingsList && els.recordingsList.querySelector('.recordings-item');
+    if (!first) return;
+    first.scrollIntoView({ block: 'nearest' });
+    first.classList.add('is-new');
+    setTimeout(() => first.classList.remove('is-new'), 1800);
+}
+
 function renderRecordingsList() {
     if (!els.recordingsList) return;
     const list = cachedRecordingsList;
@@ -6812,7 +6824,7 @@ if (els.btnImport && els.importInput) {
         const files = Array.from(e.target.files || []);
         for (const f of files) await importAudioFile(f);
         els.importInput.value = '';
-        if (els.recordingsPanel) els.recordingsPanel.open = true;
+        highlightNewestRecording();
     });
 }
 
@@ -6822,7 +6834,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — shown in the bottom-right corner (bump on each release)
-const APP_VERSION = 'v1.23.0';
+const APP_VERSION = 'v1.24.0';
 (() => {
     // The #app-version element is parsed AFTER this script tag, so on first run
     // getElementById returns null. Defer to DOMContentLoaded if the DOM isn't ready.
