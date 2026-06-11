@@ -189,6 +189,26 @@ console.log('\n\x1b[1m6. Vibrato-probe: refines when harmonics cover F1, bails o
 }
 
 // ---------------------------------------------------------------------------
+console.log('\n\x1b[1m7. Live octave-continuity snap (vibrato/leaps untouched, glitch fixed)\x1b[0m');
+{
+  const med = 220;
+  // transient octave-up glitch → snapped back
+  let r = DSP.octaveSnap(440, med);
+  (Math.abs(r - 220) < 1) ? pass(`440 with median 220 → ${r.toFixed(0)} (snapped down)`) : fail(`440 → ${r}`);
+  // transient octave-down glitch → snapped up
+  r = DSP.octaveSnap(110, med);
+  (Math.abs(r - 220) < 1) ? pass(`110 with median 220 → ${r.toFixed(0)} (snapped up)`) : fail(`110 → ${r}`);
+  // vibrato deviation (±120¢) → untouched
+  const vib = 220 * Math.pow(2, 120 / 1200);
+  r = DSP.octaveSnap(vib, med);
+  (Math.abs(r - vib) < 1) ? pass(`vibrato ${vib.toFixed(1)} (+120¢) → untouched`) : fail(`vibrato → ${r}`);
+  // real legato leap of a perfect 4th (+500¢, under the 550¢ gate) → untouched
+  const p4 = 220 * Math.pow(2, 500 / 1200);
+  r = DSP.octaveSnap(p4, med);
+  (Math.abs(r - p4) < 1) ? pass(`P4 leap ${p4.toFixed(1)} (+500¢) → untouched`) : fail(`P4 → ${r}`);
+}
+
+// ---------------------------------------------------------------------------
 console.log('');
 if (failures === 0) { console.log('\x1b[32m\x1b[1mALL GATES PASSED\x1b[0m\n'); process.exit(0); }
 else { console.log(`\x1b[31m\x1b[1m${failures} GATE(S) FAILED\x1b[0m\n`); process.exit(1); }

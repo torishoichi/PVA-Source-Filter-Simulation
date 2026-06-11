@@ -1751,6 +1751,27 @@ function detectPitchYIN(rawBuf, sampleRate) {
     return sampleRate / refined;
 }
 
+// Recent voiced f0 history for live octave-continuity correction.
+const _micF0Hist = [];
+const MIC_F0_HIST_LEN = 8;
+
+// Snap a single-frame octave slip back onto the recent pitch. Only fires on a LARGE
+// jump (>550¢ ≈ tritone) when an octave-shifted version of the detection sits much
+// closer to the running median — so vibrato (±200¢) and real legato leaps are never
+// touched, but a transient 2×/½× glitch is corrected. Sustained real leaps re-seed
+// the median within a few frames, so the correction self-releases.
+function octaveContinuityCorrect(hz) {
+    if (hz <= 0) return hz;
+    if (_micF0Hist.length >= 3 && typeof DSP !== 'undefined' && DSP.octaveSnap) {
+        const sorted = [..._micF0Hist].sort((a, b) => a - b);
+        const med = sorted[sorted.length >> 1];
+        hz = DSP.octaveSnap(hz, med);
+    }
+    _micF0Hist.push(hz);
+    if (_micF0Hist.length > MIC_F0_HIST_LEN) _micF0Hist.shift();
+    return hz;
+}
+
 function detectPitchFromMic() {
     // Use the low-latency 2048-sample analyser if available; fall back to micAnalyser
     const an = micAnalyserPitch || micAnalyser;
@@ -1762,7 +1783,9 @@ function detectPitchFromMic() {
     let rms = 0;
     for (let i = 0; i < bufLen; i++) rms += _yinTime[i] * _yinTime[i];
     state.cachedMicLevel = Math.sqrt(rms / bufLen);
-    return detectPitchYIN(_yinTime, audioCtx.sampleRate);
+    const raw = detectPitchYIN(_yinTime, audioCtx.sampleRate);
+    if (raw <= 0) { _micF0Hist.length = 0; return raw; } // reset history on unvoiced
+    return octaveContinuityCorrect(raw);
 }
 
 // --- Mic device picker ---
@@ -4373,19 +4396,40 @@ function drawVisualizer() {
         rms = Math.sqrt(rms / N);
         if (rms < 0.004) return { voiced: false };
 
-        // Decimate by 4 (box-average lowpass)
+        // Decimate by 4 with a windowed-sinc anti-alias LPF (sharper transition than
+        // the old box-average, which leaked aliasing into F3+). Kernel is cached
+        // (fixed factor/cutoff), so the per-frame cost is just the convolution.
         const decimFactor = 4;
         const decN = Math.floor(N / decimFactor);
         const decSr = sr / decimFactor;
         if (!lpcCoreState.decimated || lpcCoreState.decimated.length !== decN) {
             lpcCoreState.decimated = new Float32Array(decN);
         }
+        if (!lpcCoreState.decimKernel) {
+            const fc = 0.45 / decimFactor;        // cutoff at 0.9× new Nyquist
+            const M = 8 * decimFactor + 1, c = (M - 1) / 2;
+            const sinc = (x) => (x === 0 ? 1 : Math.sin(Math.PI * x) / (Math.PI * x));
+            const ker = new Float64Array(M);
+            let ksum = 0;
+            for (let n = 0; n < M; n++) {
+                const ham = 0.54 - 0.46 * Math.cos(2 * Math.PI * n / (M - 1));
+                ker[n] = sinc(2 * fc * (n - c)) * ham;
+                ksum += ker[n];
+            }
+            for (let n = 0; n < M; n++) ker[n] /= ksum; // unity DC gain
+            lpcCoreState.decimKernel = ker;
+            lpcCoreState.decimHalf = (M - 1) >> 1;
+        }
         const dec = lpcCoreState.decimated;
+        const ker = lpcCoreState.decimKernel, kHalf = lpcCoreState.decimHalf, kLen = ker.length;
         for (let i = 0; i < decN; i++) {
-            const base = i * decimFactor;
-            let s = 0;
-            for (let k = 0; k < decimFactor; k++) s += buf[base + k];
-            dec[i] = s / decimFactor;
+            const center = i * decimFactor;
+            let acc = 0;
+            for (let n = 0; n < kLen; n++) {
+                const idx = center + n - kHalf;
+                if (idx >= 0 && idx < N) acc += ker[n] * buf[idx];
+            }
+            dec[i] = acc;
         }
 
         // Voicing strength via autocorrelation peak ratio
@@ -6761,7 +6805,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — shown in the bottom-right corner (bump on each release)
-const APP_VERSION = 'v1.21.0';
+const APP_VERSION = 'v1.22.0';
 (() => { const el = document.getElementById('app-version'); if (el) el.textContent = APP_VERSION; })();
 
 // Service Worker — enables offline use and "Add to Home Screen"

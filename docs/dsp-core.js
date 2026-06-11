@@ -638,6 +638,30 @@
     return raw;
   }
 
+  // Live octave-continuity snap: given a fresh detection hz and the running median
+  // of recent voiced f0, return hz corrected for a transient octave slip. Only acts
+  // on a LARGE jump (>550¢) when an octave-shifted version sits much closer (<300¢)
+  // to the median — so vibrato (±200¢) and real legato leaps pass through untouched.
+  function octaveSnap(hz, medianHz, opts) {
+    if (hz <= 0 || !medianHz || medianHz <= 0) return hz;
+    opts = opts || {};
+    const jumpGate = opts.jumpGate != null ? opts.jumpGate : 550;
+    const accept = opts.accept != null ? opts.accept : 300;
+    const fMin = opts.fMin != null ? opts.fMin : 60;
+    const fMax = opts.fMax != null ? opts.fMax : 1000;
+    const cMed = 1200 * Math.log2(medianHz / C0);
+    const base = 1200 * Math.log2(hz / C0);
+    if (Math.abs(base - cMed) <= jumpGate) return hz;
+    let bestHz = hz, bestDev = Math.abs(base - cMed);
+    for (const mul of [0.5, 2, 1 / 3, 3]) {
+      const cand = hz * mul;
+      if (cand < fMin || cand > fMax) continue;
+      const dev = Math.abs(1200 * Math.log2(cand / C0) - cMed);
+      if (dev < bestDev) { bestDev = dev; bestHz = cand; }
+    }
+    return (bestHz !== hz && bestDev < accept) ? bestHz : hz;
+  }
+
   // ----------------------------------------------------------------------------
   // Offline formant track (mirrors main.js analyzeRecordingFormantsOffline +
   // _trackAndSmooth) — used by the validation harness and by main.js's vibrato
@@ -934,7 +958,7 @@
     fftRadix2, nextPow2, hann,
     burgLPC, durandKerner, lpcFormants, decimate,
     yin, cpps, h1h2, iaifGlottal, autocorrF0, estimateOpenQuotient,
-    yinCandidates, viterbiPitchPath, pitchContour,
+    yinCandidates, viterbiPitchPath, pitchContour, octaveSnap,
     offlineFormants, trackAndSmooth, vibratoProbeFormants,
     synthVowel,
   };
