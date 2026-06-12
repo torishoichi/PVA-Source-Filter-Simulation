@@ -703,12 +703,25 @@
   // probe. Input is a full mono signal at srOrig; decimates to ~11 kHz internally.
   // Returns { hop, frames:[{f1..f5}|null] }.
   // ----------------------------------------------------------------------------
+  // At high f0 the harmonics are sparse and a full-order LPC fits individual
+  // harmonics instead of the spectral envelope (formants lock onto the nearest
+  // harmonic). Praat practice is to lower the model order for high-pitched
+  // voices. Thresholds picked empirically on synth vowels (ɑ ɛ i, f0 220–380):
+  // a gradual taper left the 240–300 Hz band at order 12 where 10–11 measurably
+  // wins (ɑ@260 F1 err 73→47 Hz), so step straight to 11 above ~225 Hz and 10
+  // above ~290 Hz. Never below 10 (5 pole pairs — still enough for F1–F5).
+  function lpcOrderForF0(f0, pBase) {
+    if (!f0 || f0 <= 225) return pBase;
+    return Math.max(10, Math.min(pBase, f0 <= 290 ? 11 : 10));
+  }
+
   function offlineFormants(mono, srOrig, opts) {
     opts = opts || {};
     const { data: sig, sr } = decimate(mono, srOrig, opts.targetSr || 11025);
     const hopSec = opts.hopSec || 0.01;
     const hop = Math.max(1, Math.round(hopSec * sr));
-    const p = Math.min(16, Math.max(10, Math.round(sr / 1000) + 2));
+    const p = opts.order || Math.min(16, Math.max(10, Math.round(sr / 1000) + 2));
+    const adaptive = opts.adaptiveOrder !== false; // per-frame f0-adaptive order (default ON)
     const minLag = Math.floor(sr / 500), maxLag = Math.floor(sr / 70);
     const w40 = Math.floor(0.04 * sr);
     const minWin = Math.floor(0.02 * sr), maxWin = Math.floor(0.05 * sr);
@@ -729,11 +742,12 @@
       }
       const voiced = bestVal > 0.3 && bestLag > 0;
       const period = voiced ? bestLag : Math.floor(0.025 * sr);
+      const pEff = (adaptive && voiced) ? lpcOrderForF0(sr / bestLag, p) : p;
       let winLen = Math.max(minWin, Math.min(maxWin, 4 * period));
       let a0 = center - (winLen >> 1); if (a0 < 0) a0 = 0;
       let a1 = a0 + winLen; if (a1 > sig.length) { a1 = sig.length; a0 = Math.max(0, a1 - winLen); }
       const M = a1 - a0;
-      if (M < p + 4) { frames.push(null); continue; }
+      if (M < pEff + 4) { frames.push(null); continue; }
       const x = new Float64Array(M);
       for (let i = 0; i < M; i++) {
         const xn = sig[a0 + i], xn1 = i > 0 ? sig[a0 + i - 1] : sig[a0 + i];
@@ -741,9 +755,9 @@
         const wnd = 0.5 * (1 - Math.cos(2 * Math.PI * i / (M - 1)));
         x[i] = pe * wnd;
       }
-      const a = burgLPC(x, p);
+      const a = burgLPC(x, pEff);
       if (!a) { frames.push(null); continue; }
-      const cands = lpcFormants(a, p, sr, { fMin: 90, fMax: 5500, bwMax: 700 });
+      const cands = lpcFormants(a, pEff, sr, { fMin: 90, fMax: 5500, bwMax: 700 });
       frames.push(cands.length ? cands : null);
     }
     return trackAndSmooth(frames, hopSec);
@@ -994,7 +1008,7 @@
     burgLPC, durandKerner, lpcFormants, decimate,
     yin, cpps, h1h2, formantBoostDb, iaifGlottal, autocorrF0, estimateOpenQuotient,
     yinCandidates, viterbiPitchPath, pitchContour, octaveSnap,
-    offlineFormants, trackAndSmooth, vibratoProbeFormants,
+    offlineFormants, trackAndSmooth, vibratoProbeFormants, lpcOrderForF0,
     synthVowel,
   };
 

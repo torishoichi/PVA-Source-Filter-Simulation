@@ -51,7 +51,13 @@ const lpcCoreState = {
     lastUpdate: 0,
     // Multi-frame averaging of reflection coefficients (Praat-style stabilization)
     kHistory: [],
-    lastVoicedTime: 0
+    lastVoicedTime: 0,
+    // Pitch-adaptive LPC order (DSP.lpcOrderForF0). Debounced so vibrato crossing
+    // a band threshold doesn't thrash the order; switching clears kHistory because
+    // reflection-coefficient averaging requires a consistent order.
+    pCur: 12,
+    pPend: 12,
+    pPendCount: 0
 };
 const LPC_K_HISTORY_LEN = 3;
 // Below this per-frame confidence (voicing × sharpness × completeness), the v3
@@ -4449,14 +4455,31 @@ function drawVisualizer() {
         let r0 = 0;
         for (let i = 0; i < decN; i++) r0 += dec[i] * dec[i];
         if (r0 < 1e-9) return { voiced: false };
-        let bestRatio = 0;
+        let bestRatio = 0, bestLag = 0;
         for (let pp = minP; pp <= maxP; pp++) {
             let s = 0;
             for (let i = 0; i < decN - pp; i++) s += dec[i] * dec[i + pp];
             const ratio = s / r0;
-            if (ratio > bestRatio) bestRatio = ratio;
+            if (ratio > bestRatio) { bestRatio = ratio; bestLag = pp; }
         }
         if (bestRatio < 0.25) return { voiced: false };
+
+        // Pitch-adaptive LPC order (mirrors dsp-core lpcOrderForF0; gated in
+        // dev/validate.mjs test 3): at high f0 a full-order LPC locks onto
+        // individual harmonics instead of the envelope. The autocorrelation lag
+        // above doubles as a free f0 estimate. Only commit a switch after 6
+        // consecutive frames so vibrato around a threshold doesn't thrash.
+        const pTarget = DSP.lpcOrderForF0(decSr / bestLag, 12);
+        if (pTarget !== lpcCoreState.pCur) {
+            lpcCoreState.pPendCount = (pTarget === lpcCoreState.pPend) ? lpcCoreState.pPendCount + 1 : 1;
+            lpcCoreState.pPend = pTarget;
+            if (lpcCoreState.pPendCount >= 6) {
+                lpcCoreState.pCur = pTarget;
+                lpcCoreState.kHistory.length = 0;
+            }
+        } else {
+            lpcCoreState.pPendCount = 0;
+        }
 
         // Pre-emphasis (cutoff = 50 Hz) + Hann window
         const alpha = Math.exp(-2 * Math.PI * 50 / decSr);
@@ -4473,7 +4496,7 @@ function drawVisualizer() {
         }
 
         // LPC via Burg method (Praat default — more accurate than autocorrelation for short windows)
-        const p = 12;
+        const p = lpcCoreState.pCur;
         const kCurrent = burgLpc(x, decN, p);
         if (!kCurrent) return { voiced: false };
 
@@ -6022,12 +6045,14 @@ function analyzeRecordingFormantsOffline(audioBuffer) {
         }
         const voiced = bestVal > 0.3 && bestLag > 0;
         const period = voiced ? bestLag : Math.floor(0.025 * sr);
+        // f0-adaptive LPC order (mirrors dsp-core offlineFormants / lpcOrderForF0)
+        const pEff = voiced ? DSP.lpcOrderForF0(sr / bestLag, p) : p;
         // pitch-synchronous window ≈ 4 periods (bounded 20–50 ms)
         let winLen = Math.max(minWin, Math.min(maxWin, 4 * period));
         let a0 = center - (winLen >> 1); if (a0 < 0) a0 = 0;
         let a1 = a0 + winLen; if (a1 > sig.length) { a1 = sig.length; a0 = Math.max(0, a1 - winLen); }
         const M = a1 - a0;
-        if (M < p + 4) { frames.push(null); continue; }
+        if (M < pEff + 4) { frames.push(null); continue; }
         const x = new Float64Array(M);
         for (let i = 0; i < M; i++) {
             const xn = sig[a0 + i], xn1 = i > 0 ? sig[a0 + i - 1] : sig[a0 + i];
@@ -6035,15 +6060,15 @@ function analyzeRecordingFormantsOffline(audioBuffer) {
             const wnd = 0.5 * (1 - Math.cos(2 * Math.PI * i / (M - 1)));
             x[i] = pe * wnd;
         }
-        const k = burgLpc(x, M, p);
+        const k = burgLpc(x, M, pEff);
         if (!k) { frames.push(null); continue; }
-        const a = reflectionsToPredictions(k, p);
-        const poly = new Float64Array(p + 1); poly[0] = 1;
-        for (let i = 1; i <= p; i++) poly[i] = -a[i];
-        const roots = _dkRoots(poly, p);
+        const a = reflectionsToPredictions(k, pEff);
+        const poly = new Float64Array(pEff + 1); poly[0] = 1;
+        for (let i = 1; i <= pEff; i++) poly[i] = -a[i];
+        const roots = _dkRoots(poly, pEff);
         if (!roots) { frames.push(null); continue; }
         const cands = [];
-        for (let i = 0; i < p; i++) {
+        for (let i = 0; i < pEff; i++) {
             const re = roots[2 * i], im = roots[2 * i + 1];
             if (im <= 0) continue;
             const mag = Math.hypot(re, im);
@@ -6845,7 +6870,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — shown in the bottom-right corner (bump on each release)
-const APP_VERSION = 'v1.25.0';
+const APP_VERSION = 'v1.26.0';
 (() => {
     // The #app-version element is parsed AFTER this script tag, so on first run
     // getElementById returns null. Defer to DOMContentLoaded if the DOM isn't ready.
@@ -7993,6 +8018,26 @@ drawGlottalWaveform(); // Initial render
         });
     }
 });
+
+// Remember each collapsible panel's open/closed state across visits, so the
+// layout self-organizes to how the user actually works (panels they never use
+// stay collapsed). Keyed by <details id>; panels without an id (e.g. Learn
+// drawer subsections) are intentionally not persisted. Placed after all other
+// toggle listeners are bound — restoring `open` here fires their repaint
+// handlers (toggle is dispatched async), so canvases inside restored panels
+// get a correctly-sized first draw.
+{
+    const PANEL_STATE_KEY = 'panelOpenState';
+    let savedPanels = {};
+    try { savedPanels = JSON.parse(localStorage.getItem(PANEL_STATE_KEY)) || {}; } catch (_) {}
+    document.querySelectorAll('details[id]').forEach(d => {
+        if (Object.prototype.hasOwnProperty.call(savedPanels, d.id)) d.open = !!savedPanels[d.id];
+        d.addEventListener('toggle', () => {
+            savedPanels[d.id] = d.open;
+            try { localStorage.setItem(PANEL_STATE_KEY, JSON.stringify(savedPanels)); } catch (_) {}
+        });
+    });
+}
 
 // Guide panel toggle
 const guideToggle = document.getElementById('lf-guide-toggle');

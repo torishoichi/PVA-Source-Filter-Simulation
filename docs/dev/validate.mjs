@@ -84,6 +84,10 @@ console.log('\n\x1b[1m3. Offline formant accuracy — male & female vowels\x1b[0
     'u (male, f0=120)':  { f0: 120, F: [300,  870, 2240, 3400, 4500] },
     'ɛ (fem,  f0=220)':  { f0: 220, F: [600, 2350, 2900, 3600, 4700] },
     'ɑ (fem,  f0=260)':  { f0: 260, F: [850, 1220, 2810, 3600, 4700] },
+    // High-pitch gates — covered by the f0-adaptive LPC order (lpcOrderForF0):
+    // at fixed order 13 these were err 186/194 (ɑ@340) and err 4/71 (i@300).
+    'ɑ (fem,  f0=340)':  { f0: 340, F: [850, 1220, 2810, 3600, 4700] },
+    'i (fem,  f0=300)':  { f0: 300, F: [310, 2790, 3310, 3900, 4950] },
   };
   for (const [name, v] of Object.entries(vowels)) {
     const sig = DSP.synthVowel({ sr, dur: 0.6, f0: v.f0, formants: v.F });

@@ -746,8 +746,14 @@ input[type=range]::-moz-range-track {
     margin-left: -2px;
 }
 
+/* Primary live metrics (CPP, H1*–H2*, vibrato rate…) — sized to stay legible
+   from singing distance (arm's length or more), not just desk-reading distance. */
+.vstat-primary .vstat-val {
+    font-size: 1.35rem;
+}
+
 .vstat-verdict .vstat-val {
-    font-size: 0.8rem;
+    font-size: 0.95rem;
     padding: 2px 8px;
     background: rgba(33, 150, 243, 0.12);
     color: var(--accent-color, #2196F3);
