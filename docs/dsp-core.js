@@ -698,6 +698,100 @@
   }
 
   // ----------------------------------------------------------------------------
+  // Key shift — WSOLA time-stretch followed by linear resampling. Shifts pitch
+  // by `semitones` while preserving duration (karaoke-style transpose; formants
+  // shift along with the pitch, which is expected for this use). Used by the
+  // recording-playback key control in main.js.
+  //
+  // timeStretchWsola: stretches duration ×`stretch` without changing pitch.
+  // Synthesis hop is fixed (50% Hann OLA); each analysis frame is searched
+  // within ±10 ms of its nominal position for the best normalized correlation
+  // with the natural continuation of the previous frame (classic WSOLA).
+  // Correlation is computed on channel 0 only and the chosen offsets are reused
+  // for all channels, so multi-channel audio stays phase-coherent.
+  // ----------------------------------------------------------------------------
+  function timeStretchWsola(channels, sr, stretch) {
+    if (Math.abs(stretch - 1) < 1e-6) return channels.map(c => Float32Array.from(c));
+    const ref = channels[0];
+    const N = ref.length;
+    let win = Math.round(0.05 * sr); if (win & 1) win++;
+    const hop = win >> 1;                          // synthesis hop (50% OLA)
+    const tol = Math.round(0.010 * sr);            // ±10 ms analysis search range
+    const cmp = Math.min(hop, Math.round(0.012 * sr)); // correlation template length
+    const step = 4;                                // coarse stride (perf; ~0.09 ms @44.1k)
+    if (N < win + tol + cmp) return channels.map(c => Float32Array.from(c)); // too short to stretch
+    const outLen = Math.max(win, Math.round(N * stretch));
+    const nFrames = Math.ceil((outLen - win) / hop) + 1;
+    const hann = new Float64Array(win);
+    for (let i = 0; i < win; i++) hann[i] = 0.5 * (1 - Math.cos(2 * Math.PI * i / (win - 1)));
+    const outs = channels.map(() => new Float64Array(outLen));
+    const wsum = new Float64Array(outLen);
+    let prevP = 0;
+    for (let k = 0; k < nFrames; k++) {
+      const oPos = k * hop;
+      let pNom = Math.round(oPos / stretch);
+      if (pNom > N - win) pNom = N - win;
+      let p = pNom;
+      if (k > 0) {
+        const tmpl = Math.min(N - cmp, prevP + hop); // natural continuation of previous frame
+        const lo = Math.max(0, pNom - tol), hi = Math.min(N - win, pNom + tol);
+        let best = -Infinity;
+        for (let c = lo; c <= hi; c += step) {
+          let s = 0, ea = 0, eb = 0;
+          for (let i = 0; i < cmp; i += step) {
+            const a = ref[tmpl + i], b = ref[c + i];
+            s += a * b; ea += a * a; eb += b * b;
+          }
+          const score = s / Math.sqrt(ea * eb + 1e-12);
+          if (score > best) { best = score; p = c; }
+        }
+      }
+      prevP = p;
+      for (let chI = 0; chI < channels.length; chI++) {
+        const x = channels[chI], o = outs[chI];
+        for (let i = 0; i < win; i++) {
+          const oi = oPos + i;
+          if (oi >= outLen) break;
+          o[oi] += x[p + i] * hann[i];
+        }
+      }
+      for (let i = 0; i < win; i++) {
+        const oi = oPos + i;
+        if (oi >= outLen) break;
+        wsum[oi] += hann[i];
+      }
+    }
+    return outs.map(o => {
+      const y = new Float32Array(outLen);
+      for (let i = 0; i < outLen; i++) y[i] = wsum[i] > 1e-6 ? o[i] / wsum[i] : 0;
+      return y;
+    });
+  }
+
+  // channels: array of Float32Array (same length). Returns shifted channels of
+  // ≈the same length. semitones may be negative; 0 returns copies unchanged.
+  function pitchShift(channels, sr, semitones) {
+    if (!semitones) return channels.map(c => Float32Array.from(c));
+    const r = Math.pow(2, semitones / 12);
+    // Stretch duration ×r at constant pitch, then read it back r× faster:
+    // duration returns to the original while every frequency scales by r.
+    const stretched = timeStretchWsola(channels, sr, r);
+    return stretched.map(ch => {
+      const M = Math.max(1, Math.round(ch.length / r));
+      const y = new Float32Array(M);
+      const last = ch.length - 1;
+      for (let i = 0; i < M; i++) {
+        const t = i * r;
+        const i0 = Math.min(last, Math.floor(t));
+        const i1 = Math.min(last, i0 + 1);
+        const frac = t - i0;
+        y[i] = ch[i0] + (ch[i1] - ch[i0]) * frac;
+      }
+      return y;
+    });
+  }
+
+  // ----------------------------------------------------------------------------
   // Offline formant track (mirrors main.js analyzeRecordingFormantsOffline +
   // _trackAndSmooth) — used by the validation harness and by main.js's vibrato
   // probe. Input is a full mono signal at srOrig; decimates to ~11 kHz internally.
@@ -1009,6 +1103,7 @@
     yin, cpps, h1h2, formantBoostDb, iaifGlottal, autocorrF0, estimateOpenQuotient,
     yinCandidates, viterbiPitchPath, pitchContour, octaveSnap,
     offlineFormants, trackAndSmooth, vibratoProbeFormants, lpcOrderForF0,
+    timeStretchWsola, pitchShift,
     synthVowel,
   };
 

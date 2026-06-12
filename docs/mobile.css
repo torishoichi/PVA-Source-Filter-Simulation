@@ -1561,6 +1561,7 @@ input[type="range"]::-moz-range-thumb {
     background: rgba(79, 150, 80, 0.06);
     display: flex;
     align-items: center;
+    flex-wrap: wrap; /* key control can wrap to a second row on narrow phones */
     gap: 8px;
 }
 .pb-time { font-size: 0.7rem; color: var(--text-secondary); font-variant-numeric: tabular-nums; min-width: 32px; text-align: center; }
@@ -1599,6 +1600,20 @@ input[type="range"]::-moz-range-thumb {
     font-size: 0.85rem; line-height: 1; cursor: pointer;
 }
 .pb-loop-btn.is-active { color: #4f9650; border-color: rgba(79, 150, 80, 0.6); background: rgba(79, 150, 80, 0.1); }
+
+/* Key shift (♭/♯ transpose) — buttons padded up for touch */
+.pb-key { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 2px; }
+.pb-key-btn {
+    background: transparent; color: var(--text-secondary);
+    border: 1px solid var(--glass-border); border-radius: var(--radius-xs);
+    padding: 5px 10px; font-size: 0.9rem; line-height: 1; cursor: pointer;
+}
+.pb-key-val {
+    min-width: 22px; text-align: center;
+    font-size: 0.75rem; font-weight: 700; font-variant-numeric: tabular-nums;
+    color: var(--text-secondary);
+}
+.pb-key-val.is-active { color: var(--accent-color); }
 .rec-import-btn { margin-left: auto; font-size: 0.72rem; padding: 2px 8px; }
 .rec-label-input {
     flex: 1 1 auto; min-width: 0; background: transparent; color: var(--text-primary);

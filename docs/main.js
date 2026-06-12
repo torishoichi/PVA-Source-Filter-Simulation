@@ -307,6 +307,9 @@ const els = {
     pbSeek: document.getElementById('pb-seek'),
     pbRate: document.getElementById('pb-rate'),
     pbLoop: document.getElementById('pb-loop'),
+    pbKeyDown: document.getElementById('pb-key-down'),
+    pbKeyUp: document.getElementById('pb-key-up'),
+    pbKeyVal: document.getElementById('pb-key-val'),
     pbCurTime: document.getElementById('pb-cur-time'),
     pbTotalTime: document.getElementById('pb-total-time'),
     pbSeekWrap: document.getElementById('pb-seek-wrap'),
@@ -5618,6 +5621,15 @@ let playbackObjectUrl = null;   // object URL for the blob
 let playbackBuffer = null;      // decoded AudioBuffer — analysis only (not audible)
 let playbackRecId = null;
 let playbackRate = 1.0;
+// Key shift (karaoke-style transpose, DSP.pitchShift WSOLA). The shifted audio is
+// rendered offline into a WAV blob that replaces the <audio> src, and the shifted
+// buffer replaces playbackBuffer — so spectrum/formant/pitch analysis matches what
+// is actually heard. Kept across recordings within the session.
+let playbackKeyShift = 0;        // semitones, −6..+6
+let playbackBufferOrig = null;   // unshifted decoded buffer (source of truth)
+let playbackShiftUrl = null;     // object URL of the current shifted WAV
+let playbackShiftToken = 0;      // cancels stale async rebuilds
+let playbackKeyDebounce = null;  // coalesces rapid ♭/♯ taps into one rebuild
 let playbackLoop = false;
 let playbackLoopA = 0;   // section-loop start, ratio [0,1]
 let playbackLoopB = 1;   // section-loop end, ratio [0,1]
@@ -5646,6 +5658,101 @@ let playbackMediaSource = null; // MediaElementSourceNode for playback EQ (deskt
 let recEqFilters = [];          // peaking BiquadFilter chain for playback EQ
 let playbackUiRaf = null;
 let micWasActiveBeforePlayback = false;
+
+// --- Recording playback key shift (♭/♯ transpose) ---
+
+// Minimal 16-bit PCM WAV encoder — the shifted Float32 channels become the
+// <audio> src, so the audible path stays the iOS-safe HTMLAudioElement one.
+function channelsToWavBlob(channels, sr) {
+    const nCh = channels.length, n = channels[0].length;
+    const bytes = 44 + n * nCh * 2;
+    const dv = new DataView(new ArrayBuffer(bytes));
+    const wstr = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+    wstr(0, 'RIFF'); dv.setUint32(4, bytes - 8, true); wstr(8, 'WAVE');
+    wstr(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true);
+    dv.setUint16(22, nCh, true); dv.setUint32(24, sr, true);
+    dv.setUint32(28, sr * nCh * 2, true); dv.setUint16(32, nCh * 2, true); dv.setUint16(34, 16, true);
+    wstr(36, 'data'); dv.setUint32(40, n * nCh * 2, true);
+    let o = 44;
+    for (let i = 0; i < n; i++) {
+        for (let c = 0; c < nCh; c++) {
+            let v = channels[c][i];
+            v = v < -1 ? -1 : v > 1 ? 1 : v;
+            dv.setInt16(o, v < 0 ? v * 32768 : v * 32767, true);
+            o += 2;
+        }
+    }
+    return new Blob([dv.buffer], { type: 'audio/wav' });
+}
+
+function updateKeyShiftUi(busy) {
+    if (!els.pbKeyVal) return;
+    els.pbKeyVal.textContent = busy ? '…' : (playbackKeyShift > 0 ? '+' + playbackKeyShift : String(playbackKeyShift));
+    els.pbKeyVal.classList.toggle('is-active', playbackKeyShift !== 0);
+}
+
+function rebuildKeyShiftedPlayback() {
+    if (!playbackAudio || !playbackBufferOrig) return;
+    const token = ++playbackShiftToken;
+    const semis = playbackKeyShift;
+    updateKeyShiftUi(true);
+    // setTimeout: let the busy label paint before the synchronous WSOLA run
+    // (~130 ms for a 60 s recording on desktop, a few hundred ms on mobile).
+    setTimeout(() => {
+        if (token !== playbackShiftToken || !playbackAudio || !playbackBufferOrig) return;
+        const src = playbackBufferOrig;
+        let url, buf;
+        if (semis === 0) {
+            url = playbackObjectUrl; // original encoded blob (kept alive while playing)
+            buf = src;
+        } else {
+            const chs = [];
+            for (let c = 0; c < src.numberOfChannels; c++) chs.push(src.getChannelData(c));
+            const shifted = DSP.pitchShift(chs, src.sampleRate, semis);
+            if (token !== playbackShiftToken || !playbackAudio) return;
+            buf = audioCtx.createBuffer(shifted.length, shifted[0].length, src.sampleRate);
+            for (let c = 0; c < shifted.length; c++) buf.copyToChannel(shifted[c], c);
+            url = URL.createObjectURL(channelsToWavBlob(shifted, src.sampleRate));
+        }
+        if (playbackShiftUrl) { URL.revokeObjectURL(playbackShiftUrl); playbackShiftUrl = null; }
+        if (semis !== 0) playbackShiftUrl = url;
+
+        // Swap the analysis buffer too, so spectrum/formants/pitch reflect the
+        // transposed audio that is actually heard.
+        playbackBuffer = buf;
+        playbackFormantTrack = null;
+        computePlaybackPitchContour(buf);
+
+        // Swap src on the SAME <audio> element (keeps the EQ MediaElementSource and
+        // the ended/metadata listeners), restoring position and play state.
+        const audio = playbackAudio;
+        const dur = pbDuration();
+        const frac = dur > 0 ? Math.min(1, audio.currentTime / dur) : 0;
+        const wasPlaying = !audio.paused;
+        audio.src = url;
+        audio.preservesPitch = true;
+        audio.mozPreservesPitch = true;
+        audio.webkitPreservesPitch = true;
+        audio.playbackRate = playbackRate;
+        audio.addEventListener('loadedmetadata', () => {
+            if (token !== playbackShiftToken) return;
+            try { audio.currentTime = frac * pbDuration(); } catch (_) {}
+            if (wasPlaying) audio.play().catch(() => {});
+        }, { once: true });
+        updateKeyShiftUi(false);
+    }, 30);
+}
+
+function nudgeKeyShift(d) {
+    const v = Math.max(-6, Math.min(6, playbackKeyShift + d));
+    if (v === playbackKeyShift) return;
+    playbackKeyShift = v;
+    updateKeyShiftUi(false);
+    clearTimeout(playbackKeyDebounce);
+    playbackKeyDebounce = setTimeout(rebuildKeyShiftedPlayback, 350);
+}
+if (els.pbKeyDown) els.pbKeyDown.addEventListener('click', () => nudgeKeyShift(-1));
+if (els.pbKeyUp) els.pbKeyUp.addEventListener('click', () => nudgeKeyShift(1));
 
 function fmtDuration(ms) {
     const s = Math.max(0, ms / 1000);
@@ -6360,6 +6467,7 @@ async function playRecording(id) {
     state.isMicPaused = false;
     if (els.btnMic) els.btnMic.classList.add('mic-active');
     if (els.pbRate) els.pbRate.value = String(playbackRate);
+    updateKeyShiftUi(false);
     if (els.playbackControls) els.playbackControls.style.display = 'flex';
     if (els.playbackEq) els.playbackEq.style.display = PLAYBACK_EQ_SUPPORTED ? 'block' : 'none';
 
@@ -6390,6 +6498,7 @@ async function playRecording(id) {
         .then(buf => audioCtx.decodeAudioData(buf.slice(0)))
         .then(audioBuf => {
             if (playbackRecId !== id || !playbackAudio) return; // playback changed
+            playbackBufferOrig = audioBuf;
             playbackBuffer = audioBuf;
             if (audioBuf.duration > 0) {
                 playbackDurationSec = audioBuf.duration;
@@ -6399,7 +6508,13 @@ async function playRecording(id) {
             // (both markers and the LPC envelope curve), so no precomputed track needed.
             // Pitch Track, however, gets a high-accuracy offline contour of the whole
             // recording (chunked so the UI stays responsive).
-            computePlaybackPitchContour(audioBuf);
+            if (playbackKeyShift !== 0) {
+                // Session key shift carries over to the next recording: render the
+                // transposed version now (it also computes the matching contour).
+                rebuildKeyShiftedPlayback();
+            } else {
+                computePlaybackPitchContour(audioBuf);
+            }
         })
         .catch(err => console.warn('Playback analysis prep failed:', err));
 }
@@ -6411,6 +6526,10 @@ function stopPlayback() {
     }
     teardownPlaybackEqChain();
     if (playbackObjectUrl) { URL.revokeObjectURL(playbackObjectUrl); playbackObjectUrl = null; }
+    if (playbackShiftUrl) { URL.revokeObjectURL(playbackShiftUrl); playbackShiftUrl = null; }
+    playbackShiftToken++;                 // cancel any in-flight key-shift rebuild
+    clearTimeout(playbackKeyDebounce);
+    playbackBufferOrig = null;            // playbackKeyShift itself persists for the next playback
     playbackAudio = null;
     playbackBuffer = null;
     playbackFormantTrack = null;
@@ -6870,7 +6989,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — shown in the bottom-right corner (bump on each release)
-const APP_VERSION = 'v1.26.0';
+const APP_VERSION = 'v1.27.0';
 (() => {
     // The #app-version element is parsed AFTER this script tag, so on first run
     // getElementById returns null. Defer to DOMContentLoaded if the DOM isn't ready.

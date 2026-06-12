@@ -241,6 +241,27 @@ console.log('\n\x1b[1m7. Live octave-continuity snap (vibrato/leaps untouched, g
 }
 
 // ---------------------------------------------------------------------------
+console.log('\n\x1b[1m8. Key shift (WSOLA) — pitch moves by the interval, duration preserved\x1b[0m');
+{
+  const sr = 44100, f0 = 220, F = [600, 1500, 2600, 3400, 4500];
+  const sig = DSP.synthVowel({ sr, dur: 0.6, f0, formants: F });
+  for (const semis of [3, -4]) {
+    const out = DSP.pitchShift([Float32Array.from(sig)], sr, semis)[0];
+    const expect = f0 * Math.pow(2, semis / 12);
+    const { hz: got } = DSP.yin(frameAt(out, sr, 0.3, 4096), sr);
+    const cents = got > 0 ? 1200 * Math.log2(got / expect) : 9999;
+    const lenErr = Math.abs(out.length - sig.length) / sig.length;
+    const line = `${semis > 0 ? '+' : ''}${semis} st: f0 ${got.toFixed(1)}Hz (expect ${expect.toFixed(1)}, ${cents.toFixed(0)}¢) | len drift ${(lenErr * 100).toFixed(1)}%`;
+    (Math.abs(cents) < 40 && lenErr < 0.02) ? pass(line) : fail(line);
+  }
+  // 0 semitones must be a true no-op (bit-identical copy)
+  const same = DSP.pitchShift([Float32Array.from(sig)], sr, 0)[0];
+  let maxd = 0;
+  for (let i = 0; i < sig.length; i++) maxd = Math.max(maxd, Math.abs(same[i] - sig[i]));
+  (maxd === 0) ? pass('0 st: bit-identical passthrough') : fail(`0 st: max diff ${maxd}`);
+}
+
+// ---------------------------------------------------------------------------
 console.log('');
 if (failures === 0) { console.log('\x1b[32m\x1b[1mALL GATES PASSED\x1b[0m\n'); process.exit(0); }
 else { console.log(`\x1b[31m\x1b[1m${failures} GATE(S) FAILED\x1b[0m\n`); process.exit(1); }

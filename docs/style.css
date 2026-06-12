@@ -3559,6 +3559,34 @@ body.learn-drawer-open { overflow: hidden; }
     line-height: 1;
     cursor: pointer;
 }
+/* Key shift (♭/♯ transpose) in the playback transport */
+.pb-key {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+}
+.pb-key-btn {
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-xs);
+    padding: 1px 6px;
+    font-size: 0.85rem;
+    line-height: 1;
+    cursor: pointer;
+}
+.pb-key-btn:hover { color: var(--text-primary); }
+.pb-key-val {
+    min-width: 22px;
+    text-align: center;
+    font-size: 0.72rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-secondary);
+}
+.pb-key-val.is-active { color: var(--accent-color, #2196F3); }
+
 .pb-loop-btn.is-active {
     color: #4f9650;
     border-color: rgba(79, 150, 80, 0.6);
