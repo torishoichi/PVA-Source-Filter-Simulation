@@ -551,31 +551,36 @@
                         <button id="rec-import-btn" class="rec-btn rec-import-btn" type="button" title="音声ファイルを取り込み">+ Import</button>
                         <input type="file" id="rec-import-input" accept="audio/*,.wav,.mp3,.m4a,.ogg,.webm,.flac" style="display:none;">
                     </summary>
-                    <ul id="recordings-list" class="recordings-list" aria-live="polite"></ul>
-                    <div class="recordings-empty" id="recordings-empty">
-                        マイクをONにして Rec ボタンで録音（最大60秒・端末内のみに保存）
-                    </div>
                     <div id="playback-controls" class="playback-controls" style="display:none;">
-                        <span class="pb-time" id="pb-cur-time">0.0s</span>
-                        <div class="pb-seek-wrap" id="pb-seek-wrap">
-                            <div class="pb-region" id="pb-region"></div>
-                            <input type="range" id="pb-seek" min="0" max="1000" value="0" step="1" class="pb-seek" aria-label="Playback position">
-                            <div class="pb-handle pb-handle-a" id="pb-handle-a" role="slider" aria-label="Loop start" tabindex="0" title="区間 始点 (A)"></div>
-                            <div class="pb-handle pb-handle-b" id="pb-handle-b" role="slider" aria-label="Loop end" tabindex="0" title="区間 終点 (B)"></div>
+                        <div class="pb-now">
+                            <button id="pb-playpause" class="pb-playpause" type="button" aria-label="再生 / 一時停止">⏸</button>
+                            <span class="pb-now-label" id="pb-now-label">—</span>
                         </div>
-                        <span class="pb-time" id="pb-total-time">0.0s</span>
-                        <button id="pb-loop" class="pb-loop-btn" type="button" aria-label="Toggle A–B section loop" title="区間リピート (A–B間をループ)">A–B</button>
-                    <div class="pb-key" title="キー変更（半音単位の移調・テンポ保持）">
-                        <button id="pb-key-down" class="pb-key-btn" type="button" aria-label="Key down">♭</button>
-                        <span class="pb-key-val" id="pb-key-val">0</span>
-                        <button id="pb-key-up" class="pb-key-btn" type="button" aria-label="Key up">♯</button>
-                    </div>
-                        <select id="pb-rate" class="pb-rate-select" aria-label="Playback speed" title="再生速度（音程は保持）">
-                            <option value="0.5">0.5x</option>
-                            <option value="0.75">0.75x</option>
-                            <option value="1" selected>1x</option>
-                            <option value="1.5">1.5x</option>
-                        </select>
+                        <div class="pb-scrub">
+                            <span class="pb-time" id="pb-cur-time">0.0s</span>
+                            <div class="pb-seek-wrap" id="pb-seek-wrap">
+                                <div class="pb-region" id="pb-region"></div>
+                                <input type="range" id="pb-seek" min="0" max="1000" value="0" step="1" class="pb-seek" aria-label="Playback position">
+                                <div class="pb-handle pb-handle-a" id="pb-handle-a" role="slider" aria-label="Loop start" tabindex="0" title="区間 始点 (A)"></div>
+                                <div class="pb-handle pb-handle-b" id="pb-handle-b" role="slider" aria-label="Loop end" tabindex="0" title="区間 終点 (B)"></div>
+                            </div>
+                            <span class="pb-time" id="pb-total-time">0.0s</span>
+                        </div>
+                        <div class="pb-tools">
+                            <button id="pb-loop" class="pb-loop-btn" type="button" aria-label="Toggle A–B section loop" title="区間リピート (A–B間をループ)">A–B</button>
+                            <div class="pb-key" title="キー変更（半音単位の移調・テンポ保持）">
+                                <span class="pb-key-cap">Key</span>
+                                <button id="pb-key-down" class="pb-key-btn" type="button" aria-label="半音下げる" title="半音下げる (♭)">♭</button>
+                                <button id="pb-key-val" class="pb-key-val" type="button" aria-label="キーを 0 に戻す" title="タップで 0 に戻す">0</button>
+                                <button id="pb-key-up" class="pb-key-btn" type="button" aria-label="半音上げる" title="半音上げる (♯)">♯</button>
+                            </div>
+                            <select id="pb-rate" class="pb-rate-select" aria-label="Playback speed" title="再生速度（音程は保持）">
+                                <option value="0.5">0.5x</option>
+                                <option value="0.75">0.75x</option>
+                                <option value="1" selected>1x</option>
+                                <option value="1.5">1.5x</option>
+                            </select>
+                        </div>
                     </div>
                     <div id="playback-eq" class="playback-eq" style="display:none;">
                         <div class="pb-eq-head">
@@ -585,6 +590,10 @@
                             <button id="rec-eq-reset" class="pb-eq-reset" type="button">Reset</button>
                         </div>
                         <div class="pb-eq-note hint" id="rec-eq-note">スペクトラム上で操作します</div>
+                    </div>
+                    <ul id="recordings-list" class="recordings-list" aria-live="polite"></ul>
+                    <div class="recordings-empty" id="recordings-empty">
+                        マイクをONにして Rec ボタンで録音（最大60秒・端末内のみに保存）
                     </div>
                 </details>
 
@@ -597,7 +606,7 @@
                 <div class="mic-analysis-body">
 
                 <!-- Loudness Ceiling — guard against over-singing / pressed-loud phonation -->
-                <details id="loudness-panel" class="vib-analysis-panel">
+                <details id="loudness-panel" class="vib-analysis-panel" open>
                     <summary class="vib-analysis-summary">
                         <span class="vib-analysis-disclosure" aria-hidden="true">▸</span>
                         <span class="vib-analysis-title">Loudness Ceiling</span>
@@ -617,6 +626,70 @@
                             <span class="loud-ceiling-val" id="loud-ceiling-val">-18 dB</span>
                         </div>
                         <p class="loud-hint">マイクをONにすると声量がバーで出ます。縦線（天井）を超えると赤、手前で黄、安全域は緑。緑〜黄を保って歌う練習で大声・押し込みを抑制。</p>
+                    </div>
+                </details>
+
+                <!-- Vowel Space — F1×F2 map (uses LPC v3 formant data) -->
+                <details id="vowel-space-panel" class="vib-analysis-panel">
+                    <summary class="vib-analysis-summary">
+                        <span class="vib-analysis-disclosure" aria-hidden="true">▸</span>
+                        <span class="vib-analysis-title">Vowel Space</span>
+                        <span class="vib-analysis-summary-hint">マイクONで母音空間を表示 (F1×F2)</span>
+                    </summary>
+                    <div class="vib-analysis-body is-basic" id="vs-body">
+                        <div class="vib-analysis-controls">
+                            <div class="vs-lang-tabs" id="vs-voice-tabs" role="tablist" aria-label="声道長プロファイル (キャリブレーション)" title="AMAB (Assigned Male at Birth) / AFAB (Assigned Female at Birth) / Child で参照フォルマント値をスケール (声道長の典型差を反映, Fant 1966 比率) / Me = 個人キャリブレーション結果">
+                                <button class="vs-lang-tab is-active" data-voice="male" type="button" role="tab" aria-selected="true" title="AMAB — Assigned Male at Birth (出生時に男性と割り当てられた、平均的な声道長プロファイル)">AMAB</button>
+                                <button class="vs-lang-tab" data-voice="female" type="button" role="tab" aria-selected="false" title="AFAB — Assigned Female at Birth (出生時に女性と割り当てられた、平均的な声道長プロファイル)">AFAB</button>
+                                <button class="vs-lang-tab" data-voice="child" type="button" role="tab" aria-selected="false" title="子供 (声道長 ~40% 短い)">Child</button>
+                                <button class="vs-lang-tab" data-voice="me" type="button" role="tab" aria-selected="false" disabled style="opacity:0.4;cursor:not-allowed;" title="個人キャリブレーション結果 (Calibrate ボタンで作成)">Me</button>
+                            </div>
+                            <button id="vs-calibrate-btn" class="vs-calibrate-btn" type="button" title="自分の発声で参照値を測定 (各母音 2 秒ずつ)">🎯 Calibrate</button>
+                            <div class="vs-lang-tabs" id="vs-lang-tabs" role="tablist" aria-label="参照母音">
+                                <button class="vs-lang-tab is-active" data-lang="jp" type="button" role="tab" aria-selected="true">JP 5</button>
+                                <button class="vs-lang-tab" data-lang="en" type="button" role="tab" aria-selected="false">IPA EN</button>
+                            </div>
+                            <div class="vib-mode-tabs" id="vs-mode-tabs" role="tablist" aria-label="表示モード">
+                                <button class="vib-mode-tab is-active" data-mode="basic" type="button" role="tab" aria-selected="true">Basic</button>
+                                <button class="vib-mode-tab" data-mode="advanced" type="button" role="tab" aria-selected="false">Advanced</button>
+                            </div>
+                        </div>
+
+                        <div class="vib-section">
+                            <div class="vib-section-head">
+                                <span class="vib-section-title">Detected — mic input</span>
+                            </div>
+                        <div class="vs-readout-row">
+                            <div class="vstat">
+                                <span class="vstat-label">Nearest <span class="tooltip" data-tooltip="現在の (F1, F2) に最も近い参照母音 (log Hz 距離)。括弧内は距離 (cents-like スケール)。">[?]</span></span>
+                                <span class="vstat-val" id="vs-nearest">—</span>
+                            </div>
+                            <div class="vstat">
+                                <span class="vstat-label">F1 <span class="tooltip" data-tooltip="第1フォルマント (Hz)。口の開き / 顎の落とし方を反映。高い = 開いた音 (/a/)、低い = 閉じた音 (/i/, /u/)。">[?]</span></span>
+                                <span class="vstat-val" id="vs-f1">—</span>
+                                <span class="vstat-unit">Hz</span>
+                            </div>
+                            <div class="vstat">
+                                <span class="vstat-label">F2 <span class="tooltip" data-tooltip="第2フォルマント (Hz)。舌の前後位置を反映。高い = 前舌 (/i/, /e/)、低い = 後舌 (/u/, /o/)。">[?]</span></span>
+                                <span class="vstat-val" id="vs-f2">—</span>
+                                <span class="vstat-unit">Hz</span>
+                            </div>
+                            <div class="vstat vib-advanced-only">
+                                <span class="vstat-label">F2/F1 <span class="tooltip" data-tooltip="第2/第1フォルマント比。明るさ・前舌度の代理指標。≧4 で前舌（明）、≦2 で後舌（暗）。">[?]</span></span>
+                                <span class="vstat-val" id="vs-ratio">—</span>
+                            </div>
+                            <div class="vstat vib-advanced-only">
+                                <span class="vstat-label">F3 <span class="tooltip" data-tooltip="第3フォルマント (Hz)。/r/ 系の判別、Singer's Formant cluster の下限。">[?]</span></span>
+                                <span class="vstat-val" id="vs-f3">—</span>
+                                <span class="vstat-unit">Hz</span>
+                            </div>
+                        </div>
+
+                        </div>
+
+                        <div class="vs-canvas-wrap">
+                            <canvas id="vowel-space-canvas"></canvas>
+                        </div>
                     </div>
                 </details>
 
@@ -651,6 +724,32 @@
                             </div>
                             <p class="loud-hint">CPP・H1–H2 はマイク感度や距離で絶対値が変わります。<strong>同じ条件で発声モードを変えたときの相対的な動き</strong>を観察してください。Source パネルの Rd/OQ（理論値）と H1–H2（実測）を見比べると、狙った発声に近づけているか分かります。</p>
                         </div>
+                    </div>
+                </details>
+
+                <!-- Pitch Track — mic-detected F0 over time (cents ladder) -->
+                <details id="pitch-track-panel" class="vib-analysis-panel">
+                    <summary class="vib-analysis-summary">
+                        <span class="vib-analysis-disclosure" aria-hidden="true">▸</span>
+                        <span class="vib-analysis-title">Pitch Track</span>
+                        <span class="vib-analysis-summary-hint">マイクONで音高の軌跡を表示</span>
+                    </summary>
+                    <div class="vib-analysis-body">
+                        <div class="pitch-track-controls">
+                            <label class="pitch-follow-toggle" title="再生位置を自動で追いかけてスクロール">
+                                <input type="checkbox" id="pitch-follow" checked>
+                                <span>再生に追尾</span>
+                            </label>
+                            <label class="pitch-dot-size" title="再生ヘッド（赤丸）の大きさ">
+                                <span class="pitch-dot-mark">●</span>
+                                <input type="range" id="pitch-dot-size" min="2" max="14" value="6" step="1">
+                                <span class="pitch-dot-size-val"><span id="pitch-dot-size-val">6</span>px</span>
+                            </label>
+                        </div>
+                        <div class="pitch-track-canvas-wrap">
+                            <canvas id="pitch-track-canvas"></canvas>
+                        </div>
+                        <p class="pitch-track-hint">縦軸＝ピアノ鍵盤（音名）、横軸＝時間。ライブは直近5秒スクロール。録音再生中は全体の輪郭＋赤い再生ヘッドを表示。ホイール=時間ズーム / Shift+ホイール=音高ズーム / ドラッグ=移動 / 横スワイプ・下部バー=横スクロール / ダブルクリック=全体に戻す。枠の下端ドラッグで縦に拡大。「再生に追尾」ONで再生位置を自動追尾します。</p>
                     </div>
                 </details>
 
@@ -756,96 +855,6 @@
 
                         <div class="vib-analysis-canvas-wrap">
                             <canvas id="vibrato-canvas"></canvas>
-                        </div>
-                    </div>
-                </details>
-
-                <!-- Pitch Track — mic-detected F0 over time (cents ladder) -->
-                <details id="pitch-track-panel" class="vib-analysis-panel">
-                    <summary class="vib-analysis-summary">
-                        <span class="vib-analysis-disclosure" aria-hidden="true">▸</span>
-                        <span class="vib-analysis-title">Pitch Track</span>
-                        <span class="vib-analysis-summary-hint">マイクONで音高の軌跡を表示</span>
-                    </summary>
-                    <div class="vib-analysis-body">
-                        <div class="pitch-track-controls">
-                            <label class="pitch-follow-toggle" title="再生位置を自動で追いかけてスクロール">
-                                <input type="checkbox" id="pitch-follow" checked>
-                                <span>再生に追尾</span>
-                            </label>
-                            <label class="pitch-dot-size" title="再生ヘッド（赤丸）の大きさ">
-                                <span class="pitch-dot-mark">●</span>
-                                <input type="range" id="pitch-dot-size" min="2" max="14" value="6" step="1">
-                                <span class="pitch-dot-size-val"><span id="pitch-dot-size-val">6</span>px</span>
-                            </label>
-                        </div>
-                        <div class="pitch-track-canvas-wrap">
-                            <canvas id="pitch-track-canvas"></canvas>
-                        </div>
-                        <p class="pitch-track-hint">縦軸＝ピアノ鍵盤（音名）、横軸＝時間。ライブは直近5秒スクロール。録音再生中は全体の輪郭＋赤い再生ヘッドを表示。ホイール=時間ズーム / Shift+ホイール=音高ズーム / ドラッグ=移動 / 横スワイプ・下部バー=横スクロール / ダブルクリック=全体に戻す。枠の下端ドラッグで縦に拡大。「再生に追尾」ONで再生位置を自動追尾します。</p>
-                    </div>
-                </details>
-
-                <!-- Vowel Space — F1×F2 map (uses LPC v3 formant data) -->
-                <details id="vowel-space-panel" class="vib-analysis-panel">
-                    <summary class="vib-analysis-summary">
-                        <span class="vib-analysis-disclosure" aria-hidden="true">▸</span>
-                        <span class="vib-analysis-title">Vowel Space</span>
-                        <span class="vib-analysis-summary-hint">マイクONで母音空間を表示 (F1×F2)</span>
-                    </summary>
-                    <div class="vib-analysis-body is-basic" id="vs-body">
-                        <div class="vib-analysis-controls">
-                            <div class="vs-lang-tabs" id="vs-voice-tabs" role="tablist" aria-label="声道長プロファイル (キャリブレーション)" title="AMAB (Assigned Male at Birth) / AFAB (Assigned Female at Birth) / Child で参照フォルマント値をスケール (声道長の典型差を反映, Fant 1966 比率) / Me = 個人キャリブレーション結果">
-                                <button class="vs-lang-tab is-active" data-voice="male" type="button" role="tab" aria-selected="true" title="AMAB — Assigned Male at Birth (出生時に男性と割り当てられた、平均的な声道長プロファイル)">AMAB</button>
-                                <button class="vs-lang-tab" data-voice="female" type="button" role="tab" aria-selected="false" title="AFAB — Assigned Female at Birth (出生時に女性と割り当てられた、平均的な声道長プロファイル)">AFAB</button>
-                                <button class="vs-lang-tab" data-voice="child" type="button" role="tab" aria-selected="false" title="子供 (声道長 ~40% 短い)">Child</button>
-                                <button class="vs-lang-tab" data-voice="me" type="button" role="tab" aria-selected="false" disabled style="opacity:0.4;cursor:not-allowed;" title="個人キャリブレーション結果 (Calibrate ボタンで作成)">Me</button>
-                            </div>
-                            <button id="vs-calibrate-btn" class="vs-calibrate-btn" type="button" title="自分の発声で参照値を測定 (各母音 2 秒ずつ)">🎯 Calibrate</button>
-                            <div class="vs-lang-tabs" id="vs-lang-tabs" role="tablist" aria-label="参照母音">
-                                <button class="vs-lang-tab is-active" data-lang="jp" type="button" role="tab" aria-selected="true">JP 5</button>
-                                <button class="vs-lang-tab" data-lang="en" type="button" role="tab" aria-selected="false">IPA EN</button>
-                            </div>
-                            <div class="vib-mode-tabs" id="vs-mode-tabs" role="tablist" aria-label="表示モード">
-                                <button class="vib-mode-tab is-active" data-mode="basic" type="button" role="tab" aria-selected="true">Basic</button>
-                                <button class="vib-mode-tab" data-mode="advanced" type="button" role="tab" aria-selected="false">Advanced</button>
-                            </div>
-                        </div>
-
-                        <div class="vib-section">
-                            <div class="vib-section-head">
-                                <span class="vib-section-title">Detected — mic input</span>
-                            </div>
-                        <div class="vs-readout-row">
-                            <div class="vstat">
-                                <span class="vstat-label">Nearest <span class="tooltip" data-tooltip="現在の (F1, F2) に最も近い参照母音 (log Hz 距離)。括弧内は距離 (cents-like スケール)。">[?]</span></span>
-                                <span class="vstat-val" id="vs-nearest">—</span>
-                            </div>
-                            <div class="vstat">
-                                <span class="vstat-label">F1 <span class="tooltip" data-tooltip="第1フォルマント (Hz)。口の開き / 顎の落とし方を反映。高い = 開いた音 (/a/)、低い = 閉じた音 (/i/, /u/)。">[?]</span></span>
-                                <span class="vstat-val" id="vs-f1">—</span>
-                                <span class="vstat-unit">Hz</span>
-                            </div>
-                            <div class="vstat">
-                                <span class="vstat-label">F2 <span class="tooltip" data-tooltip="第2フォルマント (Hz)。舌の前後位置を反映。高い = 前舌 (/i/, /e/)、低い = 後舌 (/u/, /o/)。">[?]</span></span>
-                                <span class="vstat-val" id="vs-f2">—</span>
-                                <span class="vstat-unit">Hz</span>
-                            </div>
-                            <div class="vstat vib-advanced-only">
-                                <span class="vstat-label">F2/F1 <span class="tooltip" data-tooltip="第2/第1フォルマント比。明るさ・前舌度の代理指標。≧4 で前舌（明）、≦2 で後舌（暗）。">[?]</span></span>
-                                <span class="vstat-val" id="vs-ratio">—</span>
-                            </div>
-                            <div class="vstat vib-advanced-only">
-                                <span class="vstat-label">F3 <span class="tooltip" data-tooltip="第3フォルマント (Hz)。/r/ 系の判別、Singer's Formant cluster の下限。">[?]</span></span>
-                                <span class="vstat-val" id="vs-f3">—</span>
-                                <span class="vstat-unit">Hz</span>
-                            </div>
-                        </div>
-
-                        </div>
-
-                        <div class="vs-canvas-wrap">
-                            <canvas id="vowel-space-canvas"></canvas>
                         </div>
                     </div>
                 </details>

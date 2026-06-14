@@ -310,6 +310,8 @@ const els = {
     pbKeyDown: document.getElementById('pb-key-down'),
     pbKeyUp: document.getElementById('pb-key-up'),
     pbKeyVal: document.getElementById('pb-key-val'),
+    pbPlayPause: document.getElementById('pb-playpause'),
+    pbNowLabel: document.getElementById('pb-now-label'),
     pbCurTime: document.getElementById('pb-cur-time'),
     pbTotalTime: document.getElementById('pb-total-time'),
     pbSeekWrap: document.getElementById('pb-seek-wrap'),
@@ -5753,6 +5755,20 @@ function nudgeKeyShift(d) {
 }
 if (els.pbKeyDown) els.pbKeyDown.addEventListener('click', () => nudgeKeyShift(-1));
 if (els.pbKeyUp) els.pbKeyUp.addEventListener('click', () => nudgeKeyShift(1));
+// Tap the value to snap back to the original key (0). Cheap rebuild (reuses the
+// original blob), so no long debounce.
+if (els.pbKeyVal) els.pbKeyVal.addEventListener('click', () => {
+    if (playbackKeyShift === 0) return;
+    playbackKeyShift = 0;
+    updateKeyShiftUi(false);
+    clearTimeout(playbackKeyDebounce);
+    playbackKeyDebounce = setTimeout(rebuildKeyShiftedPlayback, 50);
+});
+// Play/pause toggle on the fixed transport bar (item buttons still start clips).
+if (els.pbPlayPause) els.pbPlayPause.addEventListener('click', () => {
+    if (!playbackAudio) return;
+    if (playbackAudio.paused) resumePlayback(); else pausePlayback();
+});
 
 function fmtDuration(ms) {
     const s = Math.max(0, ms / 1000);
@@ -6855,16 +6871,24 @@ function renderRecordingsList() {
         row.append(playBtn, timeEl, labelInput, durEl, dlBtn, delBtn);
         li.appendChild(row);
 
-        // Row 2 (active item only): move the shared transport + EQ INLINE under this
-        // recording, so the controls always sit with the clip they operate on instead
-        // of as a detached bar below the whole list. appendChild moves the singletons
-        // (their event bindings & els references survive the move).
-        if (isCurrent) {
-            if (els.playbackControls) li.appendChild(els.playbackControls);
-            if (els.playbackEq) li.appendChild(els.playbackEq);
-        }
-
         els.recordingsList.appendChild(li);
+    }
+    // The transport is a fixed bar above the list (not moved into each item), so
+    // just refresh which clip it names and the play/pause glyph.
+    updatePlaybackBarUi();
+}
+
+// Sync the always-visible transport bar (above the list) to the active clip.
+function updatePlaybackBarUi() {
+    if (!els.playbackControls) return;
+    const rec = cachedRecordingsList.find(r => r.id === playbackRecId);
+    if (els.pbNowLabel) els.pbNowLabel.textContent =
+        rec ? ((rec.label && rec.label.trim()) || fmtTimestamp(rec.createdAt)) : '—';
+    if (els.pbPlayPause) {
+        const playing = playbackAudio && !playbackAudio.paused;
+        els.pbPlayPause.textContent = playing ? '⏸' : '⏵';
+        els.pbPlayPause.classList.toggle('is-playing', !!playing);
+        els.pbPlayPause.title = playing ? '一時停止' : '再開';
     }
 }
 
@@ -6989,7 +7013,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — shown in the bottom-right corner (bump on each release)
-const APP_VERSION = 'v1.27.0';
+const APP_VERSION = 'v1.28.0';
 (() => {
     // The #app-version element is parsed AFTER this script tag, so on first run
     // getElementById returns null. Defer to DOMContentLoaded if the DOM isn't ready.
@@ -8149,7 +8173,11 @@ drawGlottalWaveform(); // Initial render
     const PANEL_STATE_KEY = 'panelOpenState';
     let savedPanels = {};
     try { savedPanels = JSON.parse(localStorage.getItem(PANEL_STATE_KEY)) || {}; } catch (_) {}
+    // Loudness Ceiling is a singing-time guard the user asked to keep always
+    // visible — force it open and never persist its state.
+    const ALWAYS_OPEN = new Set(['loudness-panel']);
     document.querySelectorAll('details[id]').forEach(d => {
+        if (ALWAYS_OPEN.has(d.id)) { d.open = true; return; }
         if (Object.prototype.hasOwnProperty.call(savedPanels, d.id)) d.open = !!savedPanels[d.id];
         d.addEventListener('toggle', () => {
             savedPanels[d.id] = d.open;

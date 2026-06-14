@@ -525,7 +525,7 @@
 
     <!-- Tab: Rec (recordings & playback) -->
     <section class="tab-content" id="tab-rec">
-        <details class="card vibrato-card" id="loudness-panel">
+        <details class="card vibrato-card" id="loudness-panel" open>
             <summary class="vibrato-summary">
                 <span class="vibrato-title">Loudness Ceiling</span>
                 <span class="vibrato-chevron" aria-hidden="true">▾</span>
@@ -582,31 +582,40 @@
                 <button id="rec-import-btn" class="rec-btn rec-import-btn" type="button" title="音声ファイルを取り込み">+ Import</button>
                 <input type="file" id="rec-import-input" accept="audio/*,.wav,.mp3,.m4a,.ogg,.webm,.flac" style="display:none;">
             </summary>
+            <div id="playback-controls" class="playback-controls" style="display:none;">
+                <div class="pb-now">
+                    <button id="pb-playpause" class="pb-playpause" type="button" aria-label="再生 / 一時停止">⏸</button>
+                    <span class="pb-now-label" id="pb-now-label">—</span>
+                </div>
+                <div class="pb-scrub">
+                    <span class="pb-time" id="pb-cur-time">0.0s</span>
+                    <div class="pb-seek-wrap" id="pb-seek-wrap">
+                        <div class="pb-region" id="pb-region"></div>
+                        <input type="range" id="pb-seek" min="0" max="1000" value="0" step="1" class="pb-seek" aria-label="Playback position">
+                        <div class="pb-handle pb-handle-a" id="pb-handle-a" role="slider" aria-label="Loop start" tabindex="0" title="区間 始点 (A)"></div>
+                        <div class="pb-handle pb-handle-b" id="pb-handle-b" role="slider" aria-label="Loop end" tabindex="0" title="区間 終点 (B)"></div>
+                    </div>
+                    <span class="pb-time" id="pb-total-time">0.0s</span>
+                </div>
+                <div class="pb-tools">
+                    <button id="pb-loop" class="pb-loop-btn" type="button" aria-label="Toggle A–B section loop" title="区間リピート (A–B間をループ)">A–B</button>
+                    <div class="pb-key" title="キー変更（半音単位の移調・テンポ保持）">
+                        <span class="pb-key-cap">Key</span>
+                        <button id="pb-key-down" class="pb-key-btn" type="button" aria-label="半音下げる" title="半音下げる (♭)">♭</button>
+                        <button id="pb-key-val" class="pb-key-val" type="button" aria-label="キーを 0 に戻す" title="タップで 0 に戻す">0</button>
+                        <button id="pb-key-up" class="pb-key-btn" type="button" aria-label="半音上げる" title="半音上げる (♯)">♯</button>
+                    </div>
+                    <select id="pb-rate" class="pb-rate-select" aria-label="Playback speed" title="再生速度（音程は保持）">
+                        <option value="0.5">0.5x</option>
+                        <option value="0.75">0.75x</option>
+                        <option value="1" selected>1x</option>
+                        <option value="1.5">1.5x</option>
+                    </select>
+                </div>
+            </div>
             <ul id="recordings-list" class="recordings-list" aria-live="polite"></ul>
             <div class="recordings-empty" id="recordings-empty">
                 マイクをONにして上部の Rec ボタンで録音（最大60秒・端末内のみに保存）
-            </div>
-            <div id="playback-controls" class="playback-controls" style="display:none;">
-                <span class="pb-time" id="pb-cur-time">0.0s</span>
-                <div class="pb-seek-wrap" id="pb-seek-wrap">
-                    <div class="pb-region" id="pb-region"></div>
-                    <input type="range" id="pb-seek" min="0" max="1000" value="0" step="1" class="pb-seek" aria-label="Playback position">
-                    <div class="pb-handle pb-handle-a" id="pb-handle-a" role="slider" aria-label="Loop start" tabindex="0" title="区間 始点 (A)"></div>
-                    <div class="pb-handle pb-handle-b" id="pb-handle-b" role="slider" aria-label="Loop end" tabindex="0" title="区間 終点 (B)"></div>
-                </div>
-                <span class="pb-time" id="pb-total-time">0.0s</span>
-                <button id="pb-loop" class="pb-loop-btn" type="button" aria-label="Toggle A–B section loop" title="区間リピート (A–B間をループ)">A–B</button>
-                <div class="pb-key" title="キー変更（半音単位の移調・テンポ保持）">
-                    <button id="pb-key-down" class="pb-key-btn" type="button" aria-label="Key down">♭</button>
-                    <span class="pb-key-val" id="pb-key-val">0</span>
-                    <button id="pb-key-up" class="pb-key-btn" type="button" aria-label="Key up">♯</button>
-                </div>
-                <select id="pb-rate" class="pb-rate-select" aria-label="Playback speed" title="再生速度（音程は保持）">
-                    <option value="0.5">0.5x</option>
-                    <option value="0.75">0.75x</option>
-                    <option value="1" selected>1x</option>
-                    <option value="1.5">1.5x</option>
-                </select>
             </div>
             <p class="loud-hint" style="margin-top:8px;">録音は端末内（IndexedDB）にのみ保存され、サーバーには送信されません。</p>
         </details>

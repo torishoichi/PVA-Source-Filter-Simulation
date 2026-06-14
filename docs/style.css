@@ -3289,7 +3289,7 @@ body.learn-drawer-open { overflow: hidden; }
 }
 .recordings-item {
     display: flex;
-    flex-direction: column;     /* row 1 = clip meta, row 2 = inline transport */
+    flex-direction: column;     /* single meta row per clip; transport is a fixed bar above the list */
     align-items: stretch;
     gap: 6px;
     padding: 6px 4px;
@@ -3398,15 +3398,67 @@ body.learn-drawer-open { overflow: hidden; }
 }
 
 /* Playback controls (compact one-row: time | seek | time | speed) */
+/* Fixed transport bar above the recordings list (not moved into each item). */
 .playback-controls {
-    margin-top: 6px;
-    padding: 4px 8px;
-    border: 1px solid rgba(79, 150, 80, 0.35);
-    border-radius: var(--radius-xs);
-    background: rgba(79, 150, 80, 0.05);
+    margin: 4px 0 8px;
+    padding: 6px 9px;
+    border: 1px solid rgba(79, 150, 80, 0.4);
+    border-radius: var(--radius-sm);
+    background: rgba(79, 150, 80, 0.08);
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+}
+.pb-now {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex: 0 1 auto;
+    min-width: 0;
+}
+.pb-playpause {
+    flex: 0 0 auto;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: none;
+    background: var(--accent-color, #2196F3);
+    color: #fff;
+    font-size: 0.85rem;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.pb-playpause:hover { filter: brightness(1.08); }
+.pb-now-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 170px;
+}
+.pb-scrub {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex: 1 1 240px;
+    min-width: 180px;
+}
+.pb-tools {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+}
+.pb-key-cap {
+    font-size: 0.68rem;
+    color: var(--text-secondary);
+    letter-spacing: 0.04em;
 }
 .pb-time {
     font-size: 0.7rem;
