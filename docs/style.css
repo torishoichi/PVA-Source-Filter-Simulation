@@ -193,9 +193,12 @@ header p {
     padding: 16px 20px;
 }
 
-/* When Roughness legend is open, drop sticky so the (now tall) panel scrolls normally
-   with the page — otherwise it stays glued to the viewport top and blocks the f₀ slider below. */
-.visualizer-panel:has(#roughness-toggle.roughness-active) {
+/* Drop sticky whenever the panel grows tall — otherwise it stays glued to the viewport
+   top and buries the Source/Filter controls below, making them hard to scroll to and see.
+   Triggers: Roughness legend open, or the Recordings / Mic Analysis panels expanded. */
+.visualizer-panel:not(.is-fullscreen):has(#roughness-toggle.roughness-active),
+.visualizer-panel:not(.is-fullscreen):has(#recordings-panel[open]),
+.visualizer-panel:not(.is-fullscreen):has(#mic-analysis-group[open]) {
     position: relative;
     top: auto;
 }
