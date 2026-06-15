@@ -567,14 +567,29 @@
                             <span class="pb-time" id="pb-total-time">0.0s</span>
                         </div>
                         <div class="pb-tools">
-                            <button id="pb-loop" class="pb-loop-btn" type="button" aria-label="Toggle A–B section loop" title="区間リピート (A–B間をループ)">A–B</button>
-                            <div class="pb-key" title="キー変更（半音単位の移調・テンポ保持）">
+                            <button id="pb-loop" class="pb-loop-btn pb-icon-btn" type="button" aria-label="区間リピート (A–B)" title="区間リピート (A–B間をループ)">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+                            </button>
+                            <label class="pb-key" title="キー変更（半音単位の移調・テンポ保持）">
                                 <span class="pb-key-cap">Key</span>
-                                <button id="pb-key-down" class="pb-key-btn" type="button" aria-label="半音下げる" title="半音下げる (♭)">♭</button>
-                                <button id="pb-key-val" class="pb-key-val" type="button" aria-label="キーを 0 に戻す" title="タップで 0 に戻す">0</button>
-                                <button id="pb-key-up" class="pb-key-btn" type="button" aria-label="半音上げる" title="半音上げる (♯)">♯</button>
-                            </div>
+                                <select id="pb-key" class="pb-rate-select pb-key-select" aria-label="キー（半音移調）" title="キー変更（半音単位の移調・テンポ保持）">
+                                    <option value="-6">-6</option>
+                                    <option value="-5">-5</option>
+                                    <option value="-4">-4</option>
+                                    <option value="-3">-3</option>
+                                    <option value="-2">-2</option>
+                                    <option value="-1">-1</option>
+                                    <option value="0" selected>0</option>
+                                    <option value="1">+1</option>
+                                    <option value="2">+2</option>
+                                    <option value="3">+3</option>
+                                    <option value="4">+4</option>
+                                    <option value="5">+5</option>
+                                    <option value="6">+6</option>
+                                </select>
+                            </label>
                             <select id="pb-rate" class="pb-rate-select" aria-label="Playback speed" title="再生速度（音程は保持）">
+                                <option value="0.25">0.25x</option>
                                 <option value="0.5">0.5x</option>
                                 <option value="0.75">0.75x</option>
                                 <option value="1" selected>1x</option>

@@ -307,9 +307,7 @@ const els = {
     pbSeek: document.getElementById('pb-seek'),
     pbRate: document.getElementById('pb-rate'),
     pbLoop: document.getElementById('pb-loop'),
-    pbKeyDown: document.getElementById('pb-key-down'),
-    pbKeyUp: document.getElementById('pb-key-up'),
-    pbKeyVal: document.getElementById('pb-key-val'),
+    pbKey: document.getElementById('pb-key'),
     pbPlayPause: document.getElementById('pb-playpause'),
     pbNowLabel: document.getElementById('pb-now-label'),
     pbCurTime: document.getElementById('pb-cur-time'),
@@ -5688,9 +5686,13 @@ function channelsToWavBlob(channels, sr) {
 }
 
 function updateKeyShiftUi(busy) {
-    if (!els.pbKeyVal) return;
-    els.pbKeyVal.textContent = busy ? '…' : (playbackKeyShift > 0 ? '+' + playbackKeyShift : String(playbackKeyShift));
-    els.pbKeyVal.classList.toggle('is-active', playbackKeyShift !== 0);
+    if (!els.pbKey) return;
+    // Keep the <select> in sync (e.g. when snapping back to 0 programmatically)
+    // and tint the control while transposed. Disable mid-rebuild so a second
+    // change can't race the WSOLA run.
+    els.pbKey.value = String(playbackKeyShift);
+    els.pbKey.disabled = !!busy;
+    els.pbKey.classList.toggle('is-active', playbackKeyShift !== 0);
 }
 
 function rebuildKeyShiftedPlayback() {
@@ -5745,24 +5747,15 @@ function rebuildKeyShiftedPlayback() {
     }, 30);
 }
 
-function nudgeKeyShift(d) {
-    const v = Math.max(-6, Math.min(6, playbackKeyShift + d));
+if (els.pbKey) els.pbKey.addEventListener('change', () => {
+    const v = Math.max(-6, Math.min(6, Math.round(Number(els.pbKey.value)) || 0));
     if (v === playbackKeyShift) return;
     playbackKeyShift = v;
     updateKeyShiftUi(false);
     clearTimeout(playbackKeyDebounce);
-    playbackKeyDebounce = setTimeout(rebuildKeyShiftedPlayback, 350);
-}
-if (els.pbKeyDown) els.pbKeyDown.addEventListener('click', () => nudgeKeyShift(-1));
-if (els.pbKeyUp) els.pbKeyUp.addEventListener('click', () => nudgeKeyShift(1));
-// Tap the value to snap back to the original key (0). Cheap rebuild (reuses the
-// original blob), so no long debounce.
-if (els.pbKeyVal) els.pbKeyVal.addEventListener('click', () => {
-    if (playbackKeyShift === 0) return;
-    playbackKeyShift = 0;
-    updateKeyShiftUi(false);
-    clearTimeout(playbackKeyDebounce);
-    playbackKeyDebounce = setTimeout(rebuildKeyShiftedPlayback, 50);
+    // Snapping back to the original key reuses the cached blob (cheap), so it
+    // needs no long debounce; an actual transpose runs WSOLA, so give it 350 ms.
+    playbackKeyDebounce = setTimeout(rebuildKeyShiftedPlayback, v === 0 ? 50 : 350);
 });
 // Play/pause toggle on the fixed transport bar (item buttons still start clips).
 if (els.pbPlayPause) els.pbPlayPause.addEventListener('click', () => {
@@ -7013,7 +7006,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — shown in the bottom-right corner (bump on each release)
-const APP_VERSION = 'v1.28.0';
+const APP_VERSION = 'v1.29.0';
 (() => {
     // The #app-version element is parsed AFTER this script tag, so on first run
     // getElementById returns null. Defer to DOMContentLoaded if the DOM isn't ready.
@@ -8170,7 +8163,9 @@ drawGlottalWaveform(); // Initial render
 // handlers (toggle is dispatched async), so canvases inside restored panels
 // get a correctly-sized first draw.
 {
-    const PANEL_STATE_KEY = 'panelOpenState';
+    // v2: re-baseline saved panel state so the new defaults (Source/Filter open,
+    // Mic Analysis collapsed) take effect once for users with stale v1 state.
+    const PANEL_STATE_KEY = 'panelOpenStateV2';
     let savedPanels = {};
     try { savedPanels = JSON.parse(localStorage.getItem(PANEL_STATE_KEY)) || {}; } catch (_) {}
     // Loudness Ceiling is a singing-time guard the user asked to keep always

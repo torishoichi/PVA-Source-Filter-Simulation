@@ -3611,6 +3611,21 @@ body.learn-drawer-open { overflow: hidden; }
     line-height: 1;
     cursor: pointer;
 }
+/* Icon-only transport button (e.g. section-repeat) — center the glyph */
+.pb-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    width: 28px;
+    height: 26px;
+}
+.pb-icon-btn svg { display: block; }
+/* Key shift dropdown: match the rate <select>; tint when transposed */
+.pb-key-select.is-active {
+    color: var(--accent-color, #2196F3);
+    border-color: var(--accent-color, #2196F3);
+}
 /* Key shift (♭/♯ transpose) in the playback transport */
 .pb-key {
     flex: 0 0 auto;
@@ -3618,26 +3633,6 @@ body.learn-drawer-open { overflow: hidden; }
     align-items: center;
     gap: 2px;
 }
-.pb-key-btn {
-    background: transparent;
-    color: var(--text-secondary);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-xs);
-    padding: 1px 6px;
-    font-size: 0.85rem;
-    line-height: 1;
-    cursor: pointer;
-}
-.pb-key-btn:hover { color: var(--text-primary); }
-.pb-key-val {
-    min-width: 22px;
-    text-align: center;
-    font-size: 0.72rem;
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
-    color: var(--text-secondary);
-}
-.pb-key-val.is-active { color: var(--accent-color, #2196F3); }
 
 .pb-loop-btn.is-active {
     color: #4f9650;

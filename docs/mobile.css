@@ -1615,20 +1615,14 @@ input[type="range"]::-moz-range-thumb {
     font-size: 0.85rem; line-height: 1; cursor: pointer;
 }
 .pb-loop-btn.is-active { color: #4f9650; border-color: rgba(79, 150, 80, 0.6); background: rgba(79, 150, 80, 0.1); }
+/* Icon-only transport button (section-repeat) — center the glyph, touch-sized */
+.pb-icon-btn { display: inline-flex; align-items: center; justify-content: center; padding: 4px; width: 32px; height: 30px; }
+.pb-icon-btn svg { display: block; }
+/* Key shift dropdown: match the rate <select>; tint when transposed */
+.pb-key-select.is-active { color: var(--accent-color); border-color: var(--accent-color); }
 
-/* Key shift (♭/♯ transpose) — buttons padded up for touch */
-.pb-key { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 2px; }
-.pb-key-btn {
-    background: transparent; color: var(--text-secondary);
-    border: 1px solid var(--glass-border); border-radius: var(--radius-xs);
-    padding: 5px 10px; font-size: 0.9rem; line-height: 1; cursor: pointer;
-}
-.pb-key-val {
-    min-width: 22px; text-align: center;
-    font-size: 0.75rem; font-weight: 700; font-variant-numeric: tabular-nums;
-    color: var(--text-secondary);
-}
-.pb-key-val.is-active { color: var(--accent-color); }
+/* Key shift transpose container in the playback transport */
+.pb-key { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; }
 .rec-import-btn { margin-left: auto; font-size: 0.72rem; padding: 2px 8px; }
 .rec-label-input {
     flex: 1 1 auto; min-width: 0; background: transparent; color: var(--text-primary);
