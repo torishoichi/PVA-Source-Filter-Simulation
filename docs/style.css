@@ -3808,6 +3808,42 @@ body.learn-drawer-open { overflow: hidden; }
 .learn-lesson-title { flex: 1 1 auto; font-size: 0.82rem; }
 
 /* ===== Harmonic EQ (per-harmonic graphic equalizer) ===== */
+/* Harmonic EQ as a floating overlay docked top-right inside the spectrum canvas.
+   Light translucent panel so the faders/text stay readable over the white spectrum.
+   Absolutely positioned → expanding it never changes layout height (no sticky-drop). */
+.he-overlay {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 4;
+    width: max-content;
+    max-width: min(320px, calc(100% - 16px));
+    background: rgba(255, 254, 249, 0.93); /* --canvas-bg, slightly see-through */
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.10);
+    -webkit-backdrop-filter: blur(3px);
+    backdrop-filter: blur(3px);
+}
+/* Collapsed = compact pill (just the summary) */
+.he-overlay:not([open]) {
+    background: var(--bg-elev);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+.he-overlay > .collapsible-summary {
+    padding: 6px 12px;
+    gap: 8px;
+}
+.he-overlay > .collapsible-summary .tracker-title { font-size: 0.78rem; }
+.he-overlay[open] { width: 320px; }
+/* Tighten the open panel so it sits neatly in the corner */
+.he-overlay .collapsible-body { padding: 10px 12px; }
+.he-overlay .he-presets { margin-bottom: 8px; }
+.he-overlay .he-faders { gap: 2px; padding: 4px 0 0; }
+.he-overlay .he-fader { min-width: 20px; }
+.he-overlay .he-fader .he-slider { height: 78px; }
+.he-overlay .hint { font-size: 0.62rem; margin-top: 6px; line-height: 1.35; }
+
 .he-summary-badge {
     margin-left: auto;
 }

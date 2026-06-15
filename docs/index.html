@@ -297,23 +297,6 @@
                     </div>
                 </details>
 
-                <details id="panel-harmonic-eq" class="harmonic-eq-panel glass-dark collapsible">
-                    <summary class="collapsible-summary">
-                        <h3 class="tracker-title">Harmonic EQ <span class="tooltip"
-                                data-tooltip="各倍音（H1〜H10）の強度を個別に増減するイコライザーです。声帯波形が生み出す自然なスペクトル傾斜の上に補正をかけ、特定の倍音を強調・抑制した時に音色とパワースペクトルがどう変わるかを学べます。H1-H2 バランスや Singer's Formant 帯の倍音強調などの実験に。">[?]</span></h3>
-                        <span class="status-badge he-summary-badge" id="he-badge">Flat</span>
-                    </summary>
-                    <div class="collapsible-body">
-                        <div class="he-presets" id="he-presets">
-                            <button type="button" class="he-preset-btn" data-eq-preset="flat">Flat</button>
-                            <button type="button" class="he-preset-btn" data-eq-preset="bright">明るい</button>
-                            <button type="button" class="he-preset-btn" data-eq-preset="dark">暗い</button>
-                        </div>
-                        <div class="he-faders" id="he-faders"></div>
-                        <div class="hint">各倍音バーをドラッグで増減。音色とパワースペクトル表示に即反映。Flat で全体リセット（PC はバーをダブルクリックで個別リセット）</div>
-                    </div>
-                </details>
-
             </details>
 
             <!-- Filter Panel -->
@@ -529,6 +512,25 @@
                     <canvas id="spectrogram-canvas" style="display:none;"></canvas>
                     <button id="log-scale-toggle" class="axis-scale-btn"
                         title="Toggle Log/Linear frequency scale">Log</button>
+                    <!-- Harmonic EQ — floating overlay docked top-right of the spectrum
+                         (high-freq region is mostly empty). Collapsed by default = compact
+                         pill; expands in place. Controls are ID-wired, so position is free. -->
+                    <details id="panel-harmonic-eq" class="harmonic-eq-panel he-overlay collapsible">
+                        <summary class="collapsible-summary">
+                            <h3 class="tracker-title">Harmonic EQ <span class="tooltip"
+                                    data-tooltip="各倍音（H1〜H10）の強度を個別に増減するイコライザーです。声帯波形が生み出す自然なスペクトル傾斜の上に補正をかけ、特定の倍音を強調・抑制した時に音色とパワースペクトルがどう変わるかを学べます。H1-H2 バランスや Singer's Formant 帯の倍音強調などの実験に。">[?]</span></h3>
+                            <span class="status-badge he-summary-badge" id="he-badge">Flat</span>
+                        </summary>
+                        <div class="collapsible-body">
+                            <div class="he-presets" id="he-presets">
+                                <button type="button" class="he-preset-btn" data-eq-preset="flat">Flat</button>
+                                <button type="button" class="he-preset-btn" data-eq-preset="bright">明るい</button>
+                                <button type="button" class="he-preset-btn" data-eq-preset="dark">暗い</button>
+                            </div>
+                            <div class="he-faders" id="he-faders"></div>
+                            <div class="hint">各倍音バーをドラッグで増減。Flat で全体リセット（バーをダブルクリックで個別リセット）</div>
+                        </div>
+                    </details>
                     <div class="axis-labels x-axis">
                         <span>0Hz</span>
                         <span>1kHz</span>
