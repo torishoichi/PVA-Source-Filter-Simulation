@@ -1842,6 +1842,7 @@ async function setMicDevice(deviceId) {
         echoCancellation: false,
         noiseSuppression: false,
         autoGainControl: false,
+        channelCount: 1, // mono capture → up-mixes to both ears on playback (see startMic)
     };
     if (state.micDeviceId) audioConstraints.deviceId = { exact: state.micDeviceId };
     try {
@@ -5513,6 +5514,11 @@ els.btnMic.addEventListener('click', async () => {
                 echoCancellation: false,
                 noiseSuppression: false,
                 autoGainControl: false,
+                // Force single-channel capture. Some input devices expose 2 channels
+                // with the mic wired to only one → the recording is stereo-with-one-
+                // silent-channel and plays in a single earphone. A true-mono capture
+                // up-mixes to both ears on playback.
+                channelCount: 1,
             };
             if (state.micDeviceId) audioConstraints.deviceId = { exact: state.micDeviceId };
             micStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
@@ -6451,9 +6457,13 @@ async function playRecording(id) {
     playbackDurationSec = (rec.durationMs || 0) / 1000; // WebM element duration can be Infinity
     if (els.pbTotalTime) els.pbTotalTime.textContent = playbackDurationSec.toFixed(1) + 's';
 
+    // Recordings always start in repeat mode (full-track loop, A=0/B=1). The user
+    // wants playback to loop by default; the A–B button can still toggle it off mid-play.
+    playbackLoop = true;
     playbackLoopA = 0;
     playbackLoopB = 1;
     updateLoopRegionUi();
+    if (els.pbLoop) els.pbLoop.classList.add('is-active');
     if (els.playbackControls) els.playbackControls.classList.toggle('is-loop', playbackLoop);
 
     playbackAudio.addEventListener('loadedmetadata', () => {
@@ -7006,7 +7016,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — shown in the bottom-right corner (bump on each release)
-const APP_VERSION = 'v1.29.0';
+const APP_VERSION = 'v1.30.0';
 (() => {
     // The #app-version element is parsed AFTER this script tag, so on first run
     // getElementById returns null. Defer to DOMContentLoaded if the DOM isn't ready.

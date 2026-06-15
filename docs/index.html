@@ -538,7 +538,12 @@
                         <span>5kHz</span>
                     </div>
                 </div>
+            </section>
 
+            <!-- Analysis area (full-width, below Source/Filter): recordings + live mic
+                 metrics. Split out of the visualizer panel so expanding these no longer
+                 pushes The Voice Source / The Filter far down the page. -->
+            <section class="panel analysis-panel glass">
                 <!-- Recordings panel: local-only voice recordings (IndexedDB).
                      Top-level & open by default — sits in the same eyeline as the Rec
                      button so the record→listen loop is discoverable (was buried two
