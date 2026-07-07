@@ -249,7 +249,7 @@ const state = {
         amDepth: 4,       // %
         waveform: 'sine'  // 'sine' | 'triangle' | 'sawtooth'
     },
-    viewMode: 'spectrum', // 'spectrum' | 'spectrogram'
+    viewMode: 'spectrum', // 'spectrum' | 'spectrogram' | 'waveform'
     vowelSpace: {
         trail: [],       // [{t, f1, f2}], rolling ~1.5s
         language: 'jp',  // 'jp' | 'en'
@@ -325,6 +325,7 @@ const els = {
     micMethodSelect: document.getElementById('mic-formant-method'),
     canvas: document.getElementById('spectrum-canvas'),
     spectrogramCanvas: document.getElementById('spectrogram-canvas'),
+    waveformCanvas: document.getElementById('waveform-canvas'),
     viewTabs: document.getElementById('view-tabs'),
     vibratoPanel: document.getElementById('vibrato-panel'),
     vibratoCanvas: document.getElementById('vibrato-canvas'),
@@ -1974,13 +1975,116 @@ function renderSpectrogram() {
     ctx.putImageData(spectrogramImageData, 0, 0);
 }
 
+// ---------- Waveform (oscilloscope) view ----------
+let waveformCtx = null;
+let _waveTime = null;
+
+function getWaveformCtx() {
+    if (!waveformCtx && els.waveformCanvas) {
+        waveformCtx = els.waveformCanvas.getContext('2d');
+    }
+    return waveformCtx;
+}
+
+function drawWaveformView() {
+    const ctx = getWaveformCtx();
+    if (!ctx || !els.waveformCanvas) return;
+    const cv = els.waveformCanvas;
+    if (cv.width !== cv.clientWidth || cv.height !== cv.clientHeight) {
+        cv.width = cv.clientWidth;
+        cv.height = cv.clientHeight;
+    }
+    const w = cv.width, h = cv.height;
+    if (!w || !h) return;
+    if (state.isMicActive && state.isMicPaused) return; // freeze last frame while paused
+
+    // Time-domain samples: playback reads the decoded buffer (iOS-safe),
+    // live mic reads micAnalyser, synth reads the master analyser.
+    let data = null;
+    let sr = audioCtx ? audioCtx.sampleRate : 44100;
+    const pbActive = !!playbackAudio && !playbackAudio.paused && !!playbackBuffer;
+    if (pbActive) {
+        data = getPlaybackTimeWindow(playbackAudio.currentTime, 4096);
+        sr = playbackBuffer.sampleRate;
+    } else {
+        const an = (state.isMicActive && micAnalyser) ? micAnalyser
+            : (isPlaying && analyser) ? analyser : null;
+        if (an) {
+            if (!_waveTime || _waveTime.length !== an.fftSize) _waveTime = new Float32Array(an.fftSize);
+            an.getFloatTimeDomainData(_waveTime);
+            data = _waveTime;
+        }
+    }
+
+    ctx.fillStyle = '#FFFEF9';
+    ctx.fillRect(0, 0, w, h);
+    const mid = h / 2;
+
+    if (!data) {
+        ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+        ctx.beginPath(); ctx.moveTo(0, mid); ctx.lineTo(w, mid); ctx.stroke();
+        return;
+    }
+
+    // Rising zero-crossing trigger in the first half → periodic waveforms hold still
+    const view = data.length >> 1; // samples shown (~46ms @44.1k for 4096-buffer)
+    let trig = 0;
+    for (let i = 1; i < view; i++) {
+        if (data[i - 1] <= 0 && data[i] > 0) { trig = i; break; }
+    }
+
+    let peak = 0;
+    for (let i = 0; i < view; i++) {
+        const v = Math.abs(data[trig + i]);
+        if (v > peak) peak = v;
+    }
+    // Auto vertical scale, capped so near-silence doesn't blow noise up to full height
+    const gain = (h * 0.45) / Math.max(peak, 0.02);
+
+    // Time grid every 10 ms
+    const durMs = (view / sr) * 1000;
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'left';
+    for (let t = 10; t < durMs; t += 10) {
+        const x = (t / durMs) * w;
+        ctx.strokeStyle = 'rgba(0,0,0,0.08)';
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+        ctx.fillStyle = 'rgba(0,0,0,0.45)';
+        ctx.fillText(`${t}ms`, x + 3, h - 6);
+    }
+    // Zero line
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+    ctx.beginPath(); ctx.moveTo(0, mid); ctx.lineTo(w, mid); ctx.stroke();
+
+    // Trace
+    ctx.strokeStyle = 'rgba(33, 150, 243, 0.9)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 0; i < view; i++) {
+        const x = (i / (view - 1)) * w;
+        const y = mid - data[trig + i] * gain;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    // Peak readout (linear amplitude, analyser full scale = 1.0)
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.textAlign = 'right';
+    ctx.fillText(`peak ${peak.toFixed(3)}`, w - 8, 14);
+    ctx.textAlign = 'left';
+}
+
 function applyViewMode(mode) {
-    state.viewMode = mode === 'spectrogram' ? 'spectrogram' : 'spectrum';
+    state.viewMode = (mode === 'spectrogram' || mode === 'waveform') ? mode : 'spectrum';
     if (els.canvas) els.canvas.style.display = state.viewMode === 'spectrum' ? 'block' : 'none';
     if (els.spectrogramCanvas) els.spectrogramCanvas.style.display = state.viewMode === 'spectrogram' ? 'block' : 'none';
-    // Spectrum's x-axis (freq labels) is meaningless in spectrogram mode (freq is on Y there)
+    if (els.waveformCanvas) els.waveformCanvas.style.display = state.viewMode === 'waveform' ? 'block' : 'none';
+    // Spectrum's x-axis (freq labels) is meaningless in spectrogram (freq on Y) and waveform (X is time)
     const xAxis = document.querySelector('.canvas-container .axis-labels.x-axis');
-    if (xAxis) xAxis.style.display = state.viewMode === 'spectrogram' ? 'none' : (state.logScale ? 'none' : '');
+    if (xAxis) xAxis.style.display = state.viewMode !== 'spectrum' ? 'none' : (state.logScale ? 'none' : '');
+    // Log/Linear toggle applies to freq axes only — hide in waveform (time axis) mode
+    const logBtn = document.getElementById('log-scale-toggle');
+    if (logBtn) logBtn.style.display = state.viewMode === 'waveform' ? 'none' : '';
     if (els.viewTabs) {
         els.viewTabs.querySelectorAll('.view-tab').forEach(btn => {
             const active = btn.dataset.view === state.viewMode;
@@ -3986,6 +4090,13 @@ function drawVisualizer() {
         initSpectrogramBuffer();
         pushSpectrogramColumn();
         renderSpectrogram();
+        animationId = requestAnimationFrame(drawVisualizer);
+        return;
+    }
+
+    // Waveform (oscilloscope) view: replace spectrum drawing entirely
+    if (state.viewMode === 'waveform') {
+        drawWaveformView();
         animationId = requestAnimationFrame(drawVisualizer);
         return;
     }
@@ -7016,7 +7127,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — shown in the bottom-right corner (bump on each release)
-const APP_VERSION = 'v1.31.0';
+const APP_VERSION = 'v1.32.0';
 (() => {
     // The #app-version element is parsed AFTER this script tag, so on first run
     // getElementById returns null. Defer to DOMContentLoaded if the DOM isn't ready.
