@@ -3563,6 +3563,24 @@ body.learn-drawer-open { overflow: hidden; }
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
     cursor: pointer;
 }
+/* DAW-style waveform behind the seek slider (canvas injected by main.js once
+   the recording is decoded). The wrap grows and the slider track goes
+   transparent so the envelope itself becomes the scrub surface. */
+.pb-wave {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    pointer-events: none;
+    border-radius: var(--radius-xs);
+    background: rgba(0, 0, 0, 0.28);
+}
+.pb-seek-wrap.has-wave { height: 44px; }
+.pb-seek-wrap.has-wave .pb-seek::-webkit-slider-runnable-track { background: transparent; }
+.pb-seek-wrap.has-wave .pb-seek::-moz-range-track { background: transparent; }
+.pb-seek-wrap.has-wave .pb-region { height: 100%; }
 /* A–B loop region highlight overlaid on the seek track */
 .pb-region {
     position: absolute;

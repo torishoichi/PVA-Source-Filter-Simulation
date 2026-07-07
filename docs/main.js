@@ -5842,6 +5842,7 @@ function rebuildKeyShiftedPlayback() {
         // transposed audio that is actually heard.
         playbackBuffer = buf;
         playbackFormantTrack = null;
+        buildPbWaveImage();
         computePlaybackPitchContour(buf);
 
         // Swap src on the SAME <audio> element (keeps the EQ MediaElementSource and
@@ -6512,6 +6513,99 @@ function getPlaybackTimeWindow(timeSec, N) {
     return _pbLpcWin;
 }
 
+// ---------- Playback waveform — DAW-style seek background ----------
+// Min/max peak envelope of the whole recording rendered behind the seek slider,
+// like an audio region in Logic. The static envelope is cached on an offscreen
+// canvas; the per-frame redraw is just a blit + played-region highlight +
+// playhead line. The canvas is created lazily inside #pb-seek-wrap so PC and
+// mobile both get it without HTML changes.
+let pbWaveCanvas = null;
+let pbWaveCtx = null;
+let pbWaveImage = null;   // offscreen canvas holding the static envelope
+
+function ensurePbWaveCanvas() {
+    if (pbWaveCanvas || !els.pbSeekWrap) return pbWaveCanvas;
+    pbWaveCanvas = document.createElement('canvas');
+    pbWaveCanvas.className = 'pb-wave';
+    pbWaveCanvas.setAttribute('aria-hidden', 'true');
+    els.pbSeekWrap.insertBefore(pbWaveCanvas, els.pbSeekWrap.firstChild);
+    pbWaveCtx = pbWaveCanvas.getContext('2d');
+    return pbWaveCanvas;
+}
+
+function buildPbWaveImage() {
+    if (!ensurePbWaveCanvas()) return;
+    if (!playbackBuffer) { clearPbWave(); return; }
+    els.pbSeekWrap.classList.add('has-wave');
+    const dpr = window.devicePixelRatio || 1;
+    const w = Math.max(1, Math.round(els.pbSeekWrap.clientWidth * dpr));
+    const h = Math.max(1, Math.round(els.pbSeekWrap.clientHeight * dpr));
+    const ch = playbackBuffer.getChannelData(0);
+    const n = ch.length;
+
+    // Global peak (strided — full scan of a 60s file is unnecessary)
+    let peak = 0;
+    const pkStep = Math.max(1, Math.floor(n / 500000));
+    for (let i = 0; i < n; i += pkStep) { const v = Math.abs(ch[i]); if (v > peak) peak = v; }
+    const scale = (h / 2) * 0.92 / Math.max(peak, 0.01);
+
+    const img = document.createElement('canvas');
+    img.width = w; img.height = h;
+    const ictx = img.getContext('2d');
+    ictx.fillStyle = '#6fbf70';
+    const mid = h / 2;
+    const spp = n / w;
+    for (let x = 0; x < w; x++) {
+        const s0 = Math.floor(x * spp);
+        const s1 = Math.min(n, Math.floor((x + 1) * spp) + 1);
+        const step = Math.max(1, Math.floor((s1 - s0) / 64)); // cap work per column
+        let mn = Infinity, mx = -Infinity;
+        for (let i = s0; i < s1; i += step) { const v = ch[i]; if (v < mn) mn = v; if (v > mx) mx = v; }
+        if (mn > mx) { mn = 0; mx = 0; }
+        const y0 = mid - mx * scale;
+        ictx.fillRect(x, y0, 1, Math.max(1, (mid - mn * scale) - y0));
+    }
+    pbWaveImage = img;
+    pbWaveCanvas.width = w;
+    pbWaveCanvas.height = h;
+    renderPbWave();
+}
+
+function renderPbWave() {
+    if (!pbWaveCtx || !pbWaveCanvas || !els.pbSeekWrap) return;
+    const w = pbWaveCanvas.width, h = pbWaveCanvas.height;
+    // Rebuild the cached envelope if the wrap was resized since it was drawn
+    const dpr = window.devicePixelRatio || 1;
+    const wantW = Math.max(1, Math.round(els.pbSeekWrap.clientWidth * dpr));
+    if (pbWaveImage && Math.abs(wantW - w) > 2) { buildPbWaveImage(); return; }
+    pbWaveCtx.clearRect(0, 0, w, h);
+    if (!pbWaveImage) return;
+    const dur = pbDuration();
+    const frac = (playbackAudio && dur > 0)
+        ? Math.min(1, (playbackAudio.currentTime || 0) / dur) : 0;
+    const px = Math.round(frac * w);
+    pbWaveCtx.globalAlpha = 0.35;              // unplayed: dim
+    pbWaveCtx.drawImage(pbWaveImage, 0, 0);
+    if (px > 0) {                              // played: full strength
+        pbWaveCtx.save();
+        pbWaveCtx.beginPath();
+        pbWaveCtx.rect(0, 0, px, h);
+        pbWaveCtx.clip();
+        pbWaveCtx.globalAlpha = 1;
+        pbWaveCtx.drawImage(pbWaveImage, 0, 0);
+        pbWaveCtx.restore();
+    }
+    pbWaveCtx.globalAlpha = 1;
+    pbWaveCtx.fillStyle = 'rgba(255,255,255,0.85)';    // playhead line
+    pbWaveCtx.fillRect(Math.min(px, w - 1), 0, Math.max(1, Math.round(dpr)), h);
+}
+
+function clearPbWave() {
+    pbWaveImage = null;
+    if (pbWaveCtx && pbWaveCanvas) pbWaveCtx.clearRect(0, 0, pbWaveCanvas.width, pbWaveCanvas.height);
+    if (els.pbSeekWrap) els.pbSeekWrap.classList.remove('has-wave');
+}
+
 function updatePlaybackUi() {
     if (!playbackAudio || playbackAudio.paused) { playbackUiRaf = null; return; }
     const dur = pbDuration();
@@ -6526,6 +6620,7 @@ function updatePlaybackUi() {
         els.pbSeek.value = String(dur > 0 ? Math.round((cur / dur) * 1000) : 0);
     }
     if (els.pbCurTime) els.pbCurTime.textContent = cur.toFixed(1) + 's';
+    renderPbWave();
     // Offline spectrum at the current recording time (analysis branch; formants come
     // from the precomputed track via drawVisualizer). Speed-independent.
     if (playbackBuffer) computePlaybackSpectrum(cur);
@@ -6634,6 +6729,7 @@ async function playRecording(id) {
                 playbackDurationSec = audioBuf.duration;
                 if (els.pbTotalTime) els.pbTotalTime.textContent = playbackDurationSec.toFixed(1) + 's';
             }
+            buildPbWaveImage();
             // playbackBuffer ready → drawVisualizer analyses windows from it directly
             // (both markers and the LPC envelope curve), so no precomputed track needed.
             // Pitch Track, however, gets a high-accuracy offline contour of the whole
@@ -6662,6 +6758,7 @@ function stopPlayback() {
     playbackBufferOrig = null;            // playbackKeyShift itself persists for the next playback
     playbackAudio = null;
     playbackBuffer = null;
+    clearPbWave();
     playbackFormantTrack = null;
     playbackDurationSec = 0;
     playbackPitchContour = null;
@@ -6698,6 +6795,7 @@ if (els.pbSeek) {
         const pos = (Number(els.pbSeek.value) / 1000) * dur;
         try { playbackAudio.currentTime = pos; } catch (_) {}
         if (els.pbCurTime) els.pbCurTime.textContent = pos.toFixed(1) + 's';
+        renderPbWave();   // keep the waveform playhead in sync while paused too
     });
     // Suppress the playhead auto-update only WHILE dragging (not merely focused).
     const seekStart = () => { pbSeeking = true; };
@@ -7127,7 +7225,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — shown in the bottom-right corner (bump on each release)
-const APP_VERSION = 'v1.32.0';
+const APP_VERSION = 'v1.33.0';
 (() => {
     // The #app-version element is parsed AFTER this script tag, so on first run
     // getElementById returns null. Defer to DOMContentLoaded if the DOM isn't ready.

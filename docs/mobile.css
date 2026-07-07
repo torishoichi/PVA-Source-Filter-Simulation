@@ -1586,6 +1586,16 @@ input[type="range"]::-moz-range-thumb {
 .pb-seek::-moz-range-track { height: 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.16); }
 .pb-seek::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; margin-top: -6px; border-radius: 50%; background: #4f9650; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
 .pb-seek::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: #4f9650; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
+/* DAW-style waveform behind the seek slider (canvas injected by main.js) */
+.pb-wave {
+    position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+    z-index: 0; pointer-events: none;
+    border-radius: var(--radius-xs); background: rgba(0, 0, 0, 0.28);
+}
+.pb-seek-wrap.has-wave { height: 48px; }
+.pb-seek-wrap.has-wave .pb-seek::-webkit-slider-runnable-track { background: transparent; }
+.pb-seek-wrap.has-wave .pb-seek::-moz-range-track { background: transparent; }
+.pb-seek-wrap.has-wave .pb-region { height: 100%; }
 .pb-region {
     position: absolute; top: 50%; transform: translateY(-50%);
     height: 6px; background: rgba(79, 150, 80, 0.28); border-radius: var(--radius-xs);
