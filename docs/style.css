@@ -1365,6 +1365,39 @@ input[type=range]::-webkit-slider-thumb:hover {
     opacity: 1;
 }
 
+/* Header tooltips sit near the top of the viewport (spectrum canvas-header
+   strategy strip + Harmonic EQ overlay), so the default upward bubble gets
+   clipped off the top edge. Flip these to drop downward instead. */
+.strategy-strip .tooltip::after,
+.harmonic-eq-panel .tooltip::after {
+    bottom: auto;
+    top: 150%;
+}
+
+.strategy-strip .tooltip:hover::after,
+.harmonic-eq-panel .tooltip:hover::after {
+    transform: translateX(-50%) translateY(2px);
+}
+
+.strategy-strip .tooltip::before,
+.harmonic-eq-panel .tooltip::before {
+    bottom: auto;
+    top: 100%;
+    border-color: transparent transparent #2C2C2C transparent;
+}
+
+/* Harmonic EQ lives at the spectrum's top-right corner, so a centered bubble
+   would overflow the right edge — anchor it to the icon's right instead. */
+.harmonic-eq-panel .tooltip::after {
+    left: auto;
+    right: 0;
+    transform: none;
+}
+
+.harmonic-eq-panel .tooltip:hover::after {
+    transform: translateY(2px);
+}
+
 /* Acoustic Strategy Tracker */
 .acoustic-tracker {
     margin-top: 15px;
