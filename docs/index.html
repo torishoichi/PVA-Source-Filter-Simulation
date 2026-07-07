@@ -514,6 +514,11 @@
                     <canvas id="waveform-canvas" style="display:none;"></canvas>
                     <button id="log-scale-toggle" class="axis-scale-btn"
                         title="Toggle Log/Linear frequency scale">Log</button>
+                    <div id="wave-zoom" class="wave-zoom" style="display:none;">
+                        <button id="wave-zoom-out" type="button" title="ズームアウト（広い時間範囲）">−</button>
+                        <span id="wave-zoom-label" class="wave-zoom-label">46ms</span>
+                        <button id="wave-zoom-in" type="button" title="ズームイン（波形拡大）">＋</button>
+                    </div>
                     <!-- Harmonic EQ — floating overlay docked top-right of the spectrum
                          (high-freq region is mostly empty). Collapsed by default = compact
                          pill; expands in place. Controls are ID-wired, so position is free. -->

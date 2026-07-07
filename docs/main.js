@@ -326,6 +326,10 @@ const els = {
     canvas: document.getElementById('spectrum-canvas'),
     spectrogramCanvas: document.getElementById('spectrogram-canvas'),
     waveformCanvas: document.getElementById('waveform-canvas'),
+    waveZoom: document.getElementById('wave-zoom'),
+    waveZoomIn: document.getElementById('wave-zoom-in'),
+    waveZoomOut: document.getElementById('wave-zoom-out'),
+    waveZoomLabel: document.getElementById('wave-zoom-label'),
     viewTabs: document.getElementById('view-tabs'),
     vibratoPanel: document.getElementById('vibrato-panel'),
     vibratoCanvas: document.getElementById('vibrato-canvas'),
@@ -1978,12 +1982,39 @@ function renderSpectrogram() {
 // ---------- Waveform (oscilloscope) view ----------
 let waveformCtx = null;
 let _waveTime = null;
+// Time-axis zoom: displayed window length in ms. Zoomed in → a few cycles
+// (oscilloscope); zoomed out during playback → up to the whole file (DAW-like).
+const WAVE_MS_MIN = 2;
+const WAVE_MS_DEFAULT = 46;
+let waveViewMs = WAVE_MS_DEFAULT;
 
 function getWaveformCtx() {
     if (!waveformCtx && els.waveformCanvas) {
         waveformCtx = els.waveformCanvas.getContext('2d');
     }
     return waveformCtx;
+}
+
+function waveMaxMs() {
+    // Playback reads the decoded buffer → can zoom out to the full file.
+    // Live sources only have the analyser's fftSize worth of history.
+    if (playbackAudio && playbackBuffer) {
+        return Math.max(WAVE_MS_MIN, playbackBuffer.duration * 1000);
+    }
+    const an = (state.isMicActive && micAnalyser) ? micAnalyser : analyser;
+    const fft = an ? an.fftSize : 4096;
+    const sr = audioCtx ? audioCtx.sampleRate : 44100;
+    return (fft / sr) * 1000;
+}
+
+function setWaveZoom(ms) {
+    waveViewMs = Math.min(waveMaxMs(), Math.max(WAVE_MS_MIN, ms));
+    if (els.waveZoomLabel) {
+        els.waveZoomLabel.textContent = waveViewMs >= 1000
+            ? (waveViewMs / 1000).toFixed(1) + 's'
+            : Math.round(waveViewMs) + 'ms';
+    }
+    if (state.viewMode === 'waveform') drawWaveformView();
 }
 
 function drawWaveformView() {
@@ -1998,21 +2029,35 @@ function drawWaveformView() {
     if (!w || !h) return;
     if (state.isMicActive && state.isMicPaused) return; // freeze last frame while paused
 
-    // Time-domain samples: playback reads the decoded buffer (iOS-safe),
-    // live mic reads micAnalyser, synth reads the master analyser.
-    let data = null;
+    // Source samples: playback reads the decoded buffer directly around the
+    // playhead (iOS-safe, any zoom width); live mic reads micAnalyser; synth
+    // reads the master analyser. `start` may run past the array — out-of-range
+    // samples render as 0.
+    let src = null, len = 0, start = 0, count = 0;
+    let centered = false;  // playback: window centered on the playhead
     let sr = audioCtx ? audioCtx.sampleRate : 44100;
-    const pbActive = !!playbackAudio && !playbackAudio.paused && !!playbackBuffer;
-    if (pbActive) {
-        data = getPlaybackTimeWindow(playbackAudio.currentTime, 4096);
+    if (playbackAudio && playbackBuffer) {
         sr = playbackBuffer.sampleRate;
+        src = playbackBuffer.getChannelData(0);
+        len = src.length;
+        count = Math.min(len, Math.max(16, Math.round(waveViewMs / 1000 * sr)));
+        start = Math.round((playbackAudio.currentTime || 0) * sr) - (count >> 1);
+        centered = true;
     } else {
         const an = (state.isMicActive && micAnalyser) ? micAnalyser
             : (isPlaying && analyser) ? analyser : null;
         if (an) {
             if (!_waveTime || _waveTime.length !== an.fftSize) _waveTime = new Float32Array(an.fftSize);
             an.getFloatTimeDomainData(_waveTime);
-            data = _waveTime;
+            src = _waveTime;
+            len = src.length;
+            count = Math.min(len, Math.max(16, Math.round(waveViewMs / 1000 * sr)));
+            // Rising zero-crossing trigger in the headroom before the displayed
+            // window → periodic waveforms hold still
+            const searchEnd = Math.max(1, len - count);
+            for (let i = 1; i < searchEnd; i++) {
+                if (src[i - 1] <= 0 && src[i] > 0) { start = i; break; }
+            }
         }
     }
 
@@ -2020,52 +2065,90 @@ function drawWaveformView() {
     ctx.fillRect(0, 0, w, h);
     const mid = h / 2;
 
-    if (!data) {
+    if (!src || !count) {
         ctx.strokeStyle = 'rgba(0,0,0,0.25)';
         ctx.beginPath(); ctx.moveTo(0, mid); ctx.lineTo(w, mid); ctx.stroke();
         return;
     }
 
-    // Rising zero-crossing trigger in the first half → periodic waveforms hold still
-    const view = data.length >> 1; // samples shown (~46ms @44.1k for 4096-buffer)
-    let trig = 0;
-    for (let i = 1; i < view; i++) {
-        if (data[i - 1] <= 0 && data[i] > 0) { trig = i; break; }
-    }
-
     let peak = 0;
-    for (let i = 0; i < view; i++) {
-        const v = Math.abs(data[trig + i]);
+    const pkStep = Math.max(1, Math.floor(count / 20000));
+    for (let i = 0; i < count; i += pkStep) {
+        const idx = start + i;
+        const v = (idx >= 0 && idx < len) ? Math.abs(src[idx]) : 0;
         if (v > peak) peak = v;
     }
     // Auto vertical scale, capped so near-silence doesn't blow noise up to full height
     const gain = (h * 0.45) / Math.max(peak, 0.02);
 
-    // Time grid every 10 ms
-    const durMs = (view / sr) * 1000;
+    // Adaptive time grid — pick a 1/2/5-series tick giving >= 70px spacing.
+    // Live view labels relative ms; playback labels absolute file time.
+    const durMs = (count / sr) * 1000;
+    const TICKS = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 30000, 60000];
+    let tick = TICKS[TICKS.length - 1];
+    for (const t of TICKS) { if ((t / durMs) * w >= 70) { tick = t; break; } }
+    const ms0 = centered ? (start / sr) * 1000 : 0;
+    const fmtT = (ms) => {
+        if (!centered && durMs < 1000) return Math.round(ms) + 'ms';
+        const dec = tick >= 1000 ? 0 : tick >= 100 ? 1 : tick >= 10 ? 2 : 3;
+        return (ms / 1000).toFixed(dec) + 's';
+    };
     ctx.font = '10px sans-serif';
     ctx.textAlign = 'left';
-    for (let t = 10; t < durMs; t += 10) {
-        const x = (t / durMs) * w;
+    for (let t = Math.max(0, Math.ceil(ms0 / tick) * tick); t < ms0 + durMs; t += tick) {
+        const x = ((t - ms0) / durMs) * w;
+        if (x < 1) continue;
         ctx.strokeStyle = 'rgba(0,0,0,0.08)';
         ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
         ctx.fillStyle = 'rgba(0,0,0,0.45)';
-        ctx.fillText(`${t}ms`, x + 3, h - 6);
+        ctx.fillText(fmtT(t), x + 3, h - 6);
     }
     // Zero line
     ctx.strokeStyle = 'rgba(0,0,0,0.25)';
     ctx.beginPath(); ctx.moveTo(0, mid); ctx.lineTo(w, mid); ctx.stroke();
 
-    // Trace
-    ctx.strokeStyle = 'rgba(33, 150, 243, 0.9)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    for (let i = 0; i < view; i++) {
-        const x = (i / (view - 1)) * w;
-        const y = mid - data[trig + i] * gain;
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    // Trace — polyline when zoomed in; min/max envelope per pixel column when
+    // there are many samples per pixel (zoomed-out / whole-file view)
+    const spp = count / w;
+    if (spp > 3) {
+        ctx.fillStyle = 'rgba(33, 150, 243, 0.8)';
+        for (let x = 0; x < w; x++) {
+            const s0 = start + Math.floor(x * spp);
+            const s1 = start + Math.min(count, Math.floor((x + 1) * spp) + 1);
+            const step = Math.max(1, Math.floor((s1 - s0) / 256)); // cap work per column
+            let mn = Infinity, mx = -Infinity;
+            for (let i = s0; i < s1; i += step) {
+                const v = (i >= 0 && i < len) ? src[i] : 0;
+                if (v < mn) mn = v;
+                if (v > mx) mx = v;
+            }
+            if (mn > mx) { mn = 0; mx = 0; }
+            const y0 = mid - mx * gain;
+            ctx.fillRect(x, y0, 1, Math.max(1, (mid - mn * gain) - y0));
+        }
+    } else {
+        ctx.strokeStyle = 'rgba(33, 150, 243, 0.9)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        for (let i = 0; i < count; i++) {
+            const idx = start + i;
+            const v = (idx >= 0 && idx < len) ? src[idx] : 0;
+            const x = (i / (count - 1)) * w;
+            const y = mid - v * gain;
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
     }
-    ctx.stroke();
+
+    // Playback: playhead marker at the window center + current time
+    if (centered) {
+        ctx.strokeStyle = 'rgba(220, 70, 60, 0.75)';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(w / 2, 0); ctx.lineTo(w / 2, h); ctx.stroke();
+        ctx.fillStyle = 'rgba(220, 70, 60, 0.9)';
+        ctx.textAlign = 'center';
+        ctx.fillText(((playbackAudio.currentTime || 0)).toFixed(2) + 's', w / 2, 12);
+    }
 
     // Peak readout (linear amplitude, analyser full scale = 1.0)
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
@@ -2085,6 +2168,7 @@ function applyViewMode(mode) {
     // Log/Linear toggle applies to freq axes only — hide in waveform (time axis) mode
     const logBtn = document.getElementById('log-scale-toggle');
     if (logBtn) logBtn.style.display = state.viewMode === 'waveform' ? 'none' : '';
+    if (els.waveZoom) els.waveZoom.style.display = state.viewMode === 'waveform' ? 'flex' : 'none';
     if (els.viewTabs) {
         els.viewTabs.querySelectorAll('.view-tab').forEach(btn => {
             const active = btn.dataset.view === state.viewMode;
@@ -6604,6 +6688,19 @@ function renderPbWave() {
     pbWaveCtx.fillRect(Math.min(px, w - 1), 0, Math.max(1, Math.round(dpr)), h);
 }
 
+// Waveform view: time-axis zoom — wheel over the canvas, +/- buttons,
+// double-click resets to the oscilloscope default
+if (els.waveformCanvas) {
+    els.waveformCanvas.addEventListener('wheel', (e) => {
+        if (state.viewMode !== 'waveform') return;
+        e.preventDefault();
+        setWaveZoom(waveViewMs * Math.exp(e.deltaY * 0.002));
+    }, { passive: false });
+    els.waveformCanvas.addEventListener('dblclick', () => setWaveZoom(WAVE_MS_DEFAULT));
+}
+if (els.waveZoomIn) els.waveZoomIn.addEventListener('click', () => setWaveZoom(waveViewMs / 1.5));
+if (els.waveZoomOut) els.waveZoomOut.addEventListener('click', () => setWaveZoom(waveViewMs * 1.5));
+
 function clearPbWave() {
     pbWaveImage = null;
     pbWaveImagePlayed = null;
@@ -7230,7 +7327,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — shown in the bottom-right corner (bump on each release)
-const APP_VERSION = 'v1.33.1';
+const APP_VERSION = 'v1.34.0';
 (() => {
     // The #app-version element is parsed AFTER this script tag, so on first run
     // getElementById returns null. Defer to DOMContentLoaded if the DOM isn't ready.

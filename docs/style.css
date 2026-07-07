@@ -360,8 +360,44 @@ input[type=range]::-moz-range-track {
     position: absolute;
     top: 0;
     left: 0;
-    pointer-events: none;
+    /* receives wheel events for time-axis zoom */
     background: #FFFEF9;
+}
+
+/* Waveform view: time-zoom controls (bottom-left, only in waveform mode) */
+.wave-zoom {
+    position: absolute;
+    bottom: 22px;
+    left: 8px;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    z-index: 3;
+}
+.wave-zoom button {
+    background: var(--bg-elev);
+    border: 1px solid var(--glass-border);
+    color: var(--text-secondary);
+    width: 26px;
+    height: 22px;
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-family: inherit;
+    font-weight: 600;
+    line-height: 1;
+}
+.wave-zoom button:hover {
+    color: var(--text-primary);
+    border-color: var(--accent-color);
+}
+.wave-zoom-label {
+    min-width: 48px;
+    text-align: center;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
 }
 
 /* ============================================================
