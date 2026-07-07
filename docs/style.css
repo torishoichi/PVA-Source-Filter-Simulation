@@ -3575,12 +3575,21 @@ body.learn-drawer-open { overflow: hidden; }
     z-index: 0;
     pointer-events: none;
     border-radius: var(--radius-xs);
-    background: rgba(0, 0, 0, 0.28);
+    background: rgba(10, 14, 12, 0.55);
 }
 .pb-seek-wrap.has-wave { height: 44px; }
 .pb-seek-wrap.has-wave .pb-seek::-webkit-slider-runnable-track { background: transparent; }
 .pb-seek-wrap.has-wave .pb-seek::-moz-range-track { background: transparent; }
-.pb-seek-wrap.has-wave .pb-region { height: 100%; }
+/* Over the waveform, a full-height solid tint would bury the envelope — use a
+   faint fill with hard A/B edge lines instead (Logic-style cycle range). */
+.pb-seek-wrap.has-wave .pb-region {
+    height: 100%;
+    background: rgba(79, 150, 80, 0.14);
+    border-left: 2px solid #5fd463;
+    border-right: 2px solid #5fd463;
+    box-sizing: border-box;
+    border-radius: 0;
+}
 /* A–B loop region highlight overlaid on the seek track */
 .pb-region {
     position: absolute;

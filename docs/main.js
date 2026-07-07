@@ -6521,7 +6521,8 @@ function getPlaybackTimeWindow(timeSec, N) {
 // mobile both get it without HTML changes.
 let pbWaveCanvas = null;
 let pbWaveCtx = null;
-let pbWaveImage = null;   // offscreen canvas holding the static envelope
+let pbWaveImage = null;        // offscreen envelope — unplayed (light gray)
+let pbWaveImagePlayed = null;  // offscreen envelope — played (bright green)
 
 function ensurePbWaveCanvas() {
     if (pbWaveCanvas || !els.pbSeekWrap) return pbWaveCanvas;
@@ -6549,23 +6550,29 @@ function buildPbWaveImage() {
     for (let i = 0; i < n; i += pkStep) { const v = Math.abs(ch[i]); if (v > peak) peak = v; }
     const scale = (h / 2) * 0.92 / Math.max(peak, 0.01);
 
-    const img = document.createElement('canvas');
-    img.width = w; img.height = h;
-    const ictx = img.getContext('2d');
-    ictx.fillStyle = '#6fbf70';
-    const mid = h / 2;
-    const spp = n / w;
-    for (let x = 0; x < w; x++) {
-        const s0 = Math.floor(x * spp);
-        const s1 = Math.min(n, Math.floor((x + 1) * spp) + 1);
-        const step = Math.max(1, Math.floor((s1 - s0) / 64)); // cap work per column
-        let mn = Infinity, mx = -Infinity;
-        for (let i = s0; i < s1; i += step) { const v = ch[i]; if (v < mn) mn = v; if (v > mx) mx = v; }
-        if (mn > mx) { mn = 0; mx = 0; }
-        const y0 = mid - mx * scale;
-        ictx.fillRect(x, y0, 1, Math.max(1, (mid - mn * scale) - y0));
-    }
-    pbWaveImage = img;
+    // Two cached tints — unplayed vs played — instead of alpha-dimming one color:
+    // distinct hue + brightness reads at a glance even under the A–B region tint.
+    const mkImg = (color) => {
+        const img = document.createElement('canvas');
+        img.width = w; img.height = h;
+        const ictx = img.getContext('2d');
+        ictx.fillStyle = color;
+        const mid = h / 2;
+        const spp = n / w;
+        for (let x = 0; x < w; x++) {
+            const s0 = Math.floor(x * spp);
+            const s1 = Math.min(n, Math.floor((x + 1) * spp) + 1);
+            const step = Math.max(1, Math.floor((s1 - s0) / 64)); // cap work per column
+            let mn = Infinity, mx = -Infinity;
+            for (let i = s0; i < s1; i += step) { const v = ch[i]; if (v < mn) mn = v; if (v > mx) mx = v; }
+            if (mn > mx) { mn = 0; mx = 0; }
+            const y0 = mid - mx * scale;
+            ictx.fillRect(x, y0, 1, Math.max(1, (mid - mn * scale) - y0));
+        }
+        return img;
+    };
+    pbWaveImage = mkImg('rgba(255, 255, 255, 0.62)');
+    pbWaveImagePlayed = mkImg('#5fd463');
     pbWaveCanvas.width = w;
     pbWaveCanvas.height = h;
     renderPbWave();
@@ -6584,24 +6591,22 @@ function renderPbWave() {
     const frac = (playbackAudio && dur > 0)
         ? Math.min(1, (playbackAudio.currentTime || 0) / dur) : 0;
     const px = Math.round(frac * w);
-    pbWaveCtx.globalAlpha = 0.35;              // unplayed: dim
-    pbWaveCtx.drawImage(pbWaveImage, 0, 0);
-    if (px > 0) {                              // played: full strength
+    pbWaveCtx.drawImage(pbWaveImage, 0, 0);            // unplayed: light gray
+    if (px > 0 && pbWaveImagePlayed) {                 // played: bright green
         pbWaveCtx.save();
         pbWaveCtx.beginPath();
         pbWaveCtx.rect(0, 0, px, h);
         pbWaveCtx.clip();
-        pbWaveCtx.globalAlpha = 1;
-        pbWaveCtx.drawImage(pbWaveImage, 0, 0);
+        pbWaveCtx.drawImage(pbWaveImagePlayed, 0, 0);
         pbWaveCtx.restore();
     }
-    pbWaveCtx.globalAlpha = 1;
-    pbWaveCtx.fillStyle = 'rgba(255,255,255,0.85)';    // playhead line
+    pbWaveCtx.fillStyle = '#fff';                      // playhead line
     pbWaveCtx.fillRect(Math.min(px, w - 1), 0, Math.max(1, Math.round(dpr)), h);
 }
 
 function clearPbWave() {
     pbWaveImage = null;
+    pbWaveImagePlayed = null;
     if (pbWaveCtx && pbWaveCanvas) pbWaveCtx.clearRect(0, 0, pbWaveCanvas.width, pbWaveCanvas.height);
     if (els.pbSeekWrap) els.pbSeekWrap.classList.remove('has-wave');
 }
@@ -7225,7 +7230,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — shown in the bottom-right corner (bump on each release)
-const APP_VERSION = 'v1.33.0';
+const APP_VERSION = 'v1.33.1';
 (() => {
     // The #app-version element is parsed AFTER this script tag, so on first run
     // getElementById returns null. Defer to DOMContentLoaded if the DOM isn't ready.
