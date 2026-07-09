@@ -336,6 +336,7 @@ const els = {
     ovZoomIn: document.getElementById('ov-zoom-in'),
     ovZoomOut: document.getElementById('ov-zoom-out'),
     ovZoomLabel: document.getElementById('ov-zoom-label'),
+    ovLoop: document.getElementById('ov-loop'),
     h1MeterPanel: document.getElementById('panel-h1-meter'),
     h1MeterBody: document.getElementById('h1-meter-body'),
     h1MeterCanvas: document.getElementById('h1-meter-canvas'),
@@ -2181,6 +2182,7 @@ let _ovSrcRef = null;
 let ovViewStart = 0;      // zoom window left edge (seconds), when ovViewDur > 0
 let ovViewDur = 0;        // zoom window length (seconds); 0 = full source
 let _ovVs = 0, _ovVd = 0; // window as applied on the last draw (seek/wheel mapping)
+let ovLoopOn = false;     // loop playback over the currently-visible range
 
 // Source priority: recording-in-progress (live tap) > decoded playback buffer
 // > preview of the last mic recording (kept until the next rec/playback).
@@ -2272,10 +2274,12 @@ function drawOverviewView() {
     const dur = src.n / src.sr;
     const cur = (src.pb && playbackAudio) ? (playbackAudio.currentTime || 0) : 0;
 
-    // Zoom window, clamped; auto-scroll to keep the playhead / recording head visible
+    // Zoom window, clamped; auto-scroll to keep the playhead / recording head
+    // visible — EXCEPT while looping the visible range, where the window is the
+    // loop boundary and must stay put.
     let vd = ovViewDur > 0 ? Math.min(ovViewDur, dur) : dur;
     let vs = Math.max(0, Math.min(ovViewStart, dur - vd));
-    if (ovViewDur > 0) {
+    if (ovViewDur > 0 && !(ovLoopOn && src.pb)) {
         if (src.pb && playbackAudio && !playbackAudio.paused && (cur < vs || cur > vs + vd)) {
             vs = Math.max(0, Math.min(cur - vd * 0.2, dur - vd));
             ovViewStart = vs;
@@ -2338,6 +2342,18 @@ function drawOverviewView() {
     if (_ovImg) ctx.drawImage(_ovImg, 0, 0);
 
     if (src.pb) {
+        // Loop-the-visible-range indicator: the whole window is the loop, so
+        // frame its edges in green (auto-scroll is off while looping).
+        if (ovLoopOn) {
+            ctx.fillStyle = 'rgba(79, 150, 80, 0.7)';
+            ctx.fillRect(0, 0, 2, h);
+            ctx.fillRect(w - 2, 0, 2, h);
+            ctx.fillStyle = 'rgba(79, 150, 80, 0.9)';
+            ctx.font = '600 10px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('⟳ LOOP', w / 2, h - 6);
+            ctx.textAlign = 'left';
+        }
         // Played portion (green) up to the playhead + red playhead line
         const px = Math.round(tx(cur));
         if (px > 0 && _ovImgPlayed) {
@@ -2386,6 +2402,7 @@ function applyViewMode(mode) {
     if (logBtn) logBtn.style.display = (state.viewMode === 'waveform' || state.viewMode === 'overview') ? 'none' : '';
     if (els.waveZoom) els.waveZoom.style.display = state.viewMode === 'waveform' ? 'flex' : 'none';
     if (els.ovZoom) els.ovZoom.style.display = state.viewMode === 'overview' ? 'flex' : 'none';
+    if (els.ovLoop) els.ovLoop.style.display = state.viewMode === 'overview' ? 'inline-flex' : 'none';
     if (els.viewTabs) {
         els.viewTabs.querySelectorAll('.view-tab').forEach(btn => {
             const active = btn.dataset.view === state.viewMode;
@@ -7246,6 +7263,29 @@ if (els.ovZoomOut) els.ovZoomOut.addEventListener('click', () => {
     const dur = src.n / src.sr, vd0 = _ovVd || dur;
     ovZoomTo(_ovVs + vd0 / 2 - (vd0 * 1.5) / 2, vd0 * 1.5, dur);
 });
+// Loop the currently-visible range. Snaps ovViewStart/Dur to the applied
+// window so the loop boundary matches exactly what's on screen, then jumps the
+// playhead into the window if it's currently outside it.
+if (els.ovLoop) {
+    els.ovLoop.addEventListener('click', () => {
+        ovLoopOn = !ovLoopOn;
+        els.ovLoop.classList.toggle('is-active', ovLoopOn);
+        if (ovLoopOn) {
+            // Loop range = the visible window; keep tracking zoom/pan afterwards
+            // (ovViewStart/Dur are updated by ovZoomTo). 0 = full track.
+            if (playbackAudio && playbackBuffer && _ovSrcRef === playbackBuffer) {
+                const dur = pbDuration();
+                const ld = ovViewDur > 0 ? Math.min(ovViewDur, dur) : dur;
+                const ls = Math.max(0, Math.min(ovViewStart, dur - ld));
+                const cur = playbackAudio.currentTime || 0;
+                if (cur < ls || cur >= ls + ld) {
+                    try { playbackAudio.currentTime = ls; } catch (_) {}
+                }
+            }
+        }
+        drawOverviewView();
+    });
+}
 
 // H1 Meter: paint immediately when the panel is opened (the raf loop may be idle)
 if (els.h1MeterPanel) {
@@ -7404,10 +7444,19 @@ function updatePlaybackUi() {
     if (!playbackAudio || playbackAudio.paused) { playbackUiRaf = null; return; }
     const dur = pbDuration();
     const cur = playbackAudio.currentTime || 0;
-    // Section loop: wrap back to A when the playhead reaches B (full-track loop
-    // with B≈1 is handled by the 'ended' listener instead).
-    if (playbackLoop && dur > 0 && playbackLoopB < 0.999
+    // Overview view-range loop: cycle over the currently-visible zoom window.
+    // Takes precedence over the A–B section loop while active.
+    if (ovLoopOn && dur > 0) {
+        const ld = ovViewDur > 0 ? Math.min(ovViewDur, dur) : dur;
+        const ls = Math.max(0, Math.min(ovViewStart, dur - ld));
+        const le = ls + ld;
+        if (cur >= le - 0.02 || cur < ls - 0.05) {
+            playbackAudio.currentTime = ls;
+        }
+    } else if (playbackLoop && dur > 0 && playbackLoopB < 0.999
         && cur >= playbackLoopB * dur - 0.02) {
+        // Section loop: wrap back to A when the playhead reaches B (full-track
+        // loop with B≈1 is handled by the 'ended' listener instead).
         playbackAudio.currentTime = playbackLoopA * dur;
     }
     if (els.pbSeek && !pbSeeking) {
@@ -7473,7 +7522,13 @@ async function playRecording(id) {
         }
     });
     playbackAudio.addEventListener('ended', () => {
-        if (playbackLoop) {
+        if (ovLoopOn) {
+            // Full-range view loop reached the track end → restart at window start
+            const dur = pbDuration();
+            const ld = ovViewDur > 0 ? Math.min(ovViewDur, dur) : dur;
+            playbackAudio.currentTime = Math.max(0, Math.min(ovViewStart, dur - ld));
+            playbackAudio.play().catch(() => {});
+        } else if (playbackLoop) {
             playbackAudio.currentTime = playbackLoopA * pbDuration();
             playbackAudio.play().catch(() => {});
         } else {
@@ -8019,7 +8074,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — shown in the bottom-right corner (bump on each release)
-const APP_VERSION = 'v1.35.0';
+const APP_VERSION = 'v1.36.0';
 (() => {
     // The #app-version element is parsed AFTER this script tag, so on first run
     // getElementById returns null. Defer to DOMContentLoaded if the DOM isn't ready.

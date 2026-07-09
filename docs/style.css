@@ -376,6 +376,34 @@ input[type=range]::-moz-range-track {
     touch-action: none;
 }
 
+/* Overview: loop-the-visible-range toggle, bottom-right (zoom is bottom-left) */
+.ov-loop-btn {
+    position: absolute;
+    bottom: 22px;
+    right: 8px;
+    z-index: 3;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 26px;
+    background: var(--bg-elev);
+    border: 1px solid var(--glass-border);
+    color: var(--text-secondary);
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+}
+.ov-loop-btn svg { display: block; }
+.ov-loop-btn:hover {
+    color: var(--text-primary);
+    border-color: var(--accent-color);
+}
+.ov-loop-btn.is-active {
+    color: #4f9650;
+    border-color: rgba(79, 150, 80, 0.6);
+    background: rgba(79, 150, 80, 0.14);
+}
+
 /* Waveform view: time-zoom controls (bottom-left, only in waveform mode) */
 .wave-zoom {
     position: absolute;
