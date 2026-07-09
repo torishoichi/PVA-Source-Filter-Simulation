@@ -364,6 +364,18 @@ input[type=range]::-moz-range-track {
     background: #FFFEF9;
 }
 
+#overview-canvas {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    background: #FFFEF9;
+    /* whole canvas acts as a seek surface */
+    cursor: pointer;
+    touch-action: none;
+}
+
 /* Waveform view: time-zoom controls (bottom-left, only in waveform mode) */
 .wave-zoom {
     position: absolute;
@@ -1415,7 +1427,8 @@ input[type=range]::-webkit-slider-thumb:hover {
    strategy strip + Harmonic EQ overlay), so the default upward bubble gets
    clipped off the top edge. Flip these to drop downward instead. */
 .strategy-strip .tooltip::after,
-.harmonic-eq-panel .tooltip::after {
+.harmonic-eq-panel .tooltip::after,
+.h1-meter-panel .tooltip::after {
     bottom: auto;
     top: 150%;
 }
@@ -1426,7 +1439,8 @@ input[type=range]::-webkit-slider-thumb:hover {
 }
 
 .strategy-strip .tooltip::before,
-.harmonic-eq-panel .tooltip::before {
+.harmonic-eq-panel .tooltip::before,
+.h1-meter-panel .tooltip::before {
     bottom: auto;
     top: 100%;
     border-color: transparent transparent #2C2C2C transparent;
@@ -1441,6 +1455,18 @@ input[type=range]::-webkit-slider-thumb:hover {
 }
 
 .harmonic-eq-panel .tooltip:hover::after {
+    transform: translateY(2px);
+}
+
+/* H1 Meter sits at the top-LEFT corner — anchor the bubble to the icon's left
+   so it can't overflow the left edge. */
+.h1-meter-panel .tooltip::after {
+    left: 0;
+    right: auto;
+    transform: none;
+}
+
+.h1-meter-panel .tooltip:hover::after {
     transform: translateY(2px);
 }
 
@@ -3953,6 +3979,73 @@ body.learn-drawer-open { overflow: hidden; }
 .he-summary-badge {
     margin-left: auto;
 }
+
+/* H1 Meter — precision f0 readout, floating draggable+resizable window.
+   Default position is just below Harmonic EQ (top-right); JS can override
+   left/top from a drag, and width/height from a corner resize. */
+.h1-overlay {
+    position: absolute;
+    top: 44px;            /* default: below the collapsed Harmonic EQ pill */
+    right: 8px;
+    left: auto;
+    z-index: 5;
+    width: 300px;
+    background: rgba(255, 254, 249, 0.95);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    -webkit-backdrop-filter: blur(3px);
+    backdrop-filter: blur(3px);
+}
+.h1-overlay:not([open]) {
+    width: max-content;
+    background: var(--bg-elev);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+.h1-overlay.is-dragging,
+.h1-overlay.is-resizing {
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22);
+    -webkit-user-select: none;
+    user-select: none;
+}
+.h1-overlay > .collapsible-summary {
+    padding: 6px 12px;
+    gap: 8px;
+    cursor: move;         /* title bar is the drag handle */
+}
+.h1-overlay > .collapsible-summary .tracker-title { font-size: 0.78rem; }
+
+.h1-summary-badge {
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
+}
+
+.h1-meter-body {
+    position: relative;
+    padding: 0 12px 12px;
+}
+
+.h1-meter-canvas {
+    display: block;
+    width: 100%;
+    height: 148px;        /* JS overwrites on resize */
+}
+
+/* Resize grip — bottom-right corner, diagonal lines */
+.h1-resize-handle {
+    position: absolute;
+    right: 2px;
+    bottom: 2px;
+    width: 16px;
+    height: 16px;
+    cursor: nwse-resize;
+    background:
+        linear-gradient(135deg, transparent 0 45%, var(--text-secondary) 45% 55%, transparent 55% 100%),
+        linear-gradient(135deg, transparent 0 70%, var(--text-secondary) 70% 80%, transparent 80% 100%);
+    opacity: 0.4;
+    border-radius: 0 0 var(--radius-md) 0;
+}
+.h1-resize-handle:hover { opacity: 0.7; }
 
 .he-presets {
     display: flex;

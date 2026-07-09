@@ -505,6 +505,7 @@
                             <button class="view-tab is-active" data-view="spectrum" type="button" role="tab" aria-selected="true">Spectrum</button>
                             <button class="view-tab" data-view="spectrogram" type="button" role="tab" aria-selected="false">Spectrogram</button>
                             <button class="view-tab" data-view="waveform" type="button" role="tab" aria-selected="false">Waveform</button>
+                            <button class="view-tab" data-view="overview" type="button" role="tab" aria-selected="false">Overview</button>
                         </div>
                     </div>
                 </div>
@@ -512,6 +513,7 @@
                     <canvas id="spectrum-canvas"></canvas>
                     <canvas id="spectrogram-canvas" style="display:none;"></canvas>
                     <canvas id="waveform-canvas" style="display:none;"></canvas>
+                    <canvas id="overview-canvas" style="display:none;"></canvas>
                     <button id="log-scale-toggle" class="axis-scale-btn"
                         title="Toggle Log/Linear frequency scale">Log</button>
                     <div id="wave-zoom" class="wave-zoom" style="display:none;">
@@ -519,6 +521,26 @@
                         <span id="wave-zoom-label" class="wave-zoom-label">46ms</span>
                         <button id="wave-zoom-in" type="button" title="ズームイン（波形拡大）">＋</button>
                     </div>
+                    <div id="ov-zoom" class="wave-zoom" style="display:none;">
+                        <button id="ov-zoom-out" type="button" title="ズームアウト（広い時間範囲）">−</button>
+                        <span id="ov-zoom-label" class="wave-zoom-label">Full</span>
+                        <button id="ov-zoom-in" type="button" title="ズームイン（波形拡大）">＋</button>
+                    </div>
+                    <!-- H1 Meter — precision f0 (first harmonic) readout. Floating window:
+                         drag the title bar to move, drag the bottom-right corner to resize.
+                         Collapsed = pill with a live Hz badge; expands to a big numeric
+                         readout + nearest-note cents gauge + short history trace. -->
+                    <details id="panel-h1-meter" class="h1-meter-panel h1-overlay collapsible" open>
+                        <summary class="collapsible-summary" id="h1-meter-drag">
+                            <h3 class="tracker-title">H1 Meter <span class="tooltip"
+                                    data-tooltip="第1倍音 H1（＝基本周波数 f0）を高精度に読み取るメーターです。長窓 YIN + 放物線補間 + メディアン平滑で実効 0.1〜0.3 Hz の読み取り精度。大きな数値表示・最寄り音名とのセント差・±50¢ の微差ゲージ・直近4秒の履歴トレースを表示します。シンセ音・マイク入力・録音再生のすべてで動作します。タイトルバーをドラッグで移動、右下角をドラッグでサイズ変更。">[?]</span></h3>
+                            <span class="status-badge h1-summary-badge" id="h1-badge">—</span>
+                        </summary>
+                        <div class="h1-meter-body" id="h1-meter-body">
+                            <canvas id="h1-meter-canvas" class="h1-meter-canvas"></canvas>
+                            <div class="h1-resize-handle" id="h1-resize-handle" title="サイズ変更"></div>
+                        </div>
+                    </details>
                     <!-- Harmonic EQ — floating overlay docked top-right of the spectrum
                          (high-freq region is mostly empty). Collapsed by default = compact
                          pill; expands in place. Controls are ID-wired, so position is free. -->

@@ -249,7 +249,7 @@ const state = {
         amDepth: 4,       // %
         waveform: 'sine'  // 'sine' | 'triangle' | 'sawtooth'
     },
-    viewMode: 'spectrum', // 'spectrum' | 'spectrogram' | 'waveform'
+    viewMode: 'spectrum', // 'spectrum' | 'spectrogram' | 'waveform' | 'overview'
     vowelSpace: {
         trail: [],       // [{t, f1, f2}], rolling ~1.5s
         language: 'jp',  // 'jp' | 'en'
@@ -331,6 +331,15 @@ const els = {
     waveZoomOut: document.getElementById('wave-zoom-out'),
     waveZoomLabel: document.getElementById('wave-zoom-label'),
     viewTabs: document.getElementById('view-tabs'),
+    overviewCanvas: document.getElementById('overview-canvas'),
+    ovZoom: document.getElementById('ov-zoom'),
+    ovZoomIn: document.getElementById('ov-zoom-in'),
+    ovZoomOut: document.getElementById('ov-zoom-out'),
+    ovZoomLabel: document.getElementById('ov-zoom-label'),
+    h1MeterPanel: document.getElementById('panel-h1-meter'),
+    h1MeterBody: document.getElementById('h1-meter-body'),
+    h1MeterCanvas: document.getElementById('h1-meter-canvas'),
+    h1Badge: document.getElementById('h1-badge'),
     vibratoPanel: document.getElementById('vibrato-panel'),
     vibratoCanvas: document.getElementById('vibrato-canvas'),
     pitchTrackPanel: document.getElementById('pitch-track-panel'),
@@ -2157,18 +2166,226 @@ function drawWaveformView() {
     ctx.textAlign = 'left';
 }
 
+// ---------- Overview view — whole-file waveform, DAW-style ----------
+// Min/max envelope of the full source with playhead / A–B region / seeking
+// (playback) or a live-growing trace (mic recording, see the ScriptProcessor
+// tap next to startRecording). Supports time-axis zoom: wheel = zoom around
+// the cursor, horizontal scroll = pan, +/- buttons, double-click = full view.
+// While zoomed the time grid is RELATIVE — 0 s at the window's left edge —
+// so a phrase can be measured directly. Envelope images are cached per
+// (source, length, size, window); per-frame cost is a blit + a few lines.
+let overviewCtx = null;
+let _ovImg = null, _ovImgPlayed = null;
+let _ovKey = '';
+let _ovSrcRef = null;
+let ovViewStart = 0;      // zoom window left edge (seconds), when ovViewDur > 0
+let ovViewDur = 0;        // zoom window length (seconds); 0 = full source
+let _ovVs = 0, _ovVd = 0; // window as applied on the last draw (seek/wheel mapping)
+
+// Source priority: recording-in-progress (live tap) > decoded playback buffer
+// > preview of the last mic recording (kept until the next rec/playback).
+function overviewSource() {
+    if (ovRecBuf && ovRecLen > 256 && (ovRecActive || !playbackBuffer)) {
+        return { ref: ovRecBuf, data: ovRecBuf, n: ovRecLen, sr: ovRecSr, live: ovRecActive, pb: false };
+    }
+    if (playbackBuffer) {
+        const data = playbackBuffer.getChannelData(0);
+        return { ref: playbackBuffer, data, n: data.length, sr: playbackBuffer.sampleRate, live: false, pb: true };
+    }
+    return null;
+}
+
+function getOverviewCtx() {
+    if (!overviewCtx && els.overviewCanvas) overviewCtx = els.overviewCanvas.getContext('2d');
+    return overviewCtx;
+}
+
+// Envelope of data[i0..i1) across w columns. Playback gets the two-tone pair
+// (unplayed gray / played green); mic recording gets a single green image.
+function buildOverviewImages(data, i0, i1, w, h, single) {
+    const n = i1 - i0;
+    // Peak over the visible range (strided) so zoomed-in views use full height
+    let peak = 0;
+    const pkStep = Math.max(1, Math.floor(n / 500000));
+    for (let i = i0; i < i1; i += pkStep) { const v = Math.abs(data[i]); if (v > peak) peak = v; }
+    const scale = (h / 2) * 0.86 / Math.max(peak, 0.01);
+    const mkImg = (color) => {
+        const img = document.createElement('canvas');
+        img.width = w; img.height = h;
+        const ictx = img.getContext('2d');
+        ictx.fillStyle = color;
+        const mid = h / 2;
+        const spp = n / w;
+        for (let x = 0; x < w; x++) {
+            const s0 = i0 + Math.floor(x * spp);
+            const s1 = Math.min(i1, i0 + Math.floor((x + 1) * spp) + 1);
+            const step = Math.max(1, Math.floor((s1 - s0) / 128)); // cap work per column
+            let mn = Infinity, mx = -Infinity;
+            for (let i = s0; i < s1; i += step) { const v = data[i]; if (v < mn) mn = v; if (v > mx) mx = v; }
+            if (mn > mx) { mn = 0; mx = 0; }
+            const y0 = mid - mx * scale;
+            ictx.fillRect(x, y0, 1, Math.max(1, (mid - mn * scale) - y0));
+        }
+        return img;
+    };
+    if (single) {
+        _ovImg = mkImg('#43a047');
+        _ovImgPlayed = null;
+    } else {
+        _ovImg = mkImg('rgba(110, 116, 110, 0.5)');   // unplayed: neutral gray on cream
+        _ovImgPlayed = mkImg('#43a047');              // played: green, matches the seek bar
+    }
+}
+
+function ovZoomTo(vs, vd, dur) {
+    ovViewDur = (vd >= dur || vd <= 0) ? 0 : Math.max(0.05, vd);
+    const d = ovViewDur > 0 ? ovViewDur : dur;
+    ovViewStart = Math.max(0, Math.min(vs, dur - d));
+    drawOverviewView();
+}
+
+function drawOverviewView() {
+    const ctx = getOverviewCtx();
+    if (!ctx || !els.overviewCanvas) return;
+    const cv = els.overviewCanvas;
+    if (cv.width !== cv.clientWidth || cv.height !== cv.clientHeight) {
+        cv.width = cv.clientWidth;
+        cv.height = cv.clientHeight;
+    }
+    const w = cv.width, h = cv.height;
+    if (!w || !h) return;
+    ctx.fillStyle = '#FFFEF9';
+    ctx.fillRect(0, 0, w, h);
+
+    const src = overviewSource();
+    if (!src) {
+        ctx.fillStyle = 'rgba(0,0,0,0.45)';
+        ctx.font = '13px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Rec ボタンで録音するか、Recordings の録音を再生すると全体波形を表示します', w / 2, h / 2);
+        ctx.textAlign = 'left';
+        if (els.ovZoomLabel) els.ovZoomLabel.textContent = 'Full';
+        return;
+    }
+    if (_ovSrcRef !== src.ref) { ovViewStart = 0; ovViewDur = 0; _ovSrcRef = src.ref; }
+
+    const dur = src.n / src.sr;
+    const cur = (src.pb && playbackAudio) ? (playbackAudio.currentTime || 0) : 0;
+
+    // Zoom window, clamped; auto-scroll to keep the playhead / recording head visible
+    let vd = ovViewDur > 0 ? Math.min(ovViewDur, dur) : dur;
+    let vs = Math.max(0, Math.min(ovViewStart, dur - vd));
+    if (ovViewDur > 0) {
+        if (src.pb && playbackAudio && !playbackAudio.paused && (cur < vs || cur > vs + vd)) {
+            vs = Math.max(0, Math.min(cur - vd * 0.2, dur - vd));
+            ovViewStart = vs;
+        } else if (src.live && dur > vs + vd) {
+            vs = dur - vd;   // pin the growing head to the right edge
+            ovViewStart = vs;
+        }
+    }
+    _ovVs = vs; _ovVd = vd;
+    if (els.ovZoomLabel) {
+        els.ovZoomLabel.textContent = ovViewDur > 0
+            ? (vd >= 1 ? vd.toFixed(1) + 's' : Math.round(vd * 1000) + 'ms')
+            : 'Full';
+    }
+
+    const i0 = Math.max(0, Math.floor(vs * src.sr));
+    const i1 = Math.max(i0 + 2, Math.min(src.n, Math.ceil((vs + vd) * src.sr)));
+    const key = `${src.n}|${w}x${h}|${i0}-${i1}|${src.pb ? 'pb' : 'rec'}`;
+    if (key !== _ovKey || !_ovImg) { buildOverviewImages(src.data, i0, i1, w, h, !src.pb); _ovKey = key; }
+
+    const tx = (t) => ((t - vs) / vd) * w;  // seconds -> view x
+
+    // A–B loop region behind the waveform (playback only)
+    if (src.pb && playbackLoop) {
+        const ax = tx(playbackLoopA * dur), bx = tx(playbackLoopB * dur);
+        if (bx > 0 && ax < w) {
+            ctx.fillStyle = 'rgba(95, 212, 99, 0.12)';
+            ctx.fillRect(Math.max(0, ax), 0, Math.min(w, bx) - Math.max(0, ax), h);
+            ctx.fillStyle = 'rgba(46, 125, 50, 0.6)';
+            ctx.font = '10px sans-serif';
+            if (ax >= 0 && ax < w) { ctx.fillRect(Math.round(ax), 0, 1, h); ctx.fillText('A', Math.round(ax) + 3, 11); }
+            if (bx > 0 && bx <= w) { ctx.fillRect(Math.max(0, Math.round(bx) - 1), 0, 1, h); ctx.fillText('B', Math.max(0, Math.round(bx) - 1) - 9, 11); }
+        }
+    }
+
+    // Time grid — 1/2/5 series, >= 70 px apart. RELATIVE to the window's left
+    // edge (0 s at left) so a zoomed selection reads as elapsed time.
+    const durMs = vd * 1000;
+    if (durMs > 0) {
+        const TICKS = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 30000, 60000];
+        let tick = TICKS[TICKS.length - 1];
+        for (const t of TICKS) { if ((t / durMs) * w >= 70) { tick = t; break; } }
+        const dec = tick >= 1000 ? 0 : tick >= 100 ? 1 : tick >= 10 ? 2 : 3;
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'left';
+        for (let t = 0; t < durMs; t += tick) {
+            const x = (t / durMs) * w;
+            if (x >= 1) {
+                ctx.strokeStyle = 'rgba(0,0,0,0.08)';
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+            }
+            ctx.fillStyle = 'rgba(0,0,0,0.45)';
+            ctx.fillText((t / 1000).toFixed(dec) + 's', x + 3, h - 6);
+        }
+    }
+
+    // Zero line + envelope
+    ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+    ctx.beginPath(); ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2); ctx.stroke();
+    if (_ovImg) ctx.drawImage(_ovImg, 0, 0);
+
+    if (src.pb) {
+        // Played portion (green) up to the playhead + red playhead line
+        const px = Math.round(tx(cur));
+        if (px > 0 && _ovImgPlayed) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(0, 0, Math.min(px, w), h);
+            ctx.clip();
+            ctx.drawImage(_ovImgPlayed, 0, 0);
+            ctx.restore();
+        }
+        if (px >= 0 && px <= w) {
+            ctx.fillStyle = 'rgba(220, 70, 60, 0.9)';
+            ctx.fillRect(Math.min(px, w - 1), 0, 1, h);
+            ctx.font = '10px sans-serif';
+            const flip = px > w - 60;
+            ctx.textAlign = flip ? 'right' : 'left';
+            ctx.fillText(cur.toFixed(2) + 's', Math.min(px, w - 1) + (flip ? -4 : 4), 12);
+            ctx.textAlign = 'left';
+        }
+    } else {
+        // Mic recording: red REC indicator while live, gray preview label after
+        ctx.font = '600 11px sans-serif';
+        ctx.textAlign = 'right';
+        if (src.live) {
+            ctx.fillStyle = 'rgba(211, 47, 47, 0.9)';
+            ctx.fillText('● REC ' + dur.toFixed(1) + 's / ' + (REC_MAX_MS / 1000) + 's', w - 8, 14);
+        } else {
+            ctx.fillStyle = 'rgba(0,0,0,0.45)';
+            ctx.fillText('録音プレビュー ' + dur.toFixed(1) + 's', w - 8, 14);
+        }
+        ctx.textAlign = 'left';
+    }
+}
+
 function applyViewMode(mode) {
-    state.viewMode = (mode === 'spectrogram' || mode === 'waveform') ? mode : 'spectrum';
+    state.viewMode = (mode === 'spectrogram' || mode === 'waveform' || mode === 'overview') ? mode : 'spectrum';
     if (els.canvas) els.canvas.style.display = state.viewMode === 'spectrum' ? 'block' : 'none';
     if (els.spectrogramCanvas) els.spectrogramCanvas.style.display = state.viewMode === 'spectrogram' ? 'block' : 'none';
     if (els.waveformCanvas) els.waveformCanvas.style.display = state.viewMode === 'waveform' ? 'block' : 'none';
-    // Spectrum's x-axis (freq labels) is meaningless in spectrogram (freq on Y) and waveform (X is time)
+    if (els.overviewCanvas) els.overviewCanvas.style.display = state.viewMode === 'overview' ? 'block' : 'none';
+    // Spectrum's x-axis (freq labels) is meaningless in spectrogram (freq on Y) and waveform/overview (X is time)
     const xAxis = document.querySelector('.canvas-container .axis-labels.x-axis');
     if (xAxis) xAxis.style.display = state.viewMode !== 'spectrum' ? 'none' : (state.logScale ? 'none' : '');
-    // Log/Linear toggle applies to freq axes only — hide in waveform (time axis) mode
+    // Log/Linear toggle applies to freq axes only — hide in time-axis modes
     const logBtn = document.getElementById('log-scale-toggle');
-    if (logBtn) logBtn.style.display = state.viewMode === 'waveform' ? 'none' : '';
+    if (logBtn) logBtn.style.display = (state.viewMode === 'waveform' || state.viewMode === 'overview') ? 'none' : '';
     if (els.waveZoom) els.waveZoom.style.display = state.viewMode === 'waveform' ? 'flex' : 'none';
+    if (els.ovZoom) els.ovZoom.style.display = state.viewMode === 'overview' ? 'flex' : 'none';
     if (els.viewTabs) {
         els.viewTabs.querySelectorAll('.view-tab').forEach(btn => {
             const active = btn.dataset.view === state.viewMode;
@@ -2179,6 +2396,205 @@ function applyViewMode(mode) {
     if (state.viewMode === 'spectrogram') {
         initSpectrogramBuffer();
         renderSpectrogram();
+    }
+    // Immediate paint (hint text or static waveform) even while the raf loop is idle
+    if (state.viewMode === 'overview') drawOverviewView();
+}
+
+// ---------- H1 Meter — precision f0 (first harmonic) readout ----------
+// Long-window YIN (dsp-core, parabolic interpolation) + median-of-5 + EMA gives
+// an effective read precision of ~0.1–0.3 Hz across the vocal range — well under
+// the 0.5 Hz target. Sources by priority: playback buffer slice (offline,
+// iOS-safe) > live mic analyser > synth master analyser. The summary badge
+// updates even while the panel is collapsed; the open panel draws a large Hz
+// readout, nearest-note cents deviation, a ±50¢ fine gauge and a ~4 s trace.
+const H1M_INTERVAL_MS = 90;    // measurement cadence
+const H1M_WIN_PB = 8192;       // playback: offline analysis window (~171–186 ms)
+const H1M_TRACE_MS = 4000;     // history strip length
+let _h1mLastAt = 0;
+let _h1mWin = null;
+const _h1mMedBuf = [];
+let h1mHz = -1;                // smoothed display value, -1 = no signal
+const h1mTrace = [];           // [{t, hz|null}]
+let h1mCtx = null;
+
+// Equal-tempered nearest-note frequency (A4 = 440), gauge/trace center
+function nearestNoteHz(freq) {
+    return 440 * Math.pow(2, Math.round(12 * Math.log2(freq / 440)) / 12);
+}
+
+function h1MeterMeasure() {
+    if (typeof DSP === 'undefined' || !DSP.yin) return -1;
+    if (playbackAudio && !playbackAudio.paused && playbackBuffer) {
+        const sr = playbackBuffer.sampleRate;
+        const ch = playbackBuffer.getChannelData(0);
+        const N = Math.min(H1M_WIN_PB, ch.length);
+        let start = Math.round((playbackAudio.currentTime || 0) * sr) - (N >> 1);
+        start = Math.max(0, Math.min(ch.length - N, start));
+        if (!_h1mWin || _h1mWin.length !== N) _h1mWin = new Float32Array(N);
+        for (let i = 0; i < N; i++) _h1mWin[i] = ch[start + i];
+        const r = DSP.yin(_h1mWin, sr, { fMax: 1200 });
+        return (r.hz > 0 && r.clarity > 0.5) ? r.hz : -1;
+    }
+    const an = (state.isMicActive && micAnalyser) ? micAnalyser
+        : (isPlaying && analyser) ? analyser : null;
+    if (!an || !audioCtx) return -1;
+    const N = an.fftSize;
+    if (!_h1mWin || _h1mWin.length !== N) _h1mWin = new Float32Array(N);
+    an.getFloatTimeDomainData(_h1mWin);
+    const r = DSP.yin(_h1mWin, audioCtx.sampleRate, { fMax: 1200 });
+    return (r.hz > 0 && r.clarity > 0.5) ? r.hz : -1;
+}
+
+function updateH1Meter(nowT) {
+    if (!els.h1MeterCanvas) return;
+    if (state.isMicActive && state.isMicPaused) return; // freeze last reading
+    if (nowT - _h1mLastAt >= H1M_INTERVAL_MS) {
+        _h1mLastAt = nowT;
+        const raw = h1MeterMeasure();
+        if (raw > 0) {
+            _h1mMedBuf.push(raw);
+            if (_h1mMedBuf.length > 5) _h1mMedBuf.shift();
+            const sorted = _h1mMedBuf.slice().sort((a, b) => a - b);
+            const med = sorted[sorted.length >> 1];
+            h1mHz = (h1mHz > 0) ? 0.6 * h1mHz + 0.4 * med : med;
+        } else {
+            _h1mMedBuf.length = 0;
+            h1mHz = -1;
+        }
+        h1mTrace.push({ t: nowT, hz: h1mHz > 0 ? h1mHz : null });
+        while (h1mTrace.length && h1mTrace[0].t < nowT - H1M_TRACE_MS) h1mTrace.shift();
+        if (els.h1Badge) els.h1Badge.textContent = h1mHz > 0 ? h1mHz.toFixed(1) + ' Hz' : '—';
+        if (els.h1MeterPanel && els.h1MeterPanel.open) drawH1Meter();
+    }
+}
+
+function drawH1Meter() {
+    const cv = els.h1MeterCanvas;
+    if (!cv) return;
+    if (!h1mCtx) h1mCtx = cv.getContext('2d');
+    const ctx = h1mCtx;
+    const dpr = window.devicePixelRatio || 1;
+    const W = cv.clientWidth || 288, H = cv.clientHeight || 158;
+    if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) {
+        cv.width = Math.round(W * dpr);
+        cv.height = Math.round(H * dpr);
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    const hz = h1mHz;
+    const voiced = hz > 0;
+    const target = voiced ? nearestNoteHz(hz) : 0;
+    const dev = voiced ? 1200 * Math.log2(hz / target) : 0; // cents, ±50
+    const inTune = voiced && Math.abs(dev) <= 5;
+    const accent = inTune ? '#2e7d32' : '#b26a00';
+
+    // Layout scales with height so the resized window enlarges every section.
+    // Reference layout is 158px tall; s is the scale factor (clamped so text
+    // stays legible when the window is shrunk).
+    const s = Math.max(0.85, H / 158);
+    const readoutH = 40 * s;   // top: big Hz + note/cents
+    const gaugeH = 46 * s;     // middle: ±50¢ fine gauge
+    // trace takes the rest
+
+    // Big Hz readout (left) + note & cents (right)
+    ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#2C2C2C';
+    ctx.font = `700 ${Math.round(30 * s)}px sans-serif`;
+    ctx.fillText(voiced ? hz.toFixed(1) : '—', 4, readoutH * 0.8);
+    if (voiced) {
+        const numW = ctx.measureText(hz.toFixed(1)).width;
+        ctx.font = `600 ${Math.round(13 * s)}px sans-serif`;
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillText('Hz', 4 + numW + 5, readoutH * 0.8);
+        ctx.textAlign = 'right';
+        ctx.fillStyle = accent;
+        ctx.font = `700 ${Math.round(16 * s)}px sans-serif`;
+        ctx.fillText(freqToNote(hz), W - 4, readoutH * 0.5);
+        ctx.font = `600 ${Math.round(12 * s)}px sans-serif`;
+        ctx.fillText((dev >= 0 ? '+' : '') + dev.toFixed(1) + '¢', W - 4, readoutH * 0.85);
+        ctx.textAlign = 'left';
+    }
+
+    // Fine gauge — ±50¢ around the nearest note, ticks every 10¢
+    const gy = readoutH + gaugeH * 0.42;
+    const gx0 = 14, gx1 = W - 14;
+    const tickMaj = 7 * s, tickMin = 4 * s;
+    const labelFont = `${Math.round(9 * s)}px sans-serif`;
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(gx0, gy); ctx.lineTo(gx1, gy); ctx.stroke();
+    ctx.font = labelFont;
+    for (let c = -50; c <= 50; c += 10) {
+        const x = gx0 + ((c + 50) / 100) * (gx1 - gx0);
+        const major = c === 0;
+        ctx.strokeStyle = major ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.25)';
+        ctx.beginPath(); ctx.moveTo(x, gy - (major ? tickMaj : tickMin)); ctx.lineTo(x, gy + (major ? tickMaj : tickMin)); ctx.stroke();
+    }
+    // Gauge end labels: the Hz values at ±50¢ (i.e. the semitone boundaries)
+    const gLabelY = gy + 19 * s;
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    if (voiced) {
+        ctx.textAlign = 'left';
+        ctx.fillText((target * Math.pow(2, -50 / 1200)).toFixed(1), gx0 - 8, gLabelY);
+        ctx.textAlign = 'right';
+        ctx.fillText((target * Math.pow(2, 50 / 1200)).toFixed(1), gx1 + 8, gLabelY);
+        ctx.textAlign = 'center';
+        ctx.fillText(freqToNote(hz) + ' = ' + target.toFixed(2) + ' Hz', (gx0 + gx1) / 2, gLabelY);
+        // Needle
+        const nx = gx0 + (Math.max(-50, Math.min(50, dev)) + 50) / 100 * (gx1 - gx0);
+        ctx.fillStyle = accent;
+        ctx.beginPath();
+        ctx.moveTo(nx, gy - 3 * s);
+        ctx.lineTo(nx - 5 * s, gy - 12 * s);
+        ctx.lineTo(nx + 5 * s, gy - 12 * s);
+        ctx.closePath();
+        ctx.fill();
+    } else {
+        ctx.textAlign = 'center';
+        ctx.fillText('no signal', (gx0 + gx1) / 2, gLabelY);
+    }
+    ctx.textAlign = 'left';
+
+    // History trace — cents deviation from the CURRENT nearest note, auto-zoomed
+    // y-range (min ±12¢) so sub-Hz wobble and vibrato are both readable
+    const ty0 = readoutH + gaugeH, ty1 = H - 4;
+    const tmid = (ty0 + ty1) / 2;
+    ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+    ctx.strokeRect(0.5, ty0 + 0.5, W - 1, ty1 - ty0 - 1);
+    ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+    ctx.beginPath(); ctx.moveTo(1, tmid); ctx.lineTo(W - 1, tmid); ctx.stroke();
+    if (h1mTrace.length > 1 && target > 0) {
+        let maxDev = 0;
+        const devs = h1mTrace.map(p => {
+            if (p.hz == null) return null;
+            const d = 1200 * Math.log2(p.hz / target);
+            if (Math.abs(d) > maxDev) maxDev = Math.abs(d);
+            return d;
+        });
+        const range = Math.min(120, Math.max(12, maxDev * 1.15));
+        const tNow = h1mTrace[h1mTrace.length - 1].t;
+        ctx.strokeStyle = '#1565c0';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        let pen = false;
+        for (let i = 0; i < h1mTrace.length; i++) {
+            if (devs[i] == null) { pen = false; continue; }
+            const x = W - ((tNow - h1mTrace[i].t) / H1M_TRACE_MS) * W;
+            const y = tmid - (devs[i] / range) * (ty1 - ty0) / 2;
+            if (!pen) { ctx.moveTo(x, y); pen = true; } else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        ctx.lineWidth = 1;
+        ctx.fillStyle = 'rgba(0,0,0,0.4)';
+        ctx.font = labelFont;
+        ctx.fillText('+' + range.toFixed(0) + '¢', 4, ty0 + 10 * s);
+        ctx.fillText('−' + range.toFixed(0) + '¢', 4, ty1 - 3);
+        ctx.textAlign = 'right';
+        ctx.fillText('4s', W - 4, ty1 - 3);
+        ctx.textAlign = 'left';
     }
 }
 
@@ -4152,6 +4568,9 @@ function drawVisualizer() {
         updateVoiceQuality();
     }
 
+    // H1 precision meter — throttled internally; all sources (synth / mic / playback)
+    updateH1Meter(nowT);
+
     // Pitch Track: redraw every frame while panel open + mic active (smooth scroll)
     if (state.isMicActive && els.pitchTrackPanel && els.pitchTrackPanel.open) {
         drawPitchTrack();
@@ -4181,6 +4600,13 @@ function drawVisualizer() {
     // Waveform (oscilloscope) view: replace spectrum drawing entirely
     if (state.viewMode === 'waveform') {
         drawWaveformView();
+        animationId = requestAnimationFrame(drawVisualizer);
+        return;
+    }
+
+    // Overview (whole-file waveform) view: replace spectrum drawing entirely
+    if (state.viewMode === 'overview') {
+        drawOverviewView();
         animationId = requestAnimationFrame(drawVisualizer);
         return;
     }
@@ -5996,6 +6422,53 @@ function updateRecTimer() {
     els.micRecordTimer.textContent = (remain / 1000).toFixed(1) + 's';
 }
 
+// Live PCM tap for the Overview view — MediaRecorder yields encoded chunks,
+// not samples, so mirror the raw mic stream into a preallocated buffer while
+// recording (REC_MAX worth). PC-only (needs the overview canvas); attached on
+// record start, detached on stop. The buffer stays afterwards as a preview
+// until the next recording or playback.
+let ovRecTap = null, ovRecMute = null;
+let ovRecBuf = null, ovRecLen = 0, ovRecSr = 0, ovRecActive = false;
+
+function startOvRecTap() {
+    if (!els.overviewCanvas || !audioCtx || !micSource) return;
+    const cap = Math.ceil(audioCtx.sampleRate * REC_MAX_MS / 1000);
+    if (!ovRecBuf || ovRecBuf.length !== cap) ovRecBuf = new Float32Array(cap);
+    ovRecLen = 0;
+    ovRecSr = audioCtx.sampleRate;
+    ovRecActive = true;
+    ovRecTap = audioCtx.createScriptProcessor(4096, 1, 1);
+    ovRecTap.onaudioprocess = (e) => {
+        if (!ovRecActive || !ovRecBuf) return;
+        const inp = e.inputBuffer.getChannelData(0);
+        const n = Math.min(inp.length, ovRecBuf.length - ovRecLen);
+        if (n > 0) {
+            ovRecBuf.set(n === inp.length ? inp : inp.subarray(0, n), ovRecLen);
+            ovRecLen += n;
+        }
+    };
+    // ScriptProcessor only runs when routed to the destination — mute the route
+    ovRecMute = audioCtx.createGain();
+    ovRecMute.gain.value = 0;
+    micSource.connect(ovRecTap);
+    ovRecTap.connect(ovRecMute);
+    ovRecMute.connect(audioCtx.destination);
+}
+
+function stopOvRecTap() {
+    ovRecActive = false;   // keep ovRecBuf/ovRecLen for the preview display
+    if (ovRecTap) {
+        try { if (micSource) micSource.disconnect(ovRecTap); } catch (_) {}
+        try { ovRecTap.disconnect(); } catch (_) {}
+        ovRecTap.onaudioprocess = null;
+        ovRecTap = null;
+    }
+    if (ovRecMute) {
+        try { ovRecMute.disconnect(); } catch (_) {}
+        ovRecMute = null;
+    }
+}
+
 async function startRecording() {
     if (!micStream || !state.isMicActive) {
         alert('まずマイクを ON にしてください');
@@ -6035,10 +6508,12 @@ async function startRecording() {
         if (els.micRecordTimer) els.micRecordTimer.textContent = '';
         if (recTimerId) { clearInterval(recTimerId); recTimerId = null; }
         if (recAutoStopId) { clearTimeout(recAutoStopId); recAutoStopId = null; }
+        stopOvRecTap();
     };
 
     recStartTs = performance.now();
     mediaRecorder.start();
+    startOvRecTap();
     // Auto-expand the recordings panel so the new item is visible after stop
     if (els.recordingsPanel) els.recordingsPanel.open = true;
     if (els.btnMicRecord) els.btnMicRecord.classList.add('is-recording');
@@ -6701,6 +7176,223 @@ if (els.waveformCanvas) {
 if (els.waveZoomIn) els.waveZoomIn.addEventListener('click', () => setWaveZoom(waveViewMs / 1.5));
 if (els.waveZoomOut) els.waveZoomOut.addEventListener('click', () => setWaveZoom(waveViewMs * 1.5));
 
+// Overview view: click / drag = seek (playback source only; positions map
+// through the current zoom window). Wheel = zoom around the cursor, horizontal
+// scroll = pan, double-click = reset to full view.
+if (els.overviewCanvas) {
+    const ovSeek = (clientX) => {
+        // Seeking only makes sense when the view shows the playback buffer
+        if (!playbackAudio || !playbackBuffer || _ovSrcRef !== playbackBuffer) return;
+        const rect = els.overviewCanvas.getBoundingClientRect();
+        if (rect.width <= 0) return;
+        const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+        const dur = pbDuration();
+        if (!dur) return;
+        const t = Math.max(0, Math.min(dur, _ovVs + ratio * (_ovVd || dur)));
+        try { playbackAudio.currentTime = t; } catch (_) {}
+        if (els.pbSeek) els.pbSeek.value = String(Math.round((t / dur) * 1000));
+        if (els.pbCurTime) els.pbCurTime.textContent = t.toFixed(1) + 's';
+        renderPbWave();
+        drawOverviewView();   // immediate playhead feedback while paused
+    };
+    els.overviewCanvas.addEventListener('pointerdown', (e) => {
+        if (state.viewMode !== 'overview' || !playbackAudio) return;
+        e.preventDefault();
+        try { els.overviewCanvas.setPointerCapture(e.pointerId); } catch (_) {}
+        ovSeek(e.clientX);
+        const move = (ev) => ovSeek(ev.clientX);
+        const up = () => {
+            els.overviewCanvas.removeEventListener('pointermove', move);
+            els.overviewCanvas.removeEventListener('pointerup', up);
+            els.overviewCanvas.removeEventListener('pointercancel', up);
+        };
+        els.overviewCanvas.addEventListener('pointermove', move);
+        els.overviewCanvas.addEventListener('pointerup', up);
+        els.overviewCanvas.addEventListener('pointercancel', up);
+    });
+    els.overviewCanvas.addEventListener('wheel', (e) => {
+        if (state.viewMode !== 'overview') return;
+        const src = overviewSource();
+        if (!src) return;
+        e.preventDefault();
+        const dur = src.n / src.sr;
+        const vd0 = _ovVd || dur, vs0 = _ovVs;
+        if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+            // Horizontal scroll: pan the zoom window
+            if (ovViewDur > 0) ovZoomTo(vs0 + (e.deltaX / els.overviewCanvas.clientWidth) * vd0, vd0, dur);
+        } else {
+            // Vertical scroll: zoom, keeping the time under the cursor fixed
+            const rect = els.overviewCanvas.getBoundingClientRect();
+            const ratio = rect.width > 0 ? Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) : 0.5;
+            const tAtCursor = vs0 + ratio * vd0;
+            const vd = Math.max(0.05, Math.min(dur, vd0 * Math.exp(e.deltaY * 0.002)));
+            ovZoomTo(tAtCursor - ratio * vd, vd, dur);
+        }
+    }, { passive: false });
+    els.overviewCanvas.addEventListener('dblclick', () => {
+        const src = overviewSource();
+        if (src) ovZoomTo(0, 0, src.n / src.sr);
+    });
+}
+if (els.ovZoomIn) els.ovZoomIn.addEventListener('click', () => {
+    const src = overviewSource();
+    if (!src) return;
+    const dur = src.n / src.sr, vd0 = _ovVd || dur;
+    ovZoomTo(_ovVs + vd0 / 2 - (vd0 / 1.5) / 2, vd0 / 1.5, dur);
+});
+if (els.ovZoomOut) els.ovZoomOut.addEventListener('click', () => {
+    const src = overviewSource();
+    if (!src) return;
+    const dur = src.n / src.sr, vd0 = _ovVd || dur;
+    ovZoomTo(_ovVs + vd0 / 2 - (vd0 * 1.5) / 2, vd0 * 1.5, dur);
+});
+
+// H1 Meter: paint immediately when the panel is opened (the raf loop may be idle)
+if (els.h1MeterPanel) {
+    els.h1MeterPanel.addEventListener('toggle', () => {
+        if (els.h1MeterPanel.open) { applyH1MeterGeom(); drawH1Meter(); }
+    });
+}
+
+// ---------- H1 Meter — floating window: drag to move, corner to resize ----------
+// Position (left/top) and size (width/canvas-height) persist in localStorage so
+// the window stays where the user parked it. Dragging is thresholded so a plain
+// click on the title bar still toggles the <details> open/closed.
+const H1M_GEOM_KEY = 'h1MeterGeom';
+let h1mGeom = null;
+try { h1mGeom = JSON.parse(localStorage.getItem(H1M_GEOM_KEY)); } catch (_) {}
+
+function h1mContainer() {
+    return els.h1MeterPanel ? els.h1MeterPanel.parentElement : null; // .canvas-container
+}
+
+function applyH1MeterGeom() {
+    const p = els.h1MeterPanel, cont = h1mContainer();
+    if (!p || !cont || !h1mGeom) return;
+    const cw = cont.clientWidth, ch = cont.clientHeight;
+    const pw = h1mGeom.w || p.offsetWidth || 312;
+    // Clamp into the container so a resized canvas can't strand the window off-screen
+    const left = Math.max(0, Math.min(h1mGeom.x, cw - Math.min(pw, cw)));
+    const top = Math.max(0, Math.min(h1mGeom.y, Math.max(0, ch - 40)));
+    p.style.left = left + 'px';
+    p.style.top = top + 'px';
+    p.style.right = 'auto';
+    if (h1mGeom.w) p.style.width = Math.min(h1mGeom.w, cw) + 'px';
+    if (h1mGeom.ch && els.h1MeterCanvas) els.h1MeterCanvas.style.height = h1mGeom.ch + 'px';
+}
+
+function saveH1MeterGeom() {
+    try { localStorage.setItem(H1M_GEOM_KEY, JSON.stringify(h1mGeom)); } catch (_) {}
+}
+
+// Drag via the title bar (summary). Suppress the click-toggle only if the pointer
+// actually moved past a small threshold.
+if (els.h1MeterPanel) {
+    const drag = document.getElementById('h1-meter-drag');
+    const p = els.h1MeterPanel;
+    if (drag) {
+        let sx = 0, sy = 0, ox = 0, oy = 0, moved = false, dragging = false;
+        drag.addEventListener('pointerdown', (e) => {
+            if (e.target.closest('.tooltip')) return; // let the help icon behave normally
+            const cont = h1mContainer();
+            if (!cont) return;
+            dragging = true; moved = false;
+            const contRect = cont.getBoundingClientRect();
+            const pRect = p.getBoundingClientRect();
+            ox = pRect.left - contRect.left;
+            oy = pRect.top - contRect.top;
+            sx = e.clientX; sy = e.clientY;
+            try { drag.setPointerCapture(e.pointerId); } catch (_) {}
+        });
+        drag.addEventListener('pointermove', (e) => {
+            if (!dragging) return;
+            const dx = e.clientX - sx, dy = e.clientY - sy;
+            if (!moved && Math.hypot(dx, dy) < 4) return;
+            moved = true;
+            p.classList.add('is-dragging');
+            const cont = h1mContainer();
+            const cw = cont.clientWidth, chh = cont.clientHeight;
+            // Keep the whole panel in view, but never force top negative on a
+            // panel taller than the container (grip would then be unreachable —
+            // resize handles that separately)
+            const nx = Math.max(0, Math.min(ox + dx, cw - p.offsetWidth));
+            const ny = Math.max(0, Math.min(oy + dy, Math.max(0, chh - p.offsetHeight)));
+            p.style.left = nx + 'px'; p.style.top = ny + 'px'; p.style.right = 'auto';
+        });
+        const endDrag = (e) => {
+            if (!dragging) return;
+            dragging = false;
+            p.classList.remove('is-dragging');
+            if (moved) {
+                h1mGeom = Object.assign(h1mGeom || {}, { x: parseFloat(p.style.left) || 0, y: parseFloat(p.style.top) || 0 });
+                saveH1MeterGeom();
+            }
+        };
+        drag.addEventListener('pointerup', endDrag);
+        drag.addEventListener('pointercancel', endDrag);
+        // Cancel the toggle click that follows a real drag
+        drag.addEventListener('click', (e) => { if (moved) { e.preventDefault(); e.stopPropagation(); } }, true);
+    }
+
+    // Corner resize
+    const rh = document.getElementById('h1-resize-handle');
+    if (rh) {
+        let sx = 0, sy = 0, w0 = 0, ch0 = 0, resizing = false;
+        rh.addEventListener('pointerdown', (e) => {
+            e.preventDefault(); e.stopPropagation();
+            resizing = true;
+            sx = e.clientX; sy = e.clientY;
+            w0 = p.offsetWidth;
+            ch0 = els.h1MeterCanvas ? els.h1MeterCanvas.clientHeight : 158;
+            // Pin to left/top anchoring from the current on-screen position so a
+            // right-anchored default doesn't jump to the left edge on first resize
+            const cont = h1mContainer();
+            if (cont && !p.style.left) {
+                const cr = cont.getBoundingClientRect(), pr = p.getBoundingClientRect();
+                p.style.left = (pr.left - cr.left) + 'px';
+                p.style.top = (pr.top - cr.top) + 'px';
+                p.style.right = 'auto';
+            }
+            p.classList.add('is-resizing');
+            try { rh.setPointerCapture(e.pointerId); } catch (_) {}
+        });
+        rh.addEventListener('pointermove', (e) => {
+            if (!resizing) return;
+            const cont = h1mContainer();
+            const left = parseFloat(p.style.left) || 0;
+            const top = parseFloat(p.style.top) || 0;
+            const maxW = cont ? cont.clientWidth - left - 4 : 640;
+            // Cap canvas height so the panel bottom (summary + canvas + padding)
+            // stays inside the clipped canvas-container
+            const chrome = p.offsetHeight - (els.h1MeterCanvas ? els.h1MeterCanvas.clientHeight : 148);
+            const maxH = cont ? cont.clientHeight - top - chrome - 2 : 420;
+            const w = Math.max(220, Math.min(w0 + (e.clientX - sx), maxW));
+            const chh = Math.max(100, Math.min(ch0 + (e.clientY - sy), Math.max(100, maxH)));
+            p.style.width = w + 'px';
+            if (els.h1MeterCanvas) els.h1MeterCanvas.style.height = chh + 'px';
+            drawH1Meter();
+        });
+        const endResize = () => {
+            if (!resizing) return;
+            resizing = false;
+            p.classList.remove('is-resizing');
+            h1mGeom = Object.assign(h1mGeom || {}, {
+                x: parseFloat(p.style.left) || (h1mGeom && h1mGeom.x) || 0,
+                y: parseFloat(p.style.top) || (h1mGeom && h1mGeom.y) || 58,
+                w: p.offsetWidth,
+                ch: els.h1MeterCanvas ? els.h1MeterCanvas.clientHeight : 158
+            });
+            saveH1MeterGeom();
+            drawH1Meter();
+        };
+        rh.addEventListener('pointerup', endResize);
+        rh.addEventListener('pointercancel', endResize);
+    }
+
+    // Restore saved geometry once the layout settles
+    if (h1mGeom) requestAnimationFrame(applyH1MeterGeom);
+}
+
 function clearPbWave() {
     pbWaveImage = null;
     pbWaveImagePlayed = null;
@@ -7327,7 +8019,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — shown in the bottom-right corner (bump on each release)
-const APP_VERSION = 'v1.34.0';
+const APP_VERSION = 'v1.35.0';
 (() => {
     // The #app-version element is parsed AFTER this script tag, so on first run
     // getElementById returns null. Defer to DOMContentLoaded if the DOM isn't ready.
