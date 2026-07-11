@@ -2184,15 +2184,26 @@ let ovViewDur = 0;        // zoom window length (seconds); 0 = full source
 let _ovVs = 0, _ovVd = 0; // window as applied on the last draw (seek/wheel mapping)
 let ovLoopOn = false;     // loop playback over the currently-visible range
 
-// Source priority: recording-in-progress (live tap) > decoded playback buffer
-// > preview of the last mic recording (kept until the next rec/playback).
+// Source priority: recording-in-progress (accumulate tap) > live mic monitor
+// (rolling scope tap) > decoded playback buffer > preview of the last mic
+// recording. `gen` is a monotonic sample counter used to invalidate the
+// envelope cache each frame for live sources (roll's length is constant once
+// the window fills, so `n` alone can't detect the shifting content).
 function overviewSource() {
-    if (ovRecBuf && ovRecLen > 256 && (ovRecActive || !playbackBuffer)) {
-        return { ref: ovRecBuf, data: ovRecBuf, n: ovRecLen, sr: ovRecSr, live: ovRecActive, pb: false };
+    if (ovRecActive && ovRecBuf && ovRecLen > 256) {
+        return { ref: ovRecBuf, data: ovRecBuf, n: ovRecLen, sr: ovRecSr, live: true, gen: ovRecLen, pb: false };
+    }
+    // Live monitor yields during a playback session (the tap keeps running, but
+    // the decoded buffer + playhead take over the view).
+    if (ovMonActive && !playbackAudio && ovMonBuf && ovMonLen > 256) {
+        return { ref: ovMonBuf, data: ovMonBuf, n: ovMonLen, sr: ovMonSr, live: true, roll: true, gen: ovMonTotal, pb: false };
     }
     if (playbackBuffer) {
         const data = playbackBuffer.getChannelData(0);
         return { ref: playbackBuffer, data, n: data.length, sr: playbackBuffer.sampleRate, live: false, pb: true };
+    }
+    if (ovRecBuf && ovRecLen > 256) {
+        return { ref: ovRecBuf, data: ovRecBuf, n: ovRecLen, sr: ovRecSr, live: false, pb: false };
     }
     return null;
 }
@@ -2269,7 +2280,9 @@ function drawOverviewView() {
         if (els.ovZoomLabel) els.ovZoomLabel.textContent = 'Full';
         return;
     }
-    if (_ovSrcRef !== src.ref) { ovViewStart = 0; ovViewDur = 0; _ovSrcRef = src.ref; }
+    // On source change, reset zoom. Live monitor defaults to a 10 s history
+    // window (zoom then adjusts how many seconds of history are shown).
+    if (_ovSrcRef !== src.ref) { ovViewStart = 0; ovViewDur = src.roll ? 10 : 0; _ovSrcRef = src.ref; }
 
     const dur = src.n / src.sr;
     const cur = (src.pb && playbackAudio) ? (playbackAudio.currentTime || 0) : 0;
@@ -2297,7 +2310,7 @@ function drawOverviewView() {
 
     const i0 = Math.max(0, Math.floor(vs * src.sr));
     const i1 = Math.max(i0 + 2, Math.min(src.n, Math.ceil((vs + vd) * src.sr)));
-    const key = `${src.n}|${w}x${h}|${i0}-${i1}|${src.pb ? 'pb' : 'rec'}`;
+    const key = `${src.n}|${w}x${h}|${i0}-${i1}|${src.pb ? 'pb' : 'rec'}|${src.live ? (src.gen || 0) : 0}`;
     if (key !== _ovKey || !_ovImg) { buildOverviewImages(src.data, i0, i1, w, h, !src.pb); _ovKey = key; }
 
     const tx = (t) => ((t - vs) / vd) * w;  // seconds -> view x
@@ -2374,10 +2387,14 @@ function drawOverviewView() {
             ctx.textAlign = 'left';
         }
     } else {
-        // Mic recording: red REC indicator while live, gray preview label after
+        // Live mic: green LIVE while just monitoring (rolling window), red REC
+        // while recording, gray preview label after a recording stops.
         ctx.font = '600 11px sans-serif';
         ctx.textAlign = 'right';
-        if (src.live) {
+        if (src.roll) {
+            ctx.fillStyle = 'rgba(67, 160, 71, 0.95)';
+            ctx.fillText('● LIVE', w - 8, 14);
+        } else if (src.live) {
             ctx.fillStyle = 'rgba(211, 47, 47, 0.9)';
             ctx.fillText('● REC ' + dur.toFixed(1) + 's / ' + (REC_MAX_MS / 1000) + 's', w - 8, 14);
         } else {
@@ -6108,6 +6125,7 @@ els.btnPlay.addEventListener('click', () => {
 els.btnMic.addEventListener('click', async () => {
     if (state.isMicActive) {
         // Disconnect and stop
+        stopOvMonTap();   // detach the Overview live-monitor tap while micSource is still valid
         if (micStream) {
             micStream.getTracks().forEach(track => track.stop());
             micStream = null;
@@ -6213,6 +6231,9 @@ els.btnMic.addEventListener('click', async () => {
             if (els.btnMicRecord) {
                 els.btnMicRecord.style.display = 'inline-flex';
             }
+
+            // Overview view: keep a live rolling waveform while the mic is on
+            startOvMonTap();
 
             // Kick off visualizer if it wasn't already running
             if (!isPlaying) {
@@ -6483,6 +6504,62 @@ function stopOvRecTap() {
     if (ovRecMute) {
         try { ovRecMute.disconnect(); } catch (_) {}
         ovRecMute = null;
+    }
+}
+
+// Live rolling monitor tap for the Overview view — while the mic is ON (even
+// when NOT recording) mirror the raw stream into a fixed rolling window so the
+// whole-timeline view stays live like a scope. Drop-oldest once the window is
+// full. PC-only; started on mic-on, stopped on mic-off. Runs alongside the
+// REC tap, which takes priority in overviewSource() while recording.
+const OV_MON_MAX_MS = 30000;   // rolling window capacity (seconds of history)
+let ovMonTap = null, ovMonMute = null;
+let ovMonBuf = null, ovMonLen = 0, ovMonSr = 0, ovMonTotal = 0, ovMonActive = false;
+
+function startOvMonTap() {
+    if (!els.overviewCanvas || !audioCtx || !micSource || ovMonActive) return;
+    const cap = Math.ceil(audioCtx.sampleRate * OV_MON_MAX_MS / 1000);
+    if (!ovMonBuf || ovMonBuf.length !== cap) ovMonBuf = new Float32Array(cap);
+    ovMonLen = 0;
+    ovMonTotal = 0;
+    ovMonSr = audioCtx.sampleRate;
+    ovMonActive = true;
+    ovMonTap = audioCtx.createScriptProcessor(4096, 1, 1);
+    ovMonTap.onaudioprocess = (e) => {
+        if (!ovMonActive || !ovMonBuf || state.isMicPaused) return;  // freeze while paused
+        const inp = e.inputBuffer.getChannelData(0);
+        const m = inp.length, cap = ovMonBuf.length;
+        if (ovMonLen + m <= cap) {
+            ovMonBuf.set(inp, ovMonLen);
+            ovMonLen += m;
+        } else {
+            // Window full — drop the oldest m samples, append the new block.
+            ovMonBuf.copyWithin(0, ovMonLen + m - cap, ovMonLen);
+            ovMonBuf.set(inp, cap - m);
+            ovMonLen = cap;
+        }
+        ovMonTotal += m;   // monotonic — invalidates the envelope cache each frame
+    };
+    // ScriptProcessor only ticks when routed to the destination — mute the route
+    ovMonMute = audioCtx.createGain();
+    ovMonMute.gain.value = 0;
+    micSource.connect(ovMonTap);
+    ovMonTap.connect(ovMonMute);
+    ovMonMute.connect(audioCtx.destination);
+}
+
+function stopOvMonTap() {
+    ovMonActive = false;
+    ovMonLen = 0;   // drop the live buffer so it isn't shown as a stale source
+    if (ovMonTap) {
+        try { if (micSource) micSource.disconnect(ovMonTap); } catch (_) {}
+        try { ovMonTap.disconnect(); } catch (_) {}
+        ovMonTap.onaudioprocess = null;
+        ovMonTap = null;
+    }
+    if (ovMonMute) {
+        try { ovMonMute.disconnect(); } catch (_) {}
+        ovMonMute = null;
     }
 }
 
@@ -8074,7 +8151,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — shown in the bottom-right corner (bump on each release)
-const APP_VERSION = 'v1.36.0';
+const APP_VERSION = 'v1.37.0';
 (() => {
     // The #app-version element is parsed AFTER this script tag, so on first run
     // getElementById returns null. Defer to DOMContentLoaded if the DOM isn't ready.
