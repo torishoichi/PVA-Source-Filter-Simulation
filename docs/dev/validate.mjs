@@ -262,6 +262,73 @@ console.log('\n\x1b[1m8. Key shift (WSOLA) — pitch moves by the interval, dura
 }
 
 // ---------------------------------------------------------------------------
+console.log('\n\x1b[1m9. envelopeBeat — pitch-free unison-beat (うねり) from the amplitude envelope\x1b[0m');
+{
+  const sr = 44100;
+  const twoTones = (fA, fB, dur, ampB = 1) => {
+    const n = Math.round(sr * dur);
+    const x = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const t = i / sr;
+      x[i] = 0.4 * Math.sin(2 * Math.PI * fA * t) + 0.4 * ampB * Math.sin(2 * Math.PI * fB * t);
+    }
+    return x;
+  };
+  const fmt = (r) => r.beatHz != null
+    ? `${r.beatHz.toFixed(2)}Hz depth ${r.depth.toFixed(2)} str ${r.strength.toFixed(2)}` : 'none';
+
+  // A: 220 + 222.5 Hz equal amplitude, 3 s → beat ≈ 2.5 Hz, deep modulation
+  let r = DSP.envelopeBeat(twoTones(220, 222.5, 3), sr);
+  let ok = r.beatHz != null && Math.abs(r.beatHz - 2.5) < 0.3 && r.depth > 0.3 && r.strength > 0.6;
+  ok ? pass(`220+222.5Hz 3s: ${fmt(r)} (expect ~2.5Hz)`) : fail(`220+222.5Hz 3s: ${fmt(r)} (expect ~2.5Hz)`);
+
+  // B: single steady tone → flat envelope, no beat
+  r = DSP.envelopeBeat(twoTones(220, 220, 3, 0), sr);
+  ok = r.beatHz == null;
+  ok ? pass(`220Hz solo: ${fmt(r)} (no false beat)`) : fail(`220Hz solo: ${fmt(r)} (no false beat)`);
+
+  // C: realistic — voice (small 5¢ wobble) 1.8 Hz sharp of a steady tone
+  {
+    const dur = 3, n = Math.round(sr * dur);
+    const voice = DSP.synthVowel({ sr, dur, f0: 221.8, formants: [700, 1220, 2600, 3400, 4500], vibratoExtent: 5, vibratoRate: 5.5 });
+    const x = new Float32Array(n);
+    for (let i = 0; i < n; i++) x[i] = 0.5 * voice[i] + 0.25 * Math.sin(2 * Math.PI * 220 * (i / sr));
+    r = DSP.envelopeBeat(x, sr);
+    ok = r.beatHz != null && Math.abs(r.beatHz - 1.8) < 0.6;
+    ok ? pass(`voice 221.8Hz (±5¢ vib) + tone 220Hz: ${fmt(r)} (expect ~1.8Hz)`) : fail(`voice 221.8Hz + tone 220Hz: ${fmt(r)} (expect ~1.8Hz)`);
+  }
+
+  // D: in-tune — voice ON the reference (Δ 0.2 Hz ≈ 1.6¢): vibrato leaves some
+  // envelope modulation, but its autocorrelation is partial (r ≈ 0.6) while a
+  // true beat reads ≈ 1.0 — the 0.7 display threshold must separate the two.
+  // Tested at both a modest (±5¢) and a wide (±15¢) vibrato extent.
+  for (const ext of [5, 15]) {
+    const dur = 3, n = Math.round(sr * dur);
+    const voice = DSP.synthVowel({ sr, dur, f0: 220.2, formants: [700, 1220, 2600, 3400, 4500], vibratoExtent: ext, vibratoRate: 5.5 });
+    const x = new Float32Array(n);
+    for (let i = 0; i < n; i++) x[i] = 0.5 * voice[i] + 0.25 * Math.sin(2 * Math.PI * 220 * (i / sr));
+    r = DSP.envelopeBeat(x, sr);
+    const falseBeat = r.beatHz != null && r.beatHz > 0.6 && r.strength >= 0.7 && r.depth >= 0.05;
+    !falseBeat ? pass(`voice 220.2Hz (±${ext}¢ vib) + tone 220Hz (in tune): ${fmt(r)} (no confident false beat)`) : fail(`in tune ±${ext}¢: ${fmt(r)} (false beat)`);
+  }
+
+  // E: slow beat in the fine-tuning region — 0.7 Hz needs the 4 s window
+  r = DSP.envelopeBeat(twoTones(220, 220.7, 4), sr);
+  ok = r.beatHz != null && Math.abs(r.beatHz - 0.7) < 0.2;
+  ok ? pass(`220+220.7Hz 4s: ${fmt(r)} (expect ~0.7Hz)`) : fail(`220+220.7Hz 4s: ${fmt(r)} (expect ~0.7Hz)`);
+
+  // F: fade-out on a single tone (crescendo/decrescendo is NOT a beat)
+  {
+    const n = Math.round(sr * 3);
+    const x = new Float32Array(n);
+    for (let i = 0; i < n; i++) x[i] = (1 - 0.7 * i / n) * 0.5 * Math.sin(2 * Math.PI * 220 * (i / sr));
+    r = DSP.envelopeBeat(x, sr);
+    const falseBeat = r.beatHz != null && r.strength >= 0.4;
+    !falseBeat ? pass(`220Hz fading: ${fmt(r)} (fade ≠ beat)`) : fail(`220Hz fading: ${fmt(r)} (fade read as beat)`);
+  }
+}
+
+// ---------------------------------------------------------------------------
 console.log('');
 if (failures === 0) { console.log('\x1b[32m\x1b[1mALL GATES PASSED\x1b[0m\n'); process.exit(0); }
 else { console.log(`\x1b[31m\x1b[1m${failures} GATE(S) FAILED\x1b[0m\n`); process.exit(1); }

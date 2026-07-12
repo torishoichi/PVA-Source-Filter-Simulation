@@ -261,6 +261,50 @@ span[id$="-val"] {
     line-height: 1;
 }
 
+/* f0 direct-entry field — reads like the plain Hz value until hovered/focused */
+.pitch-val-input {
+    width: 72px;
+    font: inherit;
+    font-weight: 600;
+    color: inherit;
+    text-align: right;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 0 2px;
+}
+.pitch-val-input:hover { border-color: rgba(0, 0, 0, 0.18); }
+.pitch-val-input:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    background: var(--accent-soft);
+}
+/* Keep the 0.1 Hz stepper visible instead of hover-only */
+.pitch-val-input::-webkit-inner-spin-button { opacity: 1; }
+
+/* f0 fine slider — ±5 Hz around the current pitch, 0.1 Hz steps.
+   Tucked behind a small disclosure so the default layout stays clean. */
+.pitch-fine-details { margin-top: 2px; }
+.pitch-fine-details > .pitch-fine-summary {
+    cursor: pointer;
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+    user-select: none;
+    width: fit-content;
+}
+.pitch-fine-details > .pitch-fine-summary:hover { color: var(--accent-color); }
+.pitch-fine-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 2px;
+}
+.pitch-fine-row input[type="range"] {
+    flex: 1;
+    margin: 0;
+}
+
 /* Compact 2-segment toggle (Treble / Non-Treble) */
 .voice-type-compact {
     display: inline-flex;
@@ -3481,6 +3525,18 @@ body.learn-drawer-open { overflow: hidden; }
     z-index: 50;
     user-select: none;
 }
+
+/* Faint version suffix next to the header title */
+.app-version-header {
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    opacity: 0.55;
+    font-variant-numeric: tabular-nums;
+    vertical-align: middle;
+    margin-left: 6px;
+    user-select: none;
+}
 .rec-btn {
     flex: 0 0 auto;
     background: transparent;
@@ -3971,13 +4027,26 @@ body.learn-drawer-open { overflow: hidden; }
 /* Harmonic EQ as a floating overlay docked top-right inside the spectrum canvas.
    Light translucent panel so the faders/text stay readable over the white spectrum.
    Absolutely positioned → expanding it never changes layout height (no sticky-drop). */
-.he-overlay {
+/* Top-right overlay dock — Harmonic EQ + H1 Meter stacked vertically with a
+   shared width. Fixed placement (no drag/resize): opening one panel pushes the
+   other down instead of overlapping it. */
+.overlay-dock {
     position: absolute;
     top: 8px;
     right: 8px;
-    z-index: 4;
+    z-index: 5;
+    max-width: calc(100% - 16px);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+    pointer-events: none;      /* clicks between the panels reach the canvas */
+}
+.overlay-dock > * { pointer-events: auto; }
+
+.he-overlay {
     width: max-content;
-    max-width: min(320px, calc(100% - 16px));
+    max-width: 100%;
     background: rgba(255, 254, 249, 0.93); /* --canvas-bg, slightly see-through */
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-md);
@@ -4008,16 +4077,11 @@ body.learn-drawer-open { overflow: hidden; }
     margin-left: auto;
 }
 
-/* H1 Meter — precision f0 readout, floating draggable+resizable window.
-   Default position is just below Harmonic EQ (top-right); JS can override
-   left/top from a drag, and width/height from a corner resize. */
+/* H1 Meter — precision f0 readout, docked below Harmonic EQ in .overlay-dock.
+   Same width as the open Harmonic EQ panel. */
 .h1-overlay {
-    position: absolute;
-    top: 44px;            /* default: below the collapsed Harmonic EQ pill */
-    right: 8px;
-    left: auto;
-    z-index: 5;
-    width: 300px;
+    width: 320px;
+    max-width: 100%;
     background: rgba(255, 254, 249, 0.95);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-md);
@@ -4030,16 +4094,9 @@ body.learn-drawer-open { overflow: hidden; }
     background: var(--bg-elev);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
-.h1-overlay.is-dragging,
-.h1-overlay.is-resizing {
-    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22);
-    -webkit-user-select: none;
-    user-select: none;
-}
 .h1-overlay > .collapsible-summary {
     padding: 6px 12px;
     gap: 8px;
-    cursor: move;         /* title bar is the drag handle */
 }
 .h1-overlay > .collapsible-summary .tracker-title { font-size: 0.78rem; }
 
@@ -4058,22 +4115,6 @@ body.learn-drawer-open { overflow: hidden; }
     width: 100%;
     height: 148px;        /* JS overwrites on resize */
 }
-
-/* Resize grip — bottom-right corner, diagonal lines */
-.h1-resize-handle {
-    position: absolute;
-    right: 2px;
-    bottom: 2px;
-    width: 16px;
-    height: 16px;
-    cursor: nwse-resize;
-    background:
-        linear-gradient(135deg, transparent 0 45%, var(--text-secondary) 45% 55%, transparent 55% 100%),
-        linear-gradient(135deg, transparent 0 70%, var(--text-secondary) 70% 80%, transparent 80% 100%);
-    opacity: 0.4;
-    border-radius: 0 0 var(--radius-md) 0;
-}
-.h1-resize-handle:hover { opacity: 0.7; }
 
 .he-presets {
     display: flex;

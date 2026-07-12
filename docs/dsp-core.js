@@ -1027,6 +1027,107 @@
   }
 
   // ----------------------------------------------------------------------------
+  // envelopeBeat — pitch-free unison-beat ("うねり") read from the FULL-BAND
+  // amplitude envelope: exactly what the eye sees on an oscilloscope. Two
+  // nearly-equal tones make the trace swell and shrink at their frequency
+  // difference, and every harmonic pair beats at a multiple of that same
+  // difference, so the combined envelope is periodic at Δf. No f0 estimate is
+  // involved anywhere — the instability of center-frequency approaches on
+  // mixed two-source signals cannot occur here.
+  //   1. RMS envelope, hop ≈ 5 ms (envSr ≈ 200 Hz).
+  //   2. Detrend (mean + line) so fades/crescendi don't read as beats, and
+  //      skip detection entirely when relative modulation is under 1.5%.
+  //   3. Normalized autocorrelation over beat-plausible lags; among peaks
+  //      within 90% of the best, the SMALLEST lag wins — that is the perceived
+  //      wobble rate when harmonic-pair beats stack.
+  // Returns { env, envSr, beatHz|null, depth, strength }: env(Float32Array) for
+  // drawing the overlay; beatHz null when flat or x shorter than ~0.8 s.
+  // Reentrant, no state.
+  // ----------------------------------------------------------------------------
+  function envelopeBeat(x, sr, opts) {
+    opts = opts || {};
+    // fMax defaults to 4 Hz: tuning-relevant beats live at ~0.3–3 Hz, anything
+    // faster is heard as plain roughness — and singer vibrato modulates the
+    // envelope at 4.5–7 Hz (plus harmonics), which must NOT read as a beat.
+    const fMax = opts.fMax != null ? opts.fMax : 4;
+    const targetEnvSr = opts.envSr != null ? opts.envSr : 200;
+    const hop = Math.max(1, Math.round(sr / targetEnvSr));
+    const envSr = sr / hop;
+    const half = 2 * hop;               // RMS window = 4×hop, centered
+    const n = x.length;
+    const eN = Math.floor(n / hop);
+    const out = { env: null, envSr, beatHz: null, depth: 0, strength: 0 };
+    if (eN < 8) return out;
+    const env = new Float32Array(eN);
+    for (let k = 0; k < eN; k++) {
+      const c = k * hop;
+      const i0 = Math.max(0, c - half), i1 = Math.min(n, c + half);
+      let s = 0;
+      for (let i = i0; i < i1; i++) s += x[i] * x[i];
+      env[k] = Math.sqrt(s / Math.max(1, i1 - i0));
+    }
+    out.env = env;
+    const durSec = n / sr;
+    if (durSec < 0.8) return out;
+
+    let mean = 0;
+    for (let k = 0; k < eN; k++) mean += env[k];
+    mean /= eN;
+    if (mean < 1e-6) return out;
+    const sorted = Array.from(env).sort((a, b) => a - b);
+    const p10 = sorted[Math.floor(eN * 0.1)], p90 = sorted[Math.floor(eN * 0.9)];
+    out.depth = (p90 - p10) / Math.max(1e-9, p90 + p10);
+
+    // Detrend: mean + least-squares line (a fade is not a beat).
+    const d = new Float64Array(eN);
+    const midK = (eN - 1) / 2;
+    let sxy = 0, sxx = 0;
+    for (let k = 0; k < eN; k++) { const t = k - midK; sxy += t * (env[k] - mean); sxx += t * t; }
+    const slope = sxx > 0 ? sxy / sxx : 0;
+    let varSum = 0;
+    for (let k = 0; k < eN; k++) { d[k] = env[k] - mean - slope * (k - midK); varSum += d[k] * d[k]; }
+    const variance = varSum / eN;
+    // A flat envelope autocorrelates its own numerical residue to r ≈ 1 —
+    // require ≥1.5% relative RMS modulation before searching for a beat.
+    if (Math.sqrt(variance) / mean < 0.015) return out;
+
+    // The slowest detectable beat needs ~2 periods inside the window, and the
+    // autocorrelation stays meaningful only to half the window.
+    const fMin = Math.max(opts.fMin != null ? opts.fMin : 0.5, 2.2 / durSec);
+    const lagMin = Math.max(2, Math.floor(envSr / fMax));
+    const lagMax = Math.min(eN >> 1, Math.ceil(envSr / fMin));
+    if (lagMax <= lagMin + 2) return out;
+    const rAt = (L) => {
+      let s = 0;
+      for (let k = 0; k + L < eN; k++) s += d[k] * d[k + L];
+      return (s / (eN - L)) / variance;
+    };
+    const r = new Float64Array(lagMax + 2);
+    for (let L = lagMin - 1; L <= lagMax + 1; L++) r[L - lagMin + 1] = rAt(Math.min(eN - 2, L));
+    let rBest = 0;
+    const peaks = [];
+    for (let L = lagMin; L <= lagMax; L++) {
+      const i = L - lagMin + 1;
+      if (r[i] > 0 && r[i] >= r[i - 1] && r[i] >= r[i + 1]) {
+        peaks.push({ L, r: r[i] });
+        if (r[i] > rBest) rBest = r[i];
+      }
+    }
+    if (!peaks.length || rBest < 0.25) return out;
+    // Perceived rate = smallest lag among near-best peaks (harmonic-pair beats
+    // put equal-height peaks at every multiple of the fundamental lag).
+    let pick = null;
+    for (const p of peaks) { if (p.r >= 0.9 * rBest) { pick = p; break; } }
+    const i = pick.L - lagMin + 1;
+    const den = r[i - 1] - 2 * r[i] + r[i + 1];
+    const dd = den !== 0 ? 0.5 * (r[i - 1] - r[i + 1]) / den : 0;
+    const lag = pick.L + (Math.abs(dd) <= 1 ? dd : 0);
+    out.beatHz = envSr / lag;
+    out.strength = Math.max(0, Math.min(1, pick.r));
+    return out;
+  }
+
+  // ----------------------------------------------------------------------------
   // Test-signal synthesis (used by the validation harness; harmless in browser).
   // Source-filter vowel: glottal pulse train (Rosenberg) → cascade formant
   // resonators → optional aspiration noise. Returns Float32Array at sr.
@@ -1104,6 +1205,7 @@
     yinCandidates, viterbiPitchPath, pitchContour, octaveSnap,
     offlineFormants, trackAndSmooth, vibratoProbeFormants, lpcOrderForF0,
     timeStretchWsola, pitchShift,
+    envelopeBeat,
     synthVowel,
   };
 

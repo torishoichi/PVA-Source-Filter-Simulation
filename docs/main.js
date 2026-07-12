@@ -401,6 +401,7 @@ const els = {
     voiceTypeSelect: document.getElementById('voice-type-select'),
     pitchSlider: document.getElementById('pitch-slider'),
     pitchVal: document.getElementById('pitch-val'),
+    pitchFine: document.getElementById('pitch-fine'),
     pitchNote: document.getElementById('pitch-note'),
     mechM1: document.getElementById('mech-m1'),
     mechM2: document.getElementById('mech-m2'),
@@ -1996,6 +1997,7 @@ let _waveTime = null;
 // (oscilloscope); zoomed out during playback → up to the whole file (DAW-like).
 const WAVE_MS_MIN = 2;
 const WAVE_MS_DEFAULT = 46;
+const WAVE_LIVE_MAX_MS = 10000; // live mic long-window cap (Overview rolling tap)
 let waveViewMs = WAVE_MS_DEFAULT;
 
 function getWaveformCtx() {
@@ -2007,9 +2009,14 @@ function getWaveformCtx() {
 
 function waveMaxMs() {
     // Playback reads the decoded buffer → can zoom out to the full file.
-    // Live sources only have the analyser's fftSize worth of history.
+    // Live mic can read the Overview rolling tap → seconds of history, enough
+    // for unison beats (うねり) to swell visibly on the scope. Synth-only live
+    // has just the analyser's fftSize worth (~85 ms).
     if (playbackAudio && playbackBuffer) {
         return Math.max(WAVE_MS_MIN, playbackBuffer.duration * 1000);
+    }
+    if (state.isMicActive && ovMonActive && ovMonSr > 0 && ovMonLen > 0) {
+        return Math.min(WAVE_LIVE_MAX_MS, Math.max(WAVE_MS_MIN, (ovMonLen / ovMonSr) * 1000));
     }
     const an = (state.isMicActive && micAnalyser) ? micAnalyser : analyser;
     const fft = an ? an.fftSize : 4096;
@@ -2025,6 +2032,34 @@ function setWaveZoom(ms) {
             : Math.round(waveViewMs) + 'ms';
     }
     if (state.viewMode === 'waveform') drawWaveformView();
+}
+
+// うねり (unison-beat) readout for the oscilloscope — full-band RMS envelope
+// via DSP.envelopeBeat (pitch-free, dsp-core.js), recomputed at most every
+// 250 ms. The overlay draws the SAME envelope the detector saw, so the number
+// can always be verified by eye against the visible swell of the trace.
+const WAVE_BEAT_MS = 250;      // recompute cadence
+const WAVE_BEAT_MIN_S = 0.8;   // shortest window worth analyzing
+let _waveBeat = null;          // last envelopeBeat result
+let _waveBeatAt = 0;
+let _waveBeatKey = '';
+
+function updateWaveBeat(src, len, start, count, sr) {
+    const s0 = Math.max(0, start), s1 = Math.min(len, start + count);
+    if (!src || src === _waveTime || s1 - s0 < WAVE_BEAT_MIN_S * sr ||
+        typeof DSP === 'undefined' || !DSP.envelopeBeat) {
+        _waveBeat = null;
+        _waveBeatKey = '';
+        return;
+    }
+    // Static windows (paused playback) re-key rarely; a live rolling window
+    // keeps the same key once the tap is full, so the time gate carries it.
+    const key = s0 + ':' + s1 + ':' + sr;
+    const now = performance.now();
+    if (key === _waveBeatKey && now - _waveBeatAt < WAVE_BEAT_MS) return;
+    _waveBeatKey = key;
+    _waveBeatAt = now;
+    _waveBeat = DSP.envelopeBeat(src.subarray(s0, s1), sr);
 }
 
 function drawWaveformView() {
@@ -2056,12 +2091,21 @@ function drawWaveformView() {
     } else {
         const an = (state.isMicActive && micAnalyser) ? micAnalyser
             : (isPlaying && analyser) ? analyser : null;
-        if (an) {
+        const want = Math.max(16, Math.round(waveViewMs / 1000 * sr));
+        if (state.isMicActive && ovMonActive && ovMonBuf && ovMonLen > 0 && (!an || want > an.fftSize)) {
+            // Long live window — the analyser holds only ~85 ms, so read the
+            // Overview rolling tap. Right edge = now; no zero-crossing trigger
+            // (this is an envelope-scale view, not a cycle-locked scope).
+            src = ovMonBuf;
+            len = ovMonLen;
+            count = Math.min(Math.round(WAVE_LIVE_MAX_MS / 1000 * sr), want);
+            start = ovMonLen - count;   // may be negative → renders as 0
+        } else if (an) {
             if (!_waveTime || _waveTime.length !== an.fftSize) _waveTime = new Float32Array(an.fftSize);
             an.getFloatTimeDomainData(_waveTime);
             src = _waveTime;
             len = src.length;
-            count = Math.min(len, Math.max(16, Math.round(waveViewMs / 1000 * sr)));
+            count = Math.min(len, want);
             // Rising zero-crossing trigger in the headroom before the displayed
             // window → periodic waveforms hold still
             const searchEnd = Math.max(1, len - count);
@@ -2148,6 +2192,50 @@ function drawWaveformView() {
             if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }
         ctx.stroke();
+    }
+
+    // うねり: envelope overlay + readout for windows long enough to hold beats
+    updateWaveBeat(src, len, start, count, sr);
+    if (_waveBeat && _waveBeat.env) {
+        const env = _waveBeat.env, eN = env.length;
+        const hop = sr / _waveBeat.envSr;
+        // Both the envelope and the window mean "latest sample" at their right
+        // edge, so anchor there — a ≤250 ms-stale envelope on a live rolling
+        // view then only lags at the very edge instead of shifting the curve.
+        const endS = Math.min(len, start + count);
+        ctx.strokeStyle = 'rgba(230, 138, 0, 0.85)';
+        ctx.lineWidth = 1.5;
+        for (const sign of [1, -1]) {
+            ctx.beginPath();
+            let pen = false;
+            for (let k = 0; k < eN; k++) {
+                const x = ((endS - (eN - 1 - k) * hop - start) / count) * w;
+                if (x < 0) { pen = false; continue; }
+                // RMS × √2 ≈ the peak envelope the trace itself reaches
+                const y = mid - sign * env[k] * 1.414 * gain;
+                if (!pen) { ctx.moveTo(x, y); pen = true; } else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+        }
+        ctx.lineWidth = 1;
+        // Readout — top-left (top-right holds the peak readout). 0.7 strength
+        // separates true beats (autocorr ≈ 1.0) from vibrato AM (≈ 0.6).
+        const det = _waveBeat.beatHz != null && _waveBeat.strength >= 0.7 && _waveBeat.depth >= 0.05;
+        ctx.font = '600 11px sans-serif';
+        ctx.textAlign = 'left';
+        if (det) {
+            ctx.fillStyle = 'rgba(200, 105, 0, 0.95)';
+            ctx.fillText(`うねり ${_waveBeat.beatHz.toFixed(1)} Hz（深さ ${(100 * _waveBeat.depth).toFixed(0)}%）`, 8, 14);
+        } else {
+            ctx.fillStyle = 'rgba(0,0,0,0.4)';
+            ctx.fillText('うねりなし', 8, 14);
+        }
+    } else if (state.isMicActive && ovMonActive && (count / sr) < WAVE_BEAT_MIN_S) {
+        // Discoverability: with the mic on, longer windows ARE available
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText('うねり計測: 0.8s 以上にズームアウト', 8, 14);
     }
 
     // Playback: playhead marker at the window center + current time
@@ -2389,19 +2477,20 @@ function drawOverviewView() {
     } else {
         // Live mic: green LIVE while just monitoring (rolling window), red REC
         // while recording, gray preview label after a recording stops.
+        // Top-LEFT — the top-right corner is where the Harmonic EQ pill and the
+        // H1 meter window dock, which would cover the label.
         ctx.font = '600 11px sans-serif';
-        ctx.textAlign = 'right';
+        ctx.textAlign = 'left';
         if (src.roll) {
             ctx.fillStyle = 'rgba(67, 160, 71, 0.95)';
-            ctx.fillText('● LIVE', w - 8, 14);
+            ctx.fillText('● LIVE', 8, 14);
         } else if (src.live) {
             ctx.fillStyle = 'rgba(211, 47, 47, 0.9)';
-            ctx.fillText('● REC ' + dur.toFixed(1) + 's / ' + (REC_MAX_MS / 1000) + 's', w - 8, 14);
+            ctx.fillText('● REC ' + dur.toFixed(1) + 's / ' + (REC_MAX_MS / 1000) + 's', 8, 14);
         } else {
             ctx.fillStyle = 'rgba(0,0,0,0.45)';
-            ctx.fillText('録音プレビュー ' + dur.toFixed(1) + 's', w - 8, 14);
+            ctx.fillText('録音プレビュー ' + dur.toFixed(1) + 's', 8, 14);
         }
-        ctx.textAlign = 'left';
     }
 }
 
@@ -2420,6 +2509,12 @@ function applyViewMode(mode) {
     if (els.waveZoom) els.waveZoom.style.display = state.viewMode === 'waveform' ? 'flex' : 'none';
     if (els.ovZoom) els.ovZoom.style.display = state.viewMode === 'overview' ? 'flex' : 'none';
     if (els.ovLoop) els.ovLoop.style.display = state.viewMode === 'overview' ? 'inline-flex' : 'none';
+    // Leaving Overview hides the loop button, so the view-range loop must not
+    // keep constraining playback with no visible indicator of why.
+    if (state.viewMode !== 'overview' && ovLoopOn) {
+        ovLoopOn = false;
+        if (els.ovLoop) els.ovLoop.classList.remove('is-active');
+    }
     if (els.viewTabs) {
         els.viewTabs.querySelectorAll('.view-tab').forEach(btn => {
             const active = btn.dataset.view === state.viewMode;
@@ -7367,147 +7462,17 @@ if (els.ovLoop) {
 // H1 Meter: paint immediately when the panel is opened (the raf loop may be idle)
 if (els.h1MeterPanel) {
     els.h1MeterPanel.addEventListener('toggle', () => {
-        if (els.h1MeterPanel.open) { applyH1MeterGeom(); drawH1Meter(); }
+        if (els.h1MeterPanel.open) drawH1Meter();
     });
-}
-
-// ---------- H1 Meter — floating window: drag to move, corner to resize ----------
-// Position (left/top) and size (width/canvas-height) persist in localStorage so
-// the window stays where the user parked it. Dragging is thresholded so a plain
-// click on the title bar still toggles the <details> open/closed.
-const H1M_GEOM_KEY = 'h1MeterGeom';
-let h1mGeom = null;
-try { h1mGeom = JSON.parse(localStorage.getItem(H1M_GEOM_KEY)); } catch (_) {}
-
-function h1mContainer() {
-    return els.h1MeterPanel ? els.h1MeterPanel.parentElement : null; // .canvas-container
-}
-
-function applyH1MeterGeom() {
-    const p = els.h1MeterPanel, cont = h1mContainer();
-    if (!p || !cont || !h1mGeom) return;
-    const cw = cont.clientWidth, ch = cont.clientHeight;
-    const pw = h1mGeom.w || p.offsetWidth || 312;
-    // Clamp into the container so a resized canvas can't strand the window off-screen
-    const left = Math.max(0, Math.min(h1mGeom.x, cw - Math.min(pw, cw)));
-    const top = Math.max(0, Math.min(h1mGeom.y, Math.max(0, ch - 40)));
-    p.style.left = left + 'px';
-    p.style.top = top + 'px';
-    p.style.right = 'auto';
-    if (h1mGeom.w) p.style.width = Math.min(h1mGeom.w, cw) + 'px';
-    if (h1mGeom.ch && els.h1MeterCanvas) els.h1MeterCanvas.style.height = h1mGeom.ch + 'px';
-}
-
-function saveH1MeterGeom() {
-    try { localStorage.setItem(H1M_GEOM_KEY, JSON.stringify(h1mGeom)); } catch (_) {}
-}
-
-// Drag via the title bar (summary). Suppress the click-toggle only if the pointer
-// actually moved past a small threshold.
-if (els.h1MeterPanel) {
-    const drag = document.getElementById('h1-meter-drag');
-    const p = els.h1MeterPanel;
-    if (drag) {
-        let sx = 0, sy = 0, ox = 0, oy = 0, moved = false, dragging = false;
-        drag.addEventListener('pointerdown', (e) => {
-            if (e.target.closest('.tooltip')) return; // let the help icon behave normally
-            const cont = h1mContainer();
-            if (!cont) return;
-            dragging = true; moved = false;
-            const contRect = cont.getBoundingClientRect();
-            const pRect = p.getBoundingClientRect();
-            ox = pRect.left - contRect.left;
-            oy = pRect.top - contRect.top;
-            sx = e.clientX; sy = e.clientY;
-            try { drag.setPointerCapture(e.pointerId); } catch (_) {}
-        });
-        drag.addEventListener('pointermove', (e) => {
-            if (!dragging) return;
-            const dx = e.clientX - sx, dy = e.clientY - sy;
-            if (!moved && Math.hypot(dx, dy) < 4) return;
-            moved = true;
-            p.classList.add('is-dragging');
-            const cont = h1mContainer();
-            const cw = cont.clientWidth, chh = cont.clientHeight;
-            // Keep the whole panel in view, but never force top negative on a
-            // panel taller than the container (grip would then be unreachable —
-            // resize handles that separately)
-            const nx = Math.max(0, Math.min(ox + dx, cw - p.offsetWidth));
-            const ny = Math.max(0, Math.min(oy + dy, Math.max(0, chh - p.offsetHeight)));
-            p.style.left = nx + 'px'; p.style.top = ny + 'px'; p.style.right = 'auto';
-        });
-        const endDrag = (e) => {
-            if (!dragging) return;
-            dragging = false;
-            p.classList.remove('is-dragging');
-            if (moved) {
-                h1mGeom = Object.assign(h1mGeom || {}, { x: parseFloat(p.style.left) || 0, y: parseFloat(p.style.top) || 0 });
-                saveH1MeterGeom();
-            }
-        };
-        drag.addEventListener('pointerup', endDrag);
-        drag.addEventListener('pointercancel', endDrag);
-        // Cancel the toggle click that follows a real drag
-        drag.addEventListener('click', (e) => { if (moved) { e.preventDefault(); e.stopPropagation(); } }, true);
-    }
-
-    // Corner resize
-    const rh = document.getElementById('h1-resize-handle');
-    if (rh) {
-        let sx = 0, sy = 0, w0 = 0, ch0 = 0, resizing = false;
-        rh.addEventListener('pointerdown', (e) => {
-            e.preventDefault(); e.stopPropagation();
-            resizing = true;
-            sx = e.clientX; sy = e.clientY;
-            w0 = p.offsetWidth;
-            ch0 = els.h1MeterCanvas ? els.h1MeterCanvas.clientHeight : 158;
-            // Pin to left/top anchoring from the current on-screen position so a
-            // right-anchored default doesn't jump to the left edge on first resize
-            const cont = h1mContainer();
-            if (cont && !p.style.left) {
-                const cr = cont.getBoundingClientRect(), pr = p.getBoundingClientRect();
-                p.style.left = (pr.left - cr.left) + 'px';
-                p.style.top = (pr.top - cr.top) + 'px';
-                p.style.right = 'auto';
-            }
-            p.classList.add('is-resizing');
-            try { rh.setPointerCapture(e.pointerId); } catch (_) {}
-        });
-        rh.addEventListener('pointermove', (e) => {
-            if (!resizing) return;
-            const cont = h1mContainer();
-            const left = parseFloat(p.style.left) || 0;
-            const top = parseFloat(p.style.top) || 0;
-            const maxW = cont ? cont.clientWidth - left - 4 : 640;
-            // Cap canvas height so the panel bottom (summary + canvas + padding)
-            // stays inside the clipped canvas-container
-            const chrome = p.offsetHeight - (els.h1MeterCanvas ? els.h1MeterCanvas.clientHeight : 148);
-            const maxH = cont ? cont.clientHeight - top - chrome - 2 : 420;
-            const w = Math.max(220, Math.min(w0 + (e.clientX - sx), maxW));
-            const chh = Math.max(100, Math.min(ch0 + (e.clientY - sy), Math.max(100, maxH)));
-            p.style.width = w + 'px';
-            if (els.h1MeterCanvas) els.h1MeterCanvas.style.height = chh + 'px';
-            drawH1Meter();
-        });
-        const endResize = () => {
-            if (!resizing) return;
-            resizing = false;
-            p.classList.remove('is-resizing');
-            h1mGeom = Object.assign(h1mGeom || {}, {
-                x: parseFloat(p.style.left) || (h1mGeom && h1mGeom.x) || 0,
-                y: parseFloat(p.style.top) || (h1mGeom && h1mGeom.y) || 58,
-                w: p.offsetWidth,
-                ch: els.h1MeterCanvas ? els.h1MeterCanvas.clientHeight : 158
-            });
-            saveH1MeterGeom();
-            drawH1Meter();
-        };
-        rh.addEventListener('pointerup', endResize);
-        rh.addEventListener('pointercancel', endResize);
-    }
-
-    // Restore saved geometry once the layout settles
-    if (h1mGeom) requestAnimationFrame(applyH1MeterGeom);
+    // v1.38: the panel is a fixed dock (top-right, under Harmonic EQ). The
+    // drag/resize floating window was dropped as fidgety — clear any geometry
+    // a previous version saved so nothing looks half-applied.
+    try { localStorage.removeItem('h1MeterGeom'); } catch (_) {}
+    // Paint the initial "no signal" state — the raf loop is idle before audio
+    // starts, so the default-open panel would otherwise show a blank canvas.
+    requestAnimationFrame(() => {
+        if (els.h1MeterPanel.open) drawH1Meter();
+    });
 }
 
 function clearPbWave() {
@@ -8150,12 +8115,17 @@ if (window.RecordingsDB) {
     refreshRecordingsList().catch(err => console.error('Initial recordings load failed:', err));
 }
 
-// App version — shown in the bottom-right corner (bump on each release)
-const APP_VERSION = 'v1.37.0';
+// App version — bottom-right corner + faint header suffix (bump on each release)
+const APP_VERSION = 'v1.38.0';
 (() => {
     // The #app-version element is parsed AFTER this script tag, so on first run
     // getElementById returns null. Defer to DOMContentLoaded if the DOM isn't ready.
-    const setVer = () => { const el = document.getElementById('app-version'); if (el) el.textContent = APP_VERSION; };
+    const setVer = () => {
+        for (const id of ['app-version', 'app-version-header']) {
+            const el = document.getElementById(id);
+            if (el) el.textContent = APP_VERSION;
+        }
+    };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', setVer);
     else setVer();
 })();
@@ -8204,7 +8174,8 @@ function applyVoiceType(value) {
     els.resistanceSlider.value = 1.0; state.resistance = 1.0;
     els.pressureSlider.value = 1.0; state.pressure = 1.0;
 
-    els.pitchVal.textContent = state.pitch;
+    setPitchValDisplay(state.pitch);
+    recenterPitchFine();
     els.pitchNote.textContent = noteWithCents(state.pitch);
     els.f1Val.textContent = state.formants.f1.freq;
     els.resistanceVal.textContent = state.resistance.toFixed(1);
@@ -8246,9 +8217,33 @@ if (els.voiceTypeSelect && els.voiceTypeSelect.tagName === 'SELECT') {
     els.voiceTypeSelect.addEventListener('change', (e) => applyVoiceType(e.target.value));
 }
 
+// The Hz readout is an <input type="number"> on PC and a plain <span> on
+// mobile — write whichever property renders, and never fight the caret while
+// the user is typing in the field.
+function setPitchValDisplay(v) {
+    if (!els.pitchVal) return;
+    const txt = String(Math.round(v * 10) / 10);
+    if (els.pitchVal.tagName === 'INPUT') {
+        if (document.activeElement !== els.pitchVal) els.pitchVal.value = txt;
+    } else {
+        els.pitchVal.textContent = txt;
+    }
+}
+
+// Fine slider (PC): ±5 Hz around the current pitch in 0.1 Hz steps — made for
+// beat-matching against a reference tone (e.g. an Otamatone). Recenters when
+// the pitch moves from any other control, and on release after a drag (never
+// mid-drag: the thumb would jump out from under the pointer).
+function recenterPitchFine() {
+    if (!els.pitchFine || recenterPitchFine._drag) return;
+    els.pitchFine.min = (state.pitch - 5).toFixed(1);
+    els.pitchFine.max = (state.pitch + 5).toFixed(1);
+    els.pitchFine.value = state.pitch;
+}
+
 function applyPitchChange(newPitch) {
-    state.pitch = newPitch;
-    els.pitchVal.textContent = state.pitch;
+    state.pitch = Math.round(newPitch * 10) / 10;   // 0.1 Hz resolution
+    setPitchValDisplay(state.pitch);
     els.pitchNote.textContent = noteWithCents(state.pitch);
     autoSyncVoiceTypeFromPitch(state.pitch);
     updateSourceParams();
@@ -8257,6 +8252,7 @@ function applyPitchChange(newPitch) {
     // Keep both sliders in sync without firing each other's input events
     if (els.pitchSlider.value !== String(state.pitch)) els.pitchSlider.value = state.pitch;
     if (els.pitchMirror && els.pitchMirror.value !== String(state.pitch)) els.pitchMirror.value = state.pitch;
+    recenterPitchFine();
 }
 
 els.pitchSlider.addEventListener('input', (e) => {
@@ -8267,6 +8263,43 @@ if (els.pitchMirror) {
     els.pitchMirror.addEventListener('input', (e) => {
         applyPitchChange(parseFloat(e.target.value));
     });
+}
+
+// f0 direct entry (PC only — the mobile readout is a span): typing applies
+// live when in range; Enter/blur commits with clamping and normalizes the text.
+if (els.pitchVal && els.pitchVal.tagName === 'INPUT') {
+    els.pitchVal.addEventListener('input', () => {
+        const v = parseFloat(els.pitchVal.value);
+        if (isFinite(v) && v >= 80 && v <= 1000) applyPitchChange(v);
+    });
+    els.pitchVal.addEventListener('change', () => {
+        let v = parseFloat(els.pitchVal.value);
+        if (!isFinite(v)) v = state.pitch;
+        applyPitchChange(Math.min(1000, Math.max(80, v)));
+        els.pitchVal.value = String(state.pitch);
+    });
+    els.pitchVal.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') els.pitchVal.blur();
+    });
+}
+
+if (els.pitchFine) {
+    // The fine slider lives behind a <details> disclosure — remember open state
+    const fineDet = document.getElementById('pitch-fine-details');
+    if (fineDet) {
+        try { if (localStorage.getItem('pitchFineOpen') === '1') fineDet.open = true; } catch (_) {}
+        fineDet.addEventListener('toggle', () => {
+            try { localStorage.setItem('pitchFineOpen', fineDet.open ? '1' : '0'); } catch (_) {}
+        });
+    }
+    els.pitchFine.addEventListener('pointerdown', () => { recenterPitchFine._drag = true; });
+    els.pitchFine.addEventListener('input', (e) => {
+        applyPitchChange(parseFloat(e.target.value));
+    });
+    const fineEnd = () => { recenterPitchFine._drag = false; recenterPitchFine(); };
+    els.pitchFine.addEventListener('pointerup', fineEnd);
+    els.pitchFine.addEventListener('pointercancel', fineEnd);
+    recenterPitchFine();
 }
 
 els.pressureSlider.addEventListener('input', (e) => {
@@ -9029,7 +9062,8 @@ els.presets.forEach(btn => {
             if (p.pitch) {
                 state.pitch = p.pitch;
                 els.pitchSlider.value = p.pitch;
-                els.pitchVal.textContent = p.pitch;
+                setPitchValDisplay(p.pitch);
+                recenterPitchFine();
                 els.pitchNote.textContent = noteWithCents(p.pitch);
                 updateSourceParams();
             }
