@@ -86,28 +86,40 @@
         <div id="event-flash" class="event-flash hidden">TURNING OVER!</div>
     </div>
 
-    <!-- Spectrum Canvas (always visible, sticky) -->
+    <!-- Spectrum Canvas (sticky; canvas area collapsible to reclaim vertical space) -->
     <section class="spectrum-section">
         <div class="canvas-container">
             <canvas id="spectrum-canvas"></canvas>
             <div class="axis-labels x-axis">
                 <span>0</span><span>1k</span><span>2k</span><span>3k</span><span>4k</span><span>5k</span>
             </div>
+            <div class="canvas-empty-hint" id="spectrum-empty-hint">
+                <span>▶ Play で合成音を再生</span>
+                <span>🎤 で自分の声を解析</span>
+            </div>
         </div>
         <div class="spectrum-toolbar">
+            <button id="spectrum-collapse" class="spectrum-collapse-btn" type="button"
+                aria-label="スペクトラム表示をたたむ / ひらく" title="スペクトラム表示をたたむ / ひらく">▾</button>
             <div class="toolbar-item">
                 <span>Vol</span>
                 <input type="range" id="master-volume" min="0" max="1" value="0.5" step="0.01">
                 <span class="control-val" id="volume-val">50%</span>
             </div>
-            <div class="toolbar-item">
+            <div class="toolbar-item toolbar-item-fit">
                 <button id="slope-line-toggle" class="inline-toggle-btn slope-line-active"
                     title="Toggle slope approximation line">Slope</button>
-                <input type="range" id="spectrum-slope" min="-24" max="0" value="-12" step="1">
             </div>
             <div class="toolbar-item toolbar-item-fit">
                 <button id="roughness-toggle" class="inline-toggle-btn" type="button"
                     title="倍音のラフネス・ゾーンをスペクトルに重ねる">Rough</button>
+            </div>
+        </div>
+        <div class="spectrum-toolbar spectrum-slope-row" id="slope-row">
+            <div class="toolbar-item">
+                <span>Slope</span>
+                <input type="range" id="spectrum-slope" min="-24" max="0" value="-12" step="1">
+                <span class="control-val" id="slope-val">-12</span>
             </div>
         </div>
         <div class="spectrum-toolbar" id="mic-toolbar" style="display:none;">
@@ -141,9 +153,16 @@
             <label class="slider-label">
                 Pitch (f₀) <span class="tooltip"
                     data-tooltip="意図されたピッチ（音高）に相当する基本周波数です（PVA内では1foと表記）。この基本周波数の整数倍として倍音（2fo, 3fo...）が生成され、f0が高くなるほど倍音同士の周波数間隔は広くなります。">[?]</span>
-                <span class="slider-val"><span id="pitch-val">220</span> Hz · <span id="pitch-note">A3</span></span>
+                <span class="slider-val pitch-val-tap" id="pitch-val-tap" role="button" tabindex="0"
+                    title="タップで数値入力"><span id="pitch-val">220</span> Hz · <span id="pitch-note">A3</span></span>
             </label>
-            <input type="range" id="pitch-slider" min="50" max="1000" value="220" step="1" class="mobile-range">
+            <input type="number" id="pitch-direct" class="pitch-direct-input" min="50" max="1000" step="0.1"
+                inputmode="decimal" aria-label="f₀ を数値入力 (Hz)" style="display:none;">
+            <div class="slider-step-row">
+                <button class="step-btn" id="pitch-step-down" type="button" aria-label="半音下げる">−</button>
+                <input type="range" id="pitch-slider" min="50" max="1000" value="220" step="1" class="mobile-range">
+                <button class="step-btn" id="pitch-step-up" type="button" aria-label="半音上げる">＋</button>
+            </div>
         </div>
 
         <div class="card">
@@ -158,7 +177,10 @@
                 <button id="harm-third-type" class="harm-btn harm-mod" type="button">長3</button>
                 <button id="harm-tuning" class="harm-btn harm-mod" type="button">平均律</button>
             </div>
-            <input type="range" id="harm-level" min="0" max="100" value="70" step="1" class="mobile-range">
+            <div class="harm-level-row">
+                <span class="harm-level-cap">Level</span>
+                <input type="range" id="harm-level" min="0" max="100" value="70" step="1" class="mobile-range">
+            </div>
         </div>
 
         <div class="card">
@@ -375,6 +397,20 @@
 
     <!-- Tab: Filter -->
     <section class="tab-content" id="tab-filter">
+        <!-- Vowel Presets (first: the most-used entry point on mobile) -->
+        <div class="card">
+            <label class="slider-label">Presets</label>
+            <div class="preset-grid">
+                <button class="preset-btn" data-preset="a">[ɑ] ah</button>
+                <button class="preset-btn" data-preset="i">[i] ee</button>
+                <button class="preset-btn" data-preset="u">[u] oo</button>
+                <button class="preset-btn" data-preset="e">[e] eh</button>
+                <button class="preset-btn" data-preset="o">[o] oh</button>
+                <button class="preset-btn" data-preset="open">Open</button>
+                <button class="preset-btn" data-preset="close">Close</button>
+            </div>
+        </div>
+
         <!-- F1 -->
         <div class="card formant-card">
             <div class="formant-row">
@@ -462,20 +498,6 @@
             </div>
         </div>
 
-        <!-- Vowel Presets -->
-        <div class="card">
-            <label class="slider-label">Presets</label>
-            <div class="preset-grid">
-                <button class="preset-btn" data-preset="a">[ɑ] ah</button>
-                <button class="preset-btn" data-preset="i">[i] ee</button>
-                <button class="preset-btn" data-preset="u">[u] oo</button>
-                <button class="preset-btn" data-preset="e">[e] eh</button>
-                <button class="preset-btn" data-preset="o">[o] oh</button>
-                <button class="preset-btn" data-preset="open">Open</button>
-                <button class="preset-btn" data-preset="close">Close</button>
-            </div>
-        </div>
-
         <!-- Vowel Space — F1×F2 map (uses LPC v3 formant data) -->
         <details id="vowel-space-panel" class="vib-analysis-panel">
             <summary class="vib-analysis-summary">
@@ -540,6 +562,12 @@
 
     <!-- Tab: Rec (recordings & playback) -->
     <section class="tab-content" id="tab-rec">
+        <!-- One-tap record: turns the mic on if needed, then starts recording -->
+        <div class="card rec-cta-card">
+            <button id="rec-cta" class="rec-cta" type="button">● 録音を開始</button>
+            <p class="rec-cta-hint" id="rec-cta-hint">マイクがOFFなら自動でONにして録音します（最大60秒・端末内のみ保存）</p>
+        </div>
+
         <details class="card vibrato-card" id="loudness-panel" open>
             <summary class="vibrato-summary">
                 <span class="vibrato-title">Loudness Ceiling</span>
@@ -771,6 +799,156 @@
             document.addEventListener('touchcancel', function () {
                 activeSlider = null;
             });
+        })();
+
+        // ===== Spectrum collapse (reclaim ~240px when the plot is not needed) =====
+        (function () {
+            const btn = document.getElementById('spectrum-collapse');
+            if (!btn) return;
+            const KEY = 'mobSpectrumCollapsed';
+            function apply(collapsed) {
+                document.body.classList.toggle('spectrum-collapsed', collapsed);
+                btn.textContent = collapsed ? '▸' : '▾';
+                if (!collapsed) {
+                    // Heal the canvas backing store after re-expand (main.js only
+                    // resizes on window resize while the synth is playing).
+                    requestAnimationFrame(() => {
+                        const c = document.getElementById('spectrum-canvas');
+                        if (c && c.clientWidth > 0) { c.width = c.clientWidth; c.height = c.clientHeight; }
+                        window.dispatchEvent(new Event('resize'));
+                    });
+                }
+            }
+            apply(localStorage.getItem(KEY) === '1');
+            btn.addEventListener('click', () => {
+                const next = !document.body.classList.contains('spectrum-collapsed');
+                localStorage.setItem(KEY, next ? '1' : '0');
+                apply(next);
+            });
+        })();
+
+        // ===== Spectrum empty-state hint (pristine state only) =====
+        (function () {
+            const hint = document.getElementById('spectrum-empty-hint');
+            const play = document.getElementById('audio-toggle');
+            const mic = document.getElementById('mic-toggle');
+            const pb = document.getElementById('pb-playpause');
+            if (!hint || !play || !mic) return;
+            let everActive = false;
+            function refresh() {
+                const active = play.classList.contains('playing') ||
+                    mic.classList.contains('mic-active') ||
+                    (pb && pb.classList.contains('is-playing'));
+                if (active) everActive = true;
+                hint.style.display = everActive ? 'none' : 'flex';
+            }
+            const obs = new MutationObserver(refresh);
+            [play, mic, pb].forEach(el => el && obs.observe(el, { attributes: true, attributeFilter: ['class'] }));
+            refresh();
+        })();
+
+        // ===== Slope value readout =====
+        (function () {
+            const slider = document.getElementById('spectrum-slope');
+            const val = document.getElementById('slope-val');
+            if (!slider || !val) return;
+            const show = () => { val.textContent = slider.value; };
+            slider.addEventListener('input', show);
+            show();
+        })();
+
+        // ===== Pitch: semitone step buttons + direct Hz input =====
+        (function () {
+            const slider = document.getElementById('pitch-slider');
+            const down = document.getElementById('pitch-step-down');
+            const up = document.getElementById('pitch-step-up');
+            const tap = document.getElementById('pitch-val-tap');
+            const direct = document.getElementById('pitch-direct');
+            if (!slider) return;
+            const MIN = parseFloat(slider.min), MAX = parseFloat(slider.max);
+            function setF0(hz) {
+                hz = Math.max(MIN, Math.min(MAX, hz));
+                slider.value = Math.round(hz * 10) / 10;
+                slider.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+            function stepSemitone(dir) {
+                const f = parseFloat(slider.value) || 220;
+                const midi = 69 + 12 * Math.log2(f / 440);
+                const r = Math.round(midi);
+                const target = Math.abs(midi - r) < 0.05 ? r + dir : (dir > 0 ? Math.ceil(midi) : Math.floor(midi));
+                setF0(440 * Math.pow(2, (target - 69) / 12));
+            }
+            down && down.addEventListener('click', () => stepSemitone(-1));
+            up && up.addEventListener('click', () => stepSemitone(1));
+            if (tap && direct) {
+                function openDirect() {
+                    direct.value = Math.round(parseFloat(slider.value) * 10) / 10;
+                    direct.style.display = 'block';
+                    direct.focus();
+                    direct.select();
+                }
+                function commit() {
+                    const v = parseFloat(direct.value);
+                    if (isFinite(v)) setF0(v);
+                    direct.style.display = 'none';
+                }
+                tap.addEventListener('click', openDirect);
+                tap.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDirect(); } });
+                direct.addEventListener('blur', commit);
+                direct.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') direct.blur();
+                    else if (e.key === 'Escape') { direct.value = ''; direct.style.display = 'none'; }
+                });
+            }
+        })();
+
+        // ===== Rec tab one-tap record CTA (mic on → record, single flow) =====
+        (function () {
+            const cta = document.getElementById('rec-cta');
+            const hintEl = document.getElementById('rec-cta-hint');
+            const micBtn = document.getElementById('mic-toggle');
+            const recBtn = document.getElementById('mic-record');
+            const timer = document.getElementById('mic-record-timer');
+            if (!cta || !micBtn || !recBtn) return;
+            const HINT_DEFAULT = hintEl ? hintEl.textContent : '';
+            let starting = false;
+            function refresh() {
+                const recording = recBtn.classList.contains('is-recording');
+                cta.classList.toggle('is-recording', recording);
+                cta.textContent = recording
+                    ? '■ 録音を停止 ' + (timer ? timer.textContent : '')
+                    : '● 録音を開始';
+            }
+            const obs = new MutationObserver(refresh);
+            obs.observe(recBtn, { attributes: true, attributeFilter: ['class'] });
+            if (timer) obs.observe(timer, { childList: true, characterData: true, subtree: true });
+            function waitForMic(timeoutMs) {
+                return new Promise(resolve => {
+                    if (micBtn.classList.contains('mic-active')) return resolve(true);
+                    const mo = new MutationObserver(() => {
+                        if (micBtn.classList.contains('mic-active')) { mo.disconnect(); resolve(true); }
+                    });
+                    mo.observe(micBtn, { attributes: true, attributeFilter: ['class'] });
+                    setTimeout(() => { mo.disconnect(); resolve(micBtn.classList.contains('mic-active')); }, timeoutMs);
+                });
+            }
+            cta.addEventListener('click', async () => {
+                if (starting) return;
+                if (recBtn.classList.contains('is-recording')) { recBtn.click(); return; }
+                if (micBtn.classList.contains('mic-active')) { recBtn.click(); return; }
+                starting = true;
+                if (hintEl) hintEl.textContent = 'マイクを起動中…（権限ダイアログが出たら許可してください）';
+                micBtn.click();
+                const ok = await waitForMic(15000);
+                starting = false;
+                if (ok) {
+                    if (hintEl) hintEl.textContent = HINT_DEFAULT;
+                    recBtn.click();
+                } else if (hintEl) {
+                    hintEl.textContent = 'マイクを開始できませんでした。ブラウザのマイク権限を確認してください。';
+                }
+            });
+            refresh();
         })();
     </script>
     <script>

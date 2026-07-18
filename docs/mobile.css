@@ -2588,3 +2588,156 @@ body.mode-learn .spectrum-section {
     padding: 10px 10px;
     font-size: 0.78rem;
 }
+
+.harm-level-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.harm-level-cap {
+    font-size: var(--fs-hint);
+    color: var(--text-muted);
+    font-weight: 600;
+    flex: 0 0 auto;
+}
+
+/* ===== Spectrum collapse ===== */
+.spectrum-collapse-btn {
+    flex: 0 0 auto;
+    min-width: 40px;
+    height: 32px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--glass-border);
+    background: var(--bg-elev);
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    cursor: pointer;
+    padding: 0;
+    transition: background 0.15s, color 0.15s;
+}
+
+.spectrum-collapse-btn:active {
+    background: var(--accent-soft);
+    color: var(--accent-color);
+}
+
+body.spectrum-collapsed .canvas-container {
+    display: none;
+}
+
+body.spectrum-collapsed .spectrum-slope-row {
+    display: none !important;
+}
+
+/* Slope value row: only meaningful while the slope line is shown */
+.spectrum-slope-row {
+    display: none;
+    padding-top: 4px;
+}
+
+.spectrum-section:has(#slope-line-toggle.slope-line-active) .spectrum-slope-row {
+    display: flex;
+}
+
+/* ===== Spectrum empty-state hint ===== */
+.canvas-empty-hint {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    pointer-events: none;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+/* ===== Pitch fine control ===== */
+.slider-step-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.slider-step-row input[type="range"] {
+    flex: 1;
+    min-width: 0;
+}
+
+.step-btn {
+    flex: 0 0 auto;
+    width: 40px;
+    height: 38px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--glass-border);
+    background: var(--bg-elev);
+    color: var(--text-secondary);
+    font-size: 1.1rem;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.step-btn:active {
+    background: var(--accent-soft);
+    border-color: var(--accent-color);
+    color: var(--accent-color);
+}
+
+.pitch-val-tap {
+    cursor: pointer;
+    border-bottom: 1px dashed var(--glass-border-strong);
+}
+
+.pitch-direct-input {
+    width: 110px;
+    margin: 4px 0 6px;
+    padding: 8px 10px;
+    font-size: 1rem;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    border: 1px solid var(--accent-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-elev);
+    color: var(--text-primary);
+    outline: none;
+}
+
+/* ===== Rec tab one-tap record CTA ===== */
+.rec-cta-card {
+    padding: 12px 14px;
+}
+
+.rec-cta {
+    width: 100%;
+    min-height: 52px;
+    border: none;
+    border-radius: var(--radius-md);
+    background: var(--vivid-red);
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.rec-cta:active {
+    background: #b83a3a;
+}
+
+.rec-cta.is-recording {
+    background: var(--warn-color);
+    animation: pulseMic 2.2s ease-in-out infinite;
+}
+
+.rec-cta-hint {
+    margin: 8px 2px 0;
+    font-size: var(--fs-hint);
+    color: var(--text-muted);
+    line-height: 1.5;
+}

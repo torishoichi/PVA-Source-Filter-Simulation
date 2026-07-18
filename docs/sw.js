@@ -1,15 +1,19 @@
 /**
  * Source-Filter Voice Studio — Service Worker
- * Cache-first for the app shell so the app loads offline once visited.
+ * Same-origin: network-first (fresh deploys arrive immediately; cache is the
+ * offline fallback). Cross-origin (CDN): stale-while-revalidate.
+ * Bump VERSION on release to purge old caches.
  */
-const VERSION = 'v1.38.0';
+const VERSION = 'v1.41.0';
 const CACHE = `sf-voice-studio-${VERSION}`;
 const SHELL = [
     './',
     './index.html',
+    './mobile.html',
     './main.js',
     './dsp-core.js',
     './style.css',
+    './mobile.css',
     './recordings-db.js',
     './manifest.json',
     './icon-192.png',
@@ -33,7 +37,24 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
     const req = e.request;
     if (req.method !== 'GET') return;
-    // Stale-while-revalidate for the app shell, cache-first for everything else
+    const sameOrigin = new URL(req.url).origin === self.location.origin;
+
+    if (sameOrigin) {
+        // Network-first with conditional revalidation (cheap 304s), cache fallback.
+        // Guarantees the app shell never serves a stale or version-skewed mix.
+        e.respondWith(
+            fetch(new Request(req, { cache: 'no-cache' })).then(res => {
+                if (res && res.status === 200) {
+                    const clone = res.clone();
+                    caches.open(CACHE).then(c => c.put(req, clone)).catch(() => {});
+                }
+                return res;
+            }).catch(() => caches.match(req))
+        );
+        return;
+    }
+
+    // Cross-origin (CDN libs): stale-while-revalidate
     e.respondWith(
         caches.match(req).then(cached => {
             const fetchPromise = fetch(req).then(res => {
