@@ -794,8 +794,8 @@ function stopAudio() {
         animationId = null;
     }
 
-    // If mic is still active, keep the visualizer running
-    if (state.isMicActive) {
+    // If the mic or a playback session is still active, keep the visualizer running
+    if (analysisActive()) {
         drawVisualizer();
     }
 }
@@ -2092,7 +2092,7 @@ function drawWaveformView() {
     }
     const w = cv.width, h = cv.height;
     if (!w || !h) return;
-    if (state.isMicActive && state.isMicPaused) return; // freeze last frame while paused
+    if (micFrozen()) return; // freeze last frame while paused
 
     // Source samples: playback reads the decoded buffer directly around the
     // playhead (iOS-safe, any zoom width); live mic reads micAnalyser; synth
@@ -2597,7 +2597,7 @@ function h1MeterMeasure() {
 
 function updateH1Meter(nowT) {
     if (!els.h1MeterCanvas) return;
-    if (state.isMicActive && state.isMicPaused) return; // freeze last reading
+    if (micFrozen()) return; // freeze last reading
     if (nowT - _h1mLastAt >= H1M_INTERVAL_MS) {
         _h1mLastAt = nowT;
         const raw = h1MeterMeasure();
@@ -2759,7 +2759,7 @@ let _vqWin = null;
 
 function updateVoiceQuality() {
     if (typeof DSP === 'undefined' || !DSP.cpps) return; // dsp-core not loaded
-    if (state.isMicPaused) return;
+    if (micFrozen()) return;
     const f0 = state.cachedMicPitch;
 
     // Time-domain window + sample rate: playback reads the decoded buffer (iOS-safe),
@@ -2838,7 +2838,7 @@ function updateVoiceQualityReadout() {
         els.vqVerdict.className = 'vstat-val ' + v.cls;
     }
     // Measured glottal source (IAIF)
-    if (els.glottalMeasured) els.glottalMeasured.style.display = state.isMicActive ? 'block' : 'none';
+    if (els.glottalMeasured) els.glottalMeasured.style.display = analysisActive() ? 'block' : 'none';
     if (els.measRd) els.measRd.textContent = (state.cachedRdMeas == null) ? '—' : state.cachedRdMeas.toFixed(2);
     if (els.measNaq) els.measNaq.textContent = (state.cachedNAQ == null) ? '—' : state.cachedNAQ.toFixed(3);
     if (els.measOq) els.measOq.textContent = (state.cachedOQMeas == null) ? '—' : (state.cachedOQMeas * 100).toFixed(0) + '%';
@@ -3814,13 +3814,14 @@ function drawPitchTrack() {
 
 let lastPitchTrackMicState = null;
 function updatePitchTrackVisibility() {
-    // Repaint the empty-state hint when mic transitions off (mirrors vibrato).
-    if (state.isMicActive !== lastPitchTrackMicState) {
-        if (!state.isMicActive) {
+    // Repaint the empty-state hint when the analysis source goes away (mirrors vibrato).
+    const active = analysisActive();
+    if (active !== lastPitchTrackMicState) {
+        if (!active) {
             pitchTrackAnchorCents = null;
             if (els.pitchTrackPanel && els.pitchTrackPanel.open) drawPitchTrack();
         }
-        lastPitchTrackMicState = state.isMicActive;
+        lastPitchTrackMicState = active;
     }
 }
 
@@ -4295,7 +4296,7 @@ function vsFormantHz(entry) {
 }
 
 function pushVowelSample() {
-    if (!state.isMicActive || !state.cachedMicFormants) return;
+    if (!analysisActive() || !state.cachedMicFormants) return;
     const f1 = vsFormantHz(state.cachedMicFormants.f1);
     const f2 = vsFormantHz(state.cachedMicFormants.f2);
     if (f1 == null || f2 == null) return;
@@ -4649,13 +4650,14 @@ function applyVibAnalysisMode(mode) {
 let lastVibPanelMicState = null;
 function updateVibratoPanelVisibility() {
     // Panel is a collapsible <details> that is always present in the DOM.
-    // We only need to clear the UI / trace when mic transitions off.
-    if (state.isMicActive !== lastVibPanelMicState) {
-        if (!state.isMicActive) {
+    // We only need to clear the UI / trace when the analysis source goes away.
+    const active = analysisActive();
+    if (active !== lastVibPanelMicState) {
+        if (!active) {
             resetVibratoUi();
             drawVibratoTrace(); // repaint hint
         }
-        lastVibPanelMicState = state.isMicActive;
+        lastVibPanelMicState = active;
     }
 }
 
@@ -4667,32 +4669,31 @@ function resizeCanvas() {
 }
 
 function drawVisualizer() {
-    if (!isPlaying && !state.isMicActive) return;
+    if (!isPlaying && !analysisActive()) return;
 
     // Pitch sampling + vibrato analysis (independent of view mode).
-    // During recording playback state.isMicActive is true but the live mic is
-    // detached, so detect pitch from the decoded playback buffer at the current
-    // position instead of the (silent) mic analyser. Both paths feed the same
-    // pitchBuf → Pitch Track / Vibrato. Speed-independent & iOS-safe.
+    // During recording playback the live mic is detached, so detect pitch from
+    // the decoded playback buffer at the current position instead of the
+    // (silent) mic analyser. Both paths feed the same pitchBuf → Pitch Track /
+    // Vibrato. Speed-independent & iOS-safe. Playback pitch is unrelated to the
+    // mic-pause freeze, so no isMicPaused gate here.
     const pbPitchOn = !!playbackAudio && !playbackAudio.paused && !!playbackBuffer;
     if (pbPitchOn) {
-        if (!state.isMicPaused) {
-            let pbHz, pbClar;
-            if (playbackPitchContour) {
-                // High-accuracy precomputed contour → cheap lookup (no per-frame YIN)
-                const s = lookupPlaybackPitch(playbackAudio.currentTime);
-                pbHz = s.hz; pbClar = s.clarity;
-            } else {
-                // Contour not ready yet → live per-frame YIN as a stopgap
-                const N = (micAnalyser && micAnalyser.fftSize) || 2048;
-                const win = getPlaybackTimeWindow(playbackAudio.currentTime, N);
-                pbHz = win ? detectPitchYIN(win, playbackBuffer.sampleRate) : -1;
-                pbClar = _yinClarity;
-            }
-            state.cachedMicPitch = pbHz;
-            pushPitchSample(pbHz, pbClar);
+        let pbHz, pbClar;
+        if (playbackPitchContour) {
+            // High-accuracy precomputed contour → cheap lookup (no per-frame YIN)
+            const s = lookupPlaybackPitch(playbackAudio.currentTime);
+            pbHz = s.hz; pbClar = s.clarity;
+        } else {
+            // Contour not ready yet → live per-frame YIN as a stopgap
+            const N = (micAnalyser && micAnalyser.fftSize) || 2048;
+            const win = getPlaybackTimeWindow(playbackAudio.currentTime, N);
+            pbHz = win ? detectPitchYIN(win, playbackBuffer.sampleRate) : -1;
+            pbClar = _yinClarity;
         }
-    } else if (state.isMicActive && micAnalyser) {
+        state.cachedMicPitch = pbHz;
+        pushPitchSample(pbHz, pbClar);
+    } else if (analysisActive() && micAnalyser) {
         if (!state.isMicPaused) {
             const micPitch = detectPitchFromMic();
             state.cachedMicPitch = micPitch;
@@ -4705,14 +4706,14 @@ function drawVisualizer() {
 
     const nowT = performance.now();
     const va = state.vibratoAnalysis;
-    if (state.isMicActive && nowT - va.lastAnalysisAt >= VIBRATO_ANALYSIS_INTERVAL) {
+    if (analysisActive() && nowT - va.lastAnalysisAt >= VIBRATO_ANALYSIS_INTERVAL) {
         analyzeVibrato();
         drawVibratoTrace();
     }
     updateVibratoPanelVisibility();
 
     // Voice quality (CPP / H1–H2) — throttled, runs for both live mic and playback.
-    if (state.isMicActive && nowT - _vqLastAt >= VQ_INTERVAL_MS) {
+    if (analysisActive() && nowT - _vqLastAt >= VQ_INTERVAL_MS) {
         _vqLastAt = nowT;
         updateVoiceQuality();
     }
@@ -4720,15 +4721,15 @@ function drawVisualizer() {
     // H1 precision meter — throttled internally; all sources (synth / mic / playback)
     updateH1Meter(nowT);
 
-    // Pitch Track: redraw every frame while panel open + mic active (smooth scroll)
-    if (state.isMicActive && els.pitchTrackPanel && els.pitchTrackPanel.open) {
+    // Pitch Track: redraw every frame while panel open + source active (smooth scroll)
+    if (analysisActive() && els.pitchTrackPanel && els.pitchTrackPanel.open) {
         drawPitchTrack();
     }
     updatePitchTrackVisibility();
 
     // Vowel Space: push F1/F2 sample every frame, redraw if panel open (~30fps)
-    if (state.isMicActive) pushVowelSample();
-    if (state.isMicActive && !state.isMicPaused) updateLoudnessMeter();
+    if (analysisActive()) pushVowelSample();
+    if (analysisActive() && !micFrozen()) updateLoudnessMeter();
     if (state.vowelSpace.calibration.active) advanceCalibration(nowT);
     if (els.vowelSpacePanel && els.vowelSpacePanel.open) {
         if (!drawVisualizer._lastVsDraw || nowT - drawVisualizer._lastVsDraw > 33) {
@@ -4794,8 +4795,8 @@ function drawVisualizer() {
         }
     }
 
-    // Tuner-style pitch display from mic input (pitch already cached at top of drawVisualizer)
-    if (state.isMicActive && micAnalyser) {
+    // Tuner-style pitch display from mic/playback (pitch already cached at top of drawVisualizer)
+    if (analysisActive() && micAnalyser) {
         const detectedPitch = state.cachedMicPitch;
 
         if (detectedPitch > 0) {
@@ -5737,8 +5738,8 @@ function drawVisualizer() {
         }
     }
 
-    // 2. Draw Live Microphone Spectrum (Green, outline only)
-    if (state.isMicActive && micAnalyser) {
+    // 2. Draw Live Microphone / Playback Spectrum (Green, outline only)
+    if (analysisActive() && micAnalyser) {
         if (!state.cachedMicData) {
             state.cachedMicData = new Float32Array(micAnalyser.frequencyBinCount);
         }
@@ -5828,7 +5829,7 @@ function drawVisualizer() {
             state.cachedMicFormants = { f1: null, f2: null, f3: null, f4: null, f5: null };
             state.cachedMicFormantsTime = { f1: 0, f2: 0, f3: 0, f4: 0, f5: 0 };
         }
-        if (state.isMicPaused) {
+        if (micFrozen()) {
             // Pause: freeze formants at the moment of pause (use cached snapshot)
             estFormants = state.cachedMicFormants;
         } else {
@@ -5865,7 +5866,7 @@ function drawVisualizer() {
         // guaranteed consistent (markers sit on the envelope peaks).
         if ((state.micFormantMethod === 'lpc-v2' || state.micFormantMethod === 'lpc-v3')
             && lpcCoreState.lastCoefs
-            && (state.isMicPaused || performance.now() - lpcCoreState.lastUpdate < 200)) {
+            && (micFrozen() || performance.now() - lpcCoreState.lastUpdate < 200)) {
             const a = lpcCoreState.lastCoefs;
             const p = lpcCoreState.lastP;
             const decSr = lpcCoreState.lastDecSr;
@@ -6259,6 +6260,9 @@ els.btnMic.addEventListener('click', async () => {
         }
         state.isMicActive = false;
         state.isMicPaused = false;
+        // Mic turned off mid-playback: suppress the reattach at playback end
+        // (micSource is null by then anyway, but be explicit).
+        micWasActiveBeforePlayback = false;
         state.cachedMicFormants = null;
         state.cachedMicFormantsTime = null;
         els.btnMic.classList.remove('mic-active');
@@ -6319,6 +6323,13 @@ els.btnMic.addEventListener('click', async () => {
             micSource.connect(micGainNode);
             micGainNode.connect(micAnalyser);
             micGainNode.connect(micAnalyserPitch);
+
+            // A recording is playing → analysis belongs to playback; keep the live
+            // mic detached (cleanupPlayback() reattaches it when playback ends).
+            if (playbackAudio) {
+                try { micSource.disconnect(micGainNode); } catch (_) {}
+                micWasActiveBeforePlayback = true;
+            }
 
             // Fix: WebKit/Blink optimizes away disconnected media stream graphs.
             // Create a silent dummy oscillator attached to destination to keep the audio tick active, 
@@ -6438,6 +6449,18 @@ let playbackMediaSource = null; // MediaElementSourceNode for playback EQ (deskt
 let recEqFilters = [];          // peaking BiquadFilter chain for playback EQ
 let playbackUiRaf = null;
 let micWasActiveBeforePlayback = false;
+
+// Live mic and recording playback are independent analysis sources.
+// state.isMicActive strictly means the live mic; a playback session is
+// playbackAudio. Use analysisActive() where "any analysis source is running"
+// is meant, and micFrozen() for the mic-pause freeze (never during playback).
+function analysisActive() {
+    return state.isMicActive || !!playbackAudio;
+}
+
+function micFrozen() {
+    return state.isMicActive && state.isMicPaused && !playbackAudio;
+}
 
 // --- Recording playback key shift (♭/♯ transpose) ---
 
@@ -7599,9 +7622,6 @@ async function playRecording(id) {
     });
 
     playbackRecId = id;
-    state.isMicActive = true;
-    state.isMicPaused = false;
-    if (els.btnMic) els.btnMic.classList.add('mic-active');
     if (els.pbRate) els.pbRate.value = String(playbackRate);
     updateKeyShiftUi(false);
     if (els.playbackControls) els.playbackControls.style.display = 'flex';
@@ -7685,16 +7705,19 @@ function stopPlayback() {
 
 function cleanupPlayback() {
     playbackRecId = null;
-    if (micWasActiveBeforePlayback && micSource && micGainNode) {
-        try { micSource.connect(micGainNode); } catch (_) {}
+    if (micWasActiveBeforePlayback) {
+        // Reattach the live mic that was detached for playback
+        if (micSource && micGainNode) {
+            try { micSource.connect(micGainNode); } catch (_) {}
+        }
         micWasActiveBeforePlayback = false;
-    } else {
-        state.isMicActive = false;
-        if (els.btnMic) els.btnMic.classList.remove('mic-active');
+    }
+    if (!state.isMicActive) {
         state.cachedMicData = null;
         state.cachedMicFormants = null;
-        updateVibratoPanelVisibility();
     }
+    updateVibratoPanelVisibility();
+    updatePitchTrackVisibility();
     renderRecordingsList();
 }
 
@@ -8136,7 +8159,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — bottom-right corner + faint header suffix (bump on each release)
-const APP_VERSION = 'v1.38.1';
+const APP_VERSION = 'v1.39.0';
 (() => {
     // The #app-version element is parsed AFTER this script tag, so on first run
     // getElementById returns null. Defer to DOMContentLoaded if the DOM isn't ready.
