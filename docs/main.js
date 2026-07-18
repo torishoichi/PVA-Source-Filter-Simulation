@@ -2176,6 +2176,7 @@ function renderSpectrogram() {
 // ---------- Waveform (oscilloscope) view ----------
 let waveformCtx = null;
 let _waveTime = null;
+let _waveHarm = null;
 // Time-axis zoom: displayed window length in ms. Zoomed in → a few cycles
 // (oscilloscope); zoomed out during playback → up to the whole file (DAW-like).
 const WAVE_MS_MIN = 2;
@@ -2263,6 +2264,7 @@ function drawWaveformView() {
     // samples render as 0.
     let src = null, len = 0, start = 0, count = 0;
     let centered = false;  // playback: window centered on the playhead
+    let micTrace = false;  // trace shows the live mic → draw it in orange-red
     let sr = audioCtx ? audioCtx.sampleRate : 44100;
     if (playbackAudio && playbackBuffer) {
         sr = playbackBuffer.sampleRate;
@@ -2283,7 +2285,9 @@ function drawWaveformView() {
             len = ovMonLen;
             count = Math.min(Math.round(WAVE_LIVE_MAX_MS / 1000 * sr), want);
             start = ovMonLen - count;   // may be negative → renders as 0
+            micTrace = true;
         } else if (an) {
+            micTrace = (an === micAnalyser);
             if (!_waveTime || _waveTime.length !== an.fftSize) _waveTime = new Float32Array(an.fftSize);
             an.getFloatTimeDomainData(_waveTime);
             src = _waveTime;
@@ -2345,10 +2349,12 @@ function drawWaveformView() {
     ctx.beginPath(); ctx.moveTo(0, mid); ctx.lineTo(w, mid); ctx.stroke();
 
     // Trace — polyline when zoomed in; min/max envelope per pixel column when
-    // there are many samples per pixel (zoomed-out / whole-file view)
+    // there are many samples per pixel (zoomed-out / whole-file view).
+    // Live mic = orange-red (your voice); synth/playback = blue (matches spectrum)
+    const traceRGB = micTrace ? '230, 74, 25' : '33, 150, 243';
     const spp = count / w;
     if (spp > 3) {
-        ctx.fillStyle = 'rgba(33, 150, 243, 0.8)';
+        ctx.fillStyle = `rgba(${traceRGB}, 0.8)`;
         for (let x = 0; x < w; x++) {
             const s0 = start + Math.floor(x * spp);
             const s1 = start + Math.min(count, Math.floor((x + 1) * spp) + 1);
@@ -2364,7 +2370,7 @@ function drawWaveformView() {
             ctx.fillRect(x, y0, 1, Math.max(1, (mid - mn * gain) - y0));
         }
     } else {
-        ctx.strokeStyle = 'rgba(33, 150, 243, 0.9)';
+        ctx.strokeStyle = `rgba(${traceRGB}, 0.9)`;
         ctx.lineWidth = 1.5;
         ctx.beginPath();
         for (let i = 0; i < count; i++) {
@@ -2377,6 +2383,38 @@ function drawWaveformView() {
         ctx.stroke();
     }
 
+    // Harmony voices — same analyser tap as the spectrum view, drawn in teal so
+    // the practice interval reads apart from your own voice / the main voice.
+    // Skipped on the long rolling (うねり) window: the harmony analyser only
+    // holds ~85 ms of history, and on playback (no live harmony).
+    if (!centered && harmonyAnalyser && harmonyOscs.length && count <= harmonyAnalyser.fftSize) {
+        if (!_waveHarm || _waveHarm.length !== harmonyAnalyser.fftSize) _waveHarm = new Float32Array(harmonyAnalyser.fftSize);
+        harmonyAnalyser.getFloatTimeDomainData(_waveHarm);
+        const hLen = _waveHarm.length;
+        // Both buffers end "now" — map through the right-edge offset so the
+        // harmony stays time-aligned with the (zero-cross-triggered) window,
+        // and shares `gain` so relative loudness vs the main trace is honest.
+        const off = hLen - len;
+        ctx.strokeStyle = 'rgba(46, 163, 155, 0.85)';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        for (let i = 0; i < count; i++) {
+            const idx = start + i + off;
+            const v = (idx >= 0 && idx < hLen) ? _waveHarm[idx] : 0;
+            const x = (i / (count - 1)) * w;
+            const y = mid - v * gain;
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        ctx.lineWidth = 1;
+        // Top-left below the うねり readout — the top-right corner is covered
+        // by the Harmonic EQ / H1 Meter overlay dock
+        ctx.font = '600 10px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillStyle = 'rgba(46, 163, 155, 0.95)';
+        ctx.fillText('Harmony', 8, 28);
+    }
+
     // うねり: envelope overlay + readout for windows long enough to hold beats
     updateWaveBeat(src, len, start, count, sr);
     if (_waveBeat && _waveBeat.env) {
@@ -2386,7 +2424,9 @@ function drawWaveformView() {
         // edge, so anchor there — a ≤250 ms-stale envelope on a live rolling
         // view then only lags at the very edge instead of shifting the curve.
         const endS = Math.min(len, start + count);
-        ctx.strokeStyle = 'rgba(230, 138, 0, 0.85)';
+        // Amber over the blue trace; dark brown over the orange-red mic trace
+        // (amber-on-vermilion would melt together)
+        ctx.strokeStyle = micTrace ? 'rgba(110, 45, 8, 0.85)' : 'rgba(230, 138, 0, 0.85)';
         ctx.lineWidth = 1.5;
         for (const sign of [1, -1]) {
             ctx.beginPath();
@@ -8389,7 +8429,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — bottom-right corner + faint header suffix (bump on each release)
-const APP_VERSION = 'v1.40.0';
+const APP_VERSION = 'v1.43.0';
 (() => {
     // The #app-version element is parsed AFTER this script tag, so on first run
     // getElementById returns null. Defer to DOMContentLoaded if the DOM isn't ready.

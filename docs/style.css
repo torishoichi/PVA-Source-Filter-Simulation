@@ -541,6 +541,29 @@ input[type=range]::-moz-range-track {
     background: rgba(0, 0, 0, 0.04);
 }
 
+.fullscreen-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 26px;
+    align-self: center;
+    background: var(--bg-elev);
+    border: 1px solid var(--glass-border);
+    color: var(--text-secondary);
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    font-size: 0.9rem;
+    line-height: 1;
+    transition: all 0.15s;
+}
+
+.fullscreen-btn:hover {
+    color: var(--accent-color);
+    border-color: var(--accent-color);
+    background: var(--accent-soft);
+}
+
 /* Vibrato analysis panel */
 /* Match Recordings panel visuals for visual consistency */
 /* Mic Analysis: outer wrapper around Vibrato / Vowel Space / Recordings */
@@ -2830,6 +2853,27 @@ canvas {
 }
 
 /* Responsive */
+
+/* Wide screens: Source | Spectrum | Filter — the spectrum stays centered and
+   visible (sticky) while sliders on either side are adjusted, mirroring the
+   source→filter signal chain left to right. */
+@media (min-width: 1440px) {
+    .app-container {
+        max-width: 1800px;
+    }
+
+    .dashboard {
+        grid-template-columns: minmax(340px, 1fr) minmax(0, 2.2fr) minmax(340px, 1fr);
+        grid-template-rows: auto;
+        grid-template-areas: "source visualizer filter";
+    }
+
+    /* Side column is ~400px — two formant cards per row get too cramped */
+    .formant-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
 @media (max-width: 768px) {
     .dashboard {
         grid-template-columns: 1fr;

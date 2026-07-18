@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>Wide frame harness (dev only)</title>
+<style>
+  body { margin: 0; background: #333; display: flex; justify-content: flex-start; align-items: flex-start; }
+  iframe { width: 1920px; height: 2400px; border: none; margin: 8px; background: #fff; box-shadow: 0 0 0 1px #000; }
+</style>
+</head>
+<body>
+<iframe id="frame" src="../index.html"></iframe>
+<script>
+  // Open the Source / Filter panels so the wide 3-column layout can be
+  // inspected in a fresh (no localStorage) profile such as headless Chrome.
+  document.getElementById('frame').addEventListener('load', (e) => {
+    const doc = e.target.contentDocument;
+    ['panel-source', 'panel-filter'].forEach(id => {
+      const d = doc.getElementById(id);
+      if (d) d.open = true;
+    });
+  });
+</script>
+</body>
+</html>
