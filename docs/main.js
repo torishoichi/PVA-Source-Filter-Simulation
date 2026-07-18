@@ -784,6 +784,19 @@ function resetVibrato() {
     vibratoAMGain.gain.setTargetAtTime(0, t, 0.05);
 }
 
+// Single entry point for (re)starting the drawVisualizer rAF loop.
+// drawVisualizer re-schedules itself, so calling it while a loop is already
+// running (e.g. mic on → then Play) forks a second concurrent loop; loops then
+// accumulate on every Play/Stop cycle — pitch history advances N× per frame and
+// CPU saturates. Always cancel the pending frame before seeding a new loop.
+function startVisualizerLoop() {
+    if (animationId) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+    }
+    drawVisualizer();
+}
+
 function startAudio() {
     initAudio();
     if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -813,7 +826,7 @@ function startAudio() {
     els.btnPlay.classList.add('playing');
     isPlaying = true;
 
-    drawVisualizer();
+    startVisualizerLoop();
 }
 
 function stopAudio() {
@@ -852,7 +865,7 @@ function stopAudio() {
 
     // If the mic or a playback session is still active, keep the visualizer running
     if (analysisActive()) {
-        drawVisualizer();
+        startVisualizerLoop();
     }
 }
 
@@ -6508,7 +6521,13 @@ if (els.harmLevel) {
 updateHarmonyUi();
 
 // Mic Toggle
+// Re-entry guard: while getUserMedia's permission prompt is pending, isMicActive
+// is still false, so a second click would start a second capture chain whose
+// first stream is never stopped (mic indicator stays on). Ignore clicks until
+// the pending start resolves.
+let micStarting = false;
 els.btnMic.addEventListener('click', async () => {
+    if (micStarting) return;
     if (state.isMicActive) {
         // Disconnect and stop
         stopOvMonTap();   // detach the Overview live-monitor tap while micSource is still valid
@@ -6527,6 +6546,21 @@ els.btnMic.addEventListener('click', async () => {
         if (micAnalyserPitch) {
             try { micAnalyserPitch.disconnect(); } catch (_) {}
             micAnalyserPitch = null;
+        }
+        // Tear down the keep-alive graph (dummy osc + zero-gain sink). Left running,
+        // each mic on/off cycle would leak a live oscillator and its node chain.
+        // micAnalyser itself is kept: playback still uses it as the draw handle.
+        if (state.micDummyOsc) {
+            try { state.micDummyOsc.stop(); } catch (_) {}
+            try { state.micDummyOsc.disconnect(); } catch (_) {}
+            state.micDummyOsc = null;
+        }
+        if (state.micSilenceFilter) {
+            try { state.micSilenceFilter.disconnect(); } catch (_) {}
+            state.micSilenceFilter = null;
+        }
+        if (micAnalyser) {
+            try { micAnalyser.disconnect(); } catch (_) {}
         }
         state.isMicActive = false;
         state.isMicPaused = false;
@@ -6554,6 +6588,7 @@ els.btnMic.addEventListener('click', async () => {
         }
     } else {
         // Request permissions and start
+        micStarting = true;
         try {
             const audioConstraints = {
                 echoCancellation: false,
@@ -6614,8 +6649,9 @@ els.btnMic.addEventListener('click', async () => {
             dummyOsc.connect(silenceFilter);
             dummyOsc.start();
 
-            // Store reference so it can be stopped later
+            // Store references so the keep-alive graph can be torn down on mic-off
             state.micDummyOsc = dummyOsc;
+            state.micSilenceFilter = silenceFilter;
 
             silenceFilter.connect(audioCtx.destination);
 
@@ -6633,12 +6669,13 @@ els.btnMic.addEventListener('click', async () => {
 
             // Kick off visualizer if it wasn't already running
             if (!isPlaying) {
-                cancelAnimationFrame(animationId);
-                drawVisualizer();
+                startVisualizerLoop();
             }
         } catch (err) {
             console.error('Microphone access denied or error:', err);
             alert('Could not access the microphone. Please grant permission in your browser.');
+        } finally {
+            micStarting = false;
         }
     }
 });
@@ -7909,8 +7946,7 @@ async function playRecording(id) {
     if (playbackUiRaf) cancelAnimationFrame(playbackUiRaf);
     playbackUiRaf = requestAnimationFrame(updatePlaybackUi);
     if (!isPlaying) {
-        cancelAnimationFrame(animationId);
-        drawVisualizer();
+        startVisualizerLoop();
     }
     renderRecordingsList();
 
@@ -8429,7 +8465,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — bottom-right corner + faint header suffix (bump on each release)
-const APP_VERSION = 'v1.43.0';
+const APP_VERSION = 'v1.43.1';
 (() => {
     // The #app-version element is parsed AFTER this script tag, so on first run
     // getElementById returns null. Defer to DOMContentLoaded if the DOM isn't ready.
