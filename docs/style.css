@@ -2737,22 +2737,44 @@ canvas {
     color: #fff;
 }
 
-/* Filter formant 2-col grid */
+/* Filter formant list (compact rows keep sliders wide — single column at all widths) */
 .formant-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    column-gap: 14px;
-    row-gap: 12px;
+    grid-template-columns: 1fr;
+    row-gap: 8px;
 }
 
+/* Compact 2-line card: [label | freq slider | value | ON] / [Q | q slider | value] */
 .formant-grid .formant-control {
     margin-bottom: 0;
-    padding: 12px 14px;
+    padding: 8px 12px;
     background: var(--bg-elev);
     border: 1px solid var(--glass-border);
     border-left: 3px solid var(--glass-border);
     border-radius: var(--radius-sm);
+    display: grid;
+    grid-template-columns: minmax(3rem, auto) minmax(0, 1fr) auto auto;
+    align-items: center;
+    column-gap: 8px;
+    row-gap: 4px;
 }
+
+.formant-grid .formant-control .formant-row,
+.formant-grid .formant-control .q-row {
+    display: contents;
+}
+
+.formant-grid .formant-control .formant-label { grid-area: 1 / 1; }
+.formant-grid .formant-control > input[type="range"] { grid-area: 1 / 2; }
+.formant-grid .formant-control .formant-val {
+    grid-area: 1 / 3;
+    min-width: 7ch;
+    text-align: right;
+}
+.formant-grid .formant-control .toggle-btn { grid-area: 1 / 4; min-width: 44px; }
+.formant-grid .formant-control .q-label { grid-area: 2 / 1; }
+.formant-grid .formant-control .q-row input[type="range"] { grid-area: 2 / 2; }
+.formant-grid .formant-control .q-val { grid-area: 2 / 3; text-align: right; }
 
 /* Per-formant left border color */
 .formant-grid > .formant-control:nth-of-type(1) { border-left-color: var(--vivid-red); }
@@ -2767,12 +2789,8 @@ canvas {
     display: none;
 }
 
-/* Tighten slider + Q-row spacing inside formant cards */
 .formant-grid .formant-control input[type="range"] {
-    margin: 6px 0 0;
-}
-.formant-grid .formant-control .q-row {
-    margin-top: 6px;
+    margin: 0;
 }
 
 /* Formant header (label + ON/OFF toggle) */
@@ -2867,11 +2885,6 @@ canvas {
         grid-template-rows: auto;
         grid-template-areas: "source visualizer filter";
     }
-
-    /* Side column is ~400px — two formant cards per row get too cramped */
-    .formant-grid {
-        grid-template-columns: 1fr;
-    }
 }
 
 @media (max-width: 768px) {
@@ -2907,10 +2920,6 @@ canvas {
 
     .visualizer-panel {
         position: static;
-    }
-
-    .formant-grid {
-        grid-template-columns: 1fr;
     }
 }
 
