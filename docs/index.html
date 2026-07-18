@@ -77,6 +77,25 @@
                     <div class="hint">歌う音の高さ。数字が大きいほど高い。Hz欄は直接入力可</div>
                 </div>
 
+                <div class="control-group harmony-group">
+                    <label>Harmony（ハモリ練習） <span class="tooltip"
+                            data-tooltip="合成音声に3度・5度・オクターブのハモリ声部を重ねます。各ボタンは OFF→上ハモ→下ハモ の順に切替（J-popの定番は3度下）。純正律(5:4, 3:2, 2:1)では倍音が完全に噛み合い、うねり（ビート）が消えたロックした響きになります。">[?]</span></label>
+                    <div class="harmony-btns">
+                        <button id="harm-3" class="inline-toggle-btn" type="button" title="3度ハモリ (OFF→上→下)">3rd</button>
+                        <button id="harm-5" class="inline-toggle-btn" type="button" title="5度ハモリ (OFF→上→下)">5th</button>
+                        <button id="harm-8" class="inline-toggle-btn" type="button" title="オクターブハモリ (OFF→上→下)">Oct</button>
+                        <span class="harmony-sep" aria-hidden="true"></span>
+                        <button id="harm-third-type" class="inline-toggle-btn" type="button" title="3度の長短切替">長3</button>
+                        <button id="harm-tuning" class="inline-toggle-btn" type="button" title="平均律／純正律の切替">平均律</button>
+                    </div>
+                    <div class="harmony-level-row">
+                        <label for="harm-level" class="harmony-level-label">Level</label>
+                        <input type="range" id="harm-level" min="0" max="100" value="70" step="1">
+                        <span class="control-val" id="harm-level-val">70%</span>
+                    </div>
+                    <div class="hint">Play中に鳴るハモリに合わせて歌う練習。Mic ON で自分の声も確認できる</div>
+                </div>
+
                 <div class="control-group">
                     <label>Vibrational Mechanism (Register) <span class="tooltip"
                             data-tooltip="声帯の物理的な振動様式に基づく区分です。M1（地声的）は声帯が厚く接触率が高いため、緩やかなスペクトル傾斜（豊富な高次倍音）とバズ音を持ちます。M2（裏声的）は声帯が薄く接触率が低いため、急なスペクトル傾斜（少ない高次倍音）と滑らかな音色になります。">[?]</span></label>

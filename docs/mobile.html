@@ -147,6 +147,21 @@
         </div>
 
         <div class="card">
+            <label class="slider-label">Harmony（ハモリ練習） <span class="tooltip"
+                    data-tooltip="合成音声に3度・5度・オクターブのハモリ声部を重ねます。各ボタンは OFF→上ハモ→下ハモ の順に切替（J-popの定番は3度下）。純正律ではうねり（ビート）が消えたロックした響きになります。">[?]</span>
+                <span class="slider-val"><span id="harm-level-val">70%</span></span>
+            </label>
+            <div class="harmony-btns">
+                <button id="harm-3" class="harm-btn" type="button">3rd</button>
+                <button id="harm-5" class="harm-btn" type="button">5th</button>
+                <button id="harm-8" class="harm-btn" type="button">Oct</button>
+                <button id="harm-third-type" class="harm-btn harm-mod" type="button">長3</button>
+                <button id="harm-tuning" class="harm-btn harm-mod" type="button">平均律</button>
+            </div>
+            <input type="range" id="harm-level" min="0" max="100" value="70" step="1" class="mobile-range">
+        </div>
+
+        <div class="card">
             <label class="slider-label">Mechanism <span class="tooltip"
                     data-tooltip="声帯の物理的な振動様式に基づく区分です。M1（地声的）は声帯が厚く接触率が高いため、緩やかなスペクトル傾斜（豊富な高次倍音）とバズ音を持ちます。M2（裏声的）は声帯が薄く接触率が低いため、急なスペクトル傾斜（少ない高次倍音）と滑らかな音色になります。">[?]</span></label>
             <div class="toggle-pills">

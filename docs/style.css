@@ -4288,3 +4288,46 @@ body.learn-drawer-open { overflow: hidden; }
     margin-top: 6px;
 }
 
+
+/* Harmony (ハモリ練習) — interval toggles under the pitch control */
+.harmony-btns {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 8px 0 6px;
+}
+
+.harmony-btns .inline-toggle-btn {
+    margin-left: 0;
+    min-width: 46px;
+}
+
+.inline-toggle-btn.harmony-active {
+    background-color: var(--accent-color);
+    color: #fff;
+    border-color: var(--accent-color);
+}
+
+.harmony-sep {
+    width: 1px;
+    height: 16px;
+    background: var(--glass-border);
+    margin: 0 2px;
+}
+
+.harmony-level-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.harmony-level-row .harmony-level-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.harmony-level-row input[type="range"] {
+    flex: 1;
+}

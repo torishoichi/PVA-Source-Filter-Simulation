@@ -249,6 +249,14 @@ const state = {
         amDepth: 4,       // %
         waveform: 'sine'  // 'sine' | 'triangle' | 'sawtooth'
     },
+    harmony: {
+        third: 0,          // 0 off, +1 above, -1 below
+        fifth: 0,
+        octave: 0,
+        minorThird: false, // false = major third (+4st / 5:4), true = minor (+3st / 6:5)
+        just: false,       // false = equal temperament, true = just intonation (beat-free)
+        level: 0.7         // gain relative to the main voice
+    },
     viewMode: 'spectrum', // 'spectrum' | 'spectrogram' | 'waveform' | 'overview'
     vowelSpace: {
         trail: [],       // [{t, f1, f2}], rolling ~1.5s
@@ -292,6 +300,13 @@ let vibratoAMGain = null;
 // --- DOM Elements ---
 const els = {
     btnPlay: document.getElementById('audio-toggle'),
+    harm3: document.getElementById('harm-3'),
+    harm5: document.getElementById('harm-5'),
+    harm8: document.getElementById('harm-8'),
+    harmThirdType: document.getElementById('harm-third-type'),
+    harmTuning: document.getElementById('harm-tuning'),
+    harmLevel: document.getElementById('harm-level'),
+    harmLevelVal: document.getElementById('harm-level-val'),
     btnMic: document.getElementById('mic-toggle'),
     btnMicPause: document.getElementById('mic-pause'),
     btnMicRecord: document.getElementById('mic-record'),
@@ -894,6 +909,7 @@ function createSource() {
         harmonicsOscs.push({ osc, gain, audioMute, harmonic: i });
     }
 
+    createHarmonyVoices();
     updateSpectralTilt();
 }
 
@@ -906,6 +922,92 @@ function destroySource() {
         }, 150);
     });
     harmonicsOscs = [];
+    destroyHarmonyVoices();
+}
+
+// --- Harmony voices (ハモリ練習) ---
+// Extra oscillator banks at musical intervals above/below the main voice,
+// through the same tilt → formant chain. Audio path only — the visualizer
+// keeps showing the main voice so spectrum/H1/analysis stay readable.
+let harmonyOscs = [];
+
+function harmonyRatio(kind, dir) {
+    const just = state.harmony.just;
+    let up;
+    if (kind === 'third') {
+        up = just ? (state.harmony.minorThird ? 6 / 5 : 5 / 4)
+            : Math.pow(2, (state.harmony.minorThird ? 3 : 4) / 12);
+    } else if (kind === 'fifth') {
+        up = just ? 3 / 2 : Math.pow(2, 7 / 12);
+    } else {
+        up = 2; // octave — identical in both tunings
+    }
+    return dir < 0 ? 1 / up : up;
+}
+
+function activeHarmonyVoices() {
+    const out = [];
+    for (const kind of ['third', 'fifth', 'octave']) {
+        const dir = state.harmony[kind];
+        if (dir) out.push({ kind, ratio: harmonyRatio(kind, dir) });
+    }
+    return out;
+}
+
+function harmonyVoiceMaxHarmonics(ratio) {
+    return Math.min(Math.max(1, Math.floor(MAX_FREQ_DISPLAY / (state.pitch * ratio))), 40);
+}
+
+function harmonySelectionMute(freq) {
+    if (!state.selectionActive) return 1;
+    return (freq < state.selectionMinFreq || freq > state.selectionMaxFreq) ? 0 : 1;
+}
+
+function destroyHarmonyVoices() {
+    if (!audioCtx) { harmonyOscs = []; return; }
+    const time = audioCtx.currentTime;
+    harmonyOscs.forEach(h => {
+        h.gain.gain.linearRampToValueAtTime(0, time + 0.1);
+        setTimeout(() => {
+            try { h.osc.stop(); h.osc.disconnect(); h.gain.disconnect(); h.audioMute.disconnect(); } catch (e) { }
+        }, 150);
+    });
+    harmonyOscs = [];
+}
+
+function createHarmonyVoices() {
+    destroyHarmonyVoices();
+    if (!audioCtx || !spectralTiltNode) return;
+    const time = audioCtx.currentTime;
+    for (const v of activeHarmonyVoices()) {
+        const maxH = harmonyVoiceMaxHarmonics(v.ratio);
+        for (let i = 1; i <= maxH; i++) {
+            const freq = state.pitch * v.ratio * i;
+            if (freq > audioCtx.sampleRate / 2) break;
+
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            const audioMute = audioCtx.createGain();
+
+            osc.type = 'sine';
+            osc.frequency.value = freq;
+
+            const dbGain = calcHarmonicGainDb(i, state.mechanism, state.phonationMode, state.airflow);
+            const baseGain = dbToLinear(dbGain + harmonicEqDb(i)) * (1 / Math.sqrt(maxH));
+            gain.gain.value = baseGain * state.harmony.level;
+            audioMute.gain.value = harmonySelectionMute(freq);
+
+            osc.connect(gain);
+            gain.connect(audioMute);
+            audioMute.connect(spectralTiltNode); // audio only — NOT the visualizer chain
+
+            // Same vibrato depth in cents → the harmony stays musically locked
+            if (vibratoFMGain) vibratoFMGain.connect(osc.detune);
+
+            osc.start(time);
+            harmonyOscs.push({ osc, gain, audioMute, harmonic: i, ratio: v.ratio, maxH, baseGain });
+        }
+    }
 }
 
 // --- Updates ---
@@ -1045,6 +1147,22 @@ function updateSourceParams() {
             h.gain.gain.setTargetAtTime(linearGain, time, 0.05);
             if (h.audioMute) h.audioMute.gain.setTargetAtTime(muteVal, time, 0.05);
         });
+
+        // Harmony voices follow the same pitch/slope/selection updates
+        const wantCount = activeHarmonyVoices().reduce((n, v) => n + harmonyVoiceMaxHarmonics(v.ratio), 0);
+        if (harmonyOscs.length !== wantCount) {
+            createHarmonyVoices();
+        } else {
+            harmonyOscs.forEach(h => {
+                const freq = state.pitch * h.ratio * h.harmonic;
+                if (freq > audioCtx.sampleRate / 2) return;
+                h.osc.frequency.setTargetAtTime(freq, time, 0.05);
+                const dbGain = calcHarmonicGainDb(h.harmonic, state.mechanism, state.phonationMode, state.airflow);
+                h.baseGain = dbToLinear(dbGain + harmonicEqDb(h.harmonic)) * (1 / Math.sqrt(h.maxH));
+                h.gain.gain.setTargetAtTime(h.baseGain * state.harmony.level, time, 0.05);
+                h.audioMute.gain.setTargetAtTime(harmonySelectionMute(freq), time, 0.05);
+            });
+        }
     }
 
     updateSpectralTilt();
@@ -6237,6 +6355,60 @@ els.btnPlay.addEventListener('click', () => {
     updateSynthVibratoDisplay();
 });
 
+// Harmony (ハモリ練習) — interval buttons cycle OFF → above → below
+function updateHarmonyUi() {
+    const map = [['harm3', 'third', '3rd'], ['harm5', 'fifth', '5th'], ['harm8', 'octave', 'Oct']];
+    for (const [el, key, base] of map) {
+        const btn = els[el];
+        if (!btn) continue;
+        const dir = state.harmony[key];
+        btn.textContent = dir === 0 ? base : base + (dir > 0 ? ' ↑' : ' ↓');
+        btn.classList.toggle('harmony-active', dir !== 0);
+    }
+    if (els.harmThirdType) els.harmThirdType.textContent = state.harmony.minorThird ? '短3' : '長3';
+    if (els.harmTuning) els.harmTuning.textContent = state.harmony.just ? '純正律' : '平均律';
+    if (els.harmLevelVal) els.harmLevelVal.textContent = Math.round(state.harmony.level * 100) + '%';
+}
+
+function bindHarmonyCycle(el, key) {
+    if (!el) return;
+    el.addEventListener('click', () => {
+        const cur = state.harmony[key];
+        state.harmony[key] = cur === 0 ? 1 : (cur === 1 ? -1 : 0);
+        updateHarmonyUi();
+        if (isPlaying) createHarmonyVoices();
+    });
+}
+bindHarmonyCycle(els.harm3, 'third');
+bindHarmonyCycle(els.harm5, 'fifth');
+bindHarmonyCycle(els.harm8, 'octave');
+
+if (els.harmThirdType) {
+    els.harmThirdType.addEventListener('click', () => {
+        state.harmony.minorThird = !state.harmony.minorThird;
+        updateHarmonyUi();
+        if (isPlaying && state.harmony.third) createHarmonyVoices();
+    });
+}
+if (els.harmTuning) {
+    els.harmTuning.addEventListener('click', () => {
+        state.harmony.just = !state.harmony.just;
+        updateHarmonyUi();
+        if (isPlaying && activeHarmonyVoices().length) createHarmonyVoices();
+    });
+}
+if (els.harmLevel) {
+    els.harmLevel.addEventListener('input', () => {
+        state.harmony.level = Number(els.harmLevel.value) / 100;
+        updateHarmonyUi();
+        if (audioCtx) {
+            const t = audioCtx.currentTime;
+            harmonyOscs.forEach(h => h.gain.gain.setTargetAtTime(h.baseGain * state.harmony.level, t, 0.03));
+        }
+    });
+}
+updateHarmonyUi();
+
 // Mic Toggle
 els.btnMic.addEventListener('click', async () => {
     if (state.isMicActive) {
@@ -8159,7 +8331,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — bottom-right corner + faint header suffix (bump on each release)
-const APP_VERSION = 'v1.39.0';
+const APP_VERSION = 'v1.40.0';
 (() => {
     // The #app-version element is parsed AFTER this script tag, so on first run
     // getElementById returns null. Defer to DOMContentLoaded if the DOM isn't ready.
