@@ -1935,12 +1935,16 @@ function initSpectrogramBuffer() {
 }
 
 function pickSpectrogramAnalyser() {
-    const playbackOn = !!playbackAudio && !playbackAudio.paused;
-    if ((state.isMicActive || playbackOn) && micAnalyser) return micAnalyser;
+    // While a playback session exists (playing OR paused) the mic chain is
+    // detached, so micAnalyser only ever sees silence — never pick it then.
+    // The playing case itself is handled with the offline playback spectrum
+    // in pushSpectrogramColumn, not here.
+    if (!playbackAudio && state.isMicActive && micAnalyser) return micAnalyser;
     if (isPlaying && analyser) return analyser;
     return null;
 }
 
+let _sgFft = null;
 function pushSpectrogramColumn() {
     if (!spectrogramBuf32 || !spectrogramPalette) return;
     const w = SPECTROGRAM_WIDTH, h = SPECTROGRAM_HEIGHT;
@@ -1951,20 +1955,36 @@ function pushSpectrogramColumn() {
         spectrogramBuf32.copyWithin(off, off + 1, off + w);
     }
 
-    const an = pickSpectrogramAnalyser();
     const colX = w - 1;
-    if (!an || !audioCtx) {
+    // While a recording is playing, the analyser node is silent (the real mic is
+    // disconnected and iOS never routes <audio> into it) — use the offline
+    // playback spectrum from computePlaybackSpectrum() instead.
+    const playbackOn = !!playbackAudio && !playbackAudio.paused && !!playbackBuffer;
+    let fft = null, bins = 0, minDb = -100, maxDb = -30, nyquist = 0;
+    if (playbackOn && state.cachedMicData && micAnalyser) {
+        fft = state.cachedMicData;
+        bins = fft.length;
+        minDb = micAnalyser.minDecibels;
+        maxDb = micAnalyser.maxDecibels;
+        nyquist = playbackBuffer.sampleRate / 2;
+    } else if (!playbackOn) {
+        const an = pickSpectrogramAnalyser();
+        if (an && audioCtx) {
+            bins = an.frequencyBinCount;
+            if (!_sgFft || _sgFft.length !== bins) _sgFft = new Float32Array(bins);
+            fft = _sgFft;
+            an.getFloatFrequencyData(fft);
+            minDb = an.minDecibels;
+            maxDb = an.maxDecibels;
+            nyquist = audioCtx.sampleRate / 2;
+        }
+    }
+    if (!fft || !nyquist) {
         for (let y = 0; y < h; y++) spectrogramBuf32[y * w + colX] = spectrogramPalette[0];
         return;
     }
 
-    const bins = an.frequencyBinCount;
-    const fft = new Float32Array(bins);
-    an.getFloatFrequencyData(fft);
-    const minDb = an.minDecibels;
-    const maxDb = an.maxDecibels;
     const dbRange = maxDb - minDb;
-    const nyquist = audioCtx.sampleRate / 2;
     const useLog = !!state.logScale;
     const logMin = Math.log10(50);
     const logMax = Math.log10(SPECTROGRAM_MAX_FREQ);
@@ -8116,7 +8136,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — bottom-right corner + faint header suffix (bump on each release)
-const APP_VERSION = 'v1.38.0';
+const APP_VERSION = 'v1.38.1';
 (() => {
     // The #app-version element is parsed AFTER this script tag, so on first run
     // getElementById returns null. Defer to DOMContentLoaded if the DOM isn't ready.
