@@ -26,6 +26,13 @@ let visSpectralTiltNode = null;
 let visMasterGain = null;
 let silentTarget = null;
 
+// Harmony visualizer chain — separate analyser so harmony partials draw in
+// their own color without polluting the main-voice spectrum / H1 analysis
+let harmonyVisF1Node = null, harmonyVisF2Node = null, harmonyVisF3Node = null, harmonyVisF4Node = null, harmonyVisF5Node = null;
+let harmonyVisTiltNode = null;
+let harmonyVisGain = null;
+let harmonyAnalyser = null;
+
 let noiseNode = null;
 let noiseFilter = null;
 let noiseGain = null;
@@ -710,6 +717,29 @@ function initAudio() {
     analyser.connect(silentTarget);
     silentTarget.connect(audioCtx.destination);
 
+    // Harmony visualizer path (mirrors the vis chain; fed only by harmony voices)
+    harmonyVisTiltNode = audioCtx.createBiquadFilter();
+    harmonyVisTiltNode.type = 'highshelf';
+    harmonyVisTiltNode.frequency.value = 400;
+    harmonyVisF1Node = audioCtx.createBiquadFilter(); harmonyVisF1Node.type = 'peaking'; harmonyVisF1Node.gain.value = state.formants.f1.gain;
+    harmonyVisF2Node = audioCtx.createBiquadFilter(); harmonyVisF2Node.type = 'peaking'; harmonyVisF2Node.gain.value = state.formants.f2.gain;
+    harmonyVisF3Node = audioCtx.createBiquadFilter(); harmonyVisF3Node.type = 'peaking'; harmonyVisF3Node.gain.value = state.formants.f3.gain;
+    harmonyVisF4Node = audioCtx.createBiquadFilter(); harmonyVisF4Node.type = 'peaking'; harmonyVisF4Node.gain.value = state.formants.f4.gain;
+    harmonyVisF5Node = audioCtx.createBiquadFilter(); harmonyVisF5Node.type = 'peaking'; harmonyVisF5Node.gain.value = state.formants.f5.gain;
+    harmonyVisGain = audioCtx.createGain();
+    harmonyVisGain.gain.value = 0;
+    harmonyAnalyser = audioCtx.createAnalyser();
+    harmonyAnalyser.fftSize = 4096;
+    harmonyAnalyser.smoothingTimeConstant = 0.8;
+    harmonyVisTiltNode.connect(harmonyVisF1Node);
+    harmonyVisF1Node.connect(harmonyVisF2Node);
+    harmonyVisF2Node.connect(harmonyVisF3Node);
+    harmonyVisF3Node.connect(harmonyVisF4Node);
+    harmonyVisF4Node.connect(harmonyVisF5Node);
+    harmonyVisF5Node.connect(harmonyVisGain);
+    harmonyVisGain.connect(harmonyAnalyser);
+    harmonyAnalyser.connect(silentTarget);
+
     // Vibrato LFO + modulation gains
     vibratoLFO = audioCtx.createOscillator();
     vibratoLFO.type = state.vibrato.waveform;
@@ -722,6 +752,7 @@ function initAudio() {
     vibratoLFO.connect(vibratoAMGain);
     vibratoAMGain.connect(masterGain.gain); // AM rides on masterGain (audio)
     vibratoAMGain.connect(visMasterGain.gain); // AM also rides on visMasterGain (spectrum)
+    vibratoAMGain.connect(harmonyVisGain.gain); // keep harmony spectrum AM-consistent
     vibratoLFO.start();
 
     updateFilterParams();
@@ -772,6 +803,11 @@ function startAudio() {
         visMasterGain.gain.setValueAtTime(0, audioCtx.currentTime);
         visMasterGain.gain.linearRampToValueAtTime(targetIntensity, audioCtx.currentTime + 0.1);
     }
+    if (harmonyVisGain) {
+        harmonyVisGain.gain.cancelScheduledValues(audioCtx.currentTime);
+        harmonyVisGain.gain.setValueAtTime(0, audioCtx.currentTime);
+        harmonyVisGain.gain.linearRampToValueAtTime(targetIntensity, audioCtx.currentTime + 0.1);
+    }
 
     els.btnPlay.textContent = isMobilePage ? '■ Stop' : 'Stop Audio';
     els.btnPlay.classList.add('playing');
@@ -791,6 +827,11 @@ function stopAudio() {
         visMasterGain.gain.cancelScheduledValues(audioCtx.currentTime);
         visMasterGain.gain.setValueAtTime(visMasterGain.gain.value, audioCtx.currentTime);
         visMasterGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.1);
+    }
+    if (harmonyVisGain) {
+        harmonyVisGain.gain.cancelScheduledValues(audioCtx.currentTime);
+        harmonyVisGain.gain.setValueAtTime(harmonyVisGain.gain.value, audioCtx.currentTime);
+        harmonyVisGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.1);
     }
 
     resetVibrato();
@@ -927,8 +968,9 @@ function destroySource() {
 
 // --- Harmony voices (ハモリ練習) ---
 // Extra oscillator banks at musical intervals above/below the main voice,
-// through the same tilt → formant chain. Audio path only — the visualizer
-// keeps showing the main voice so spectrum/H1/analysis stay readable.
+// through the same tilt → formant chain. Audio + a dedicated harmony analyser:
+// the spectrum draws harmony in its own color (teal) while the main analyser
+// keeps seeing only the main voice, so H1/H2 and analysis stay readable.
 let harmonyOscs = [];
 
 function harmonyRatio(kind, dir) {
@@ -999,7 +1041,8 @@ function createHarmonyVoices() {
 
             osc.connect(gain);
             gain.connect(audioMute);
-            audioMute.connect(spectralTiltNode); // audio only — NOT the visualizer chain
+            audioMute.connect(spectralTiltNode); // audio out (mixed with the main voice)
+            if (harmonyVisTiltNode) audioMute.connect(harmonyVisTiltNode); // harmony-only analyser tap
 
             // Same vibrato depth in cents → the harmony stays musically locked
             if (vibratoFMGain) vibratoFMGain.connect(osc.detune);
@@ -1043,6 +1086,7 @@ function calcAerodynamics() {
         const targetIntensity = Math.min(1.0, state.pressure * 0.8) * state.masterVolume;
         masterGain.gain.setTargetAtTime(targetIntensity, audioCtx.currentTime, 0.05);
         if (visMasterGain) visMasterGain.gain.setTargetAtTime(targetIntensity, audioCtx.currentTime, 0.05);
+        if (harmonyVisGain) harmonyVisGain.gain.setTargetAtTime(targetIntensity, audioCtx.currentTime, 0.05);
     }
     updateNoiseLevel();
     // Do not call analyzeAcoustics() here as calcAerodynamics() will trigger it
@@ -1173,24 +1217,25 @@ function updateFilterParams() {
 
     const time = audioCtx.currentTime;
 
-    const updateNode = (node, visNode, key) => {
+    const updateNode = (node, visNodes, key) => {
         node.frequency.setTargetAtTime(state.formants[key].freq, time, 0.05);
         node.Q.setTargetAtTime(state.formants[key].q, time, 0.05);
         // Toggle bypass by setting gain to 0
         node.gain.setTargetAtTime(state.formants[key].enabled ? state.formants[key].gain : 0, time, 0.05);
 
-        if (visNode) {
+        for (const visNode of visNodes) {
+            if (!visNode) continue;
             visNode.frequency.setTargetAtTime(state.formants[key].freq, time, 0.05);
             visNode.Q.setTargetAtTime(state.formants[key].q, time, 0.05);
             visNode.gain.setTargetAtTime(state.formants[key].enabled ? state.formants[key].gain : 0, time, 0.05);
         }
     };
 
-    updateNode(f1Node, visF1Node, 'f1');
-    updateNode(f2Node, visF2Node, 'f2');
-    updateNode(f3Node, visF3Node, 'f3');
-    updateNode(f4Node, visF4Node, 'f4');
-    updateNode(f5Node, visF5Node, 'f5');
+    updateNode(f1Node, [visF1Node, harmonyVisF1Node], 'f1');
+    updateNode(f2Node, [visF2Node, harmonyVisF2Node], 'f2');
+    updateNode(f3Node, [visF3Node, harmonyVisF3Node], 'f3');
+    updateNode(f4Node, [visF4Node, harmonyVisF4Node], 'f4');
+    updateNode(f5Node, [visF5Node, harmonyVisF5Node], 'f5');
 
     analyzeAcoustics();
 
@@ -5655,6 +5700,19 @@ function drawVisualizer() {
             drawSpectrum(analyser, 'rgba(33, 150, 243, 0.9)', gradient, 1.5, dataArray);
         }
 
+        // Harmony voices — dedicated analyser, drawn in teal (matches the active
+        // harmony buttons) so added partials read apart from the main voice (blue)
+        if (harmonyAnalyser && harmonyOscs.length) {
+            const hGradient = canvasCtx.createLinearGradient(0, 0, 0, height);
+            hGradient.addColorStop(0, 'rgba(46, 163, 155, 0.4)');
+            hGradient.addColorStop(1, 'rgba(46, 163, 155, 0.0)');
+            drawSpectrum(harmonyAnalyser, 'rgba(46, 163, 155, 0.9)', hGradient, 1.5);
+            canvasCtx.font = '10px monospace';
+            canvasCtx.textAlign = 'right';
+            canvasCtx.fillStyle = 'rgba(46, 163, 155, 0.95)';
+            canvasCtx.fillText('Harmony', width - 6, 12);
+        }
+
         const maxDb = analyser.maxDecibels;
         const minDb = analyser.minDecibels;
         const dbRange = maxDb - minDb;
@@ -9167,6 +9225,10 @@ function updateSpectralTilt() {
         if (visSpectralTiltNode) {
             visSpectralTiltNode.frequency.setTargetAtTime(anchorFreq, audioCtx.currentTime, 0.1);
             visSpectralTiltNode.gain.setTargetAtTime(state.spectrumSlope, audioCtx.currentTime, 0.1);
+        }
+        if (harmonyVisTiltNode) {
+            harmonyVisTiltNode.frequency.setTargetAtTime(anchorFreq, audioCtx.currentTime, 0.1);
+            harmonyVisTiltNode.gain.setTargetAtTime(state.spectrumSlope, audioCtx.currentTime, 0.1);
         }
     }
 }
