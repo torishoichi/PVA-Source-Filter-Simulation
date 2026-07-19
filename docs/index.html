@@ -446,19 +446,16 @@
                         <div class="canvas-title-block">
                             <h2 title="Source × Filter = Output">Power Spectrum</h2>
                             <div class="strategy-strip">
-                                <span class="strategy-item">
-                                    <span class="strategy-label">Phonation <span class="tooltip"
-                                            data-tooltip="圧力、気流、声門抵抗のバランスによる発声状態の分類です。これらが均衡した「フロー発声」、抵抗が過剰な「圧迫発声（Pressed）」、気流が過剰な「息漏れ発声（Breathy）」に分かれ、生成される波形の倍音の強さ（スペクトルスロープ）やノイズ比率に影響を与えます。">[?]</span></span>
+                                <span class="strategy-item hover-tip"
+                                    data-tooltip="Phonation（発声様式）— 圧力、気流、声門抵抗のバランスによる発声状態の分類です。これらが均衡した「フロー発声」、抵抗が過剰な「圧迫発声（Pressed）」、気流が過剰な「息漏れ発声（Breathy）」に分かれ、生成される波形の倍音の強さ（スペクトルスロープ）やノイズ比率に影響を与えます。">
                                     <span class="status-badge flow phonation-mode-badge">Flow</span>
                                 </span>
-                                <span class="strategy-item">
-                                    <span class="strategy-label">Timbre <span class="tooltip"
-                                            data-tooltip="倍音と第1共鳴（fR1）の位置関係によって生じる音色の状態です。複数の倍音がfR1の下にある場合は「Open Timbre（開いた音色）」となり、第2倍音（2fo）がfR1を超えて上に行くと「Close Timbre（閉じた音色 / ターンオーバー）」へ移行します。">[?]</span></span>
+                                <span class="strategy-item hover-tip"
+                                    data-tooltip="Timbre（音色）— 倍音と第1共鳴（fR1）の位置関係によって生じる音色の状態です。複数の倍音がfR1の下にある場合は「Open Timbre（開いた音色）」となり、第2倍音（2fo）がfR1を超えて上に行くと「Close Timbre（閉じた音色 / ターンオーバー）」へ移行します。">
                                     <span id="timbre-state" class="status-badge open">Open</span>
                                 </span>
-                                <span class="strategy-item">
-                                    <span class="strategy-label">Mode <span class="tooltip"
-                                            data-tooltip="共鳴周波数を特定の倍音に追従させる（トラッキングする）戦略です。fR1を2foに同調させ続けると発散型共鳴器による「YELL（叫び）」となり、fR1を1foに同調させると収束型共鳴器による「WHOOP（フープ）」となります。">[?]</span></span>
+                                <span class="strategy-item hover-tip"
+                                    data-tooltip="Mode（音響戦略）— 共鳴周波数を特定の倍音に追従させる（トラッキングする）戦略です。fR1を2foに同調させ続けると発散型共鳴器による「YELL（叫び）」となり、fR1を1foに同調させると収束型共鳴器による「WHOOP（フープ）」となります。">
                                     <span id="acoustic-mode" class="status-badge neutral">Neutral</span>
                                 </span>
                             </div>

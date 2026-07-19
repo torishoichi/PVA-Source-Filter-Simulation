@@ -541,6 +541,11 @@ input[type=range]::-moz-range-track {
     background: rgba(0, 0, 0, 0.04);
 }
 
+.canvas-header-bottom .view-tab {
+    padding: 4px 9px;
+    letter-spacing: 0.04em;
+}
+
 .fullscreen-btn {
     display: inline-flex;
     align-items: center;
@@ -2002,15 +2007,17 @@ input[type=range]::-webkit-slider-thumb:hover {
     align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
-    gap: 12px;
+    gap: 8px 12px;
     min-width: 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--glass-border);
 }
 
 .canvas-header-bottom {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
 }
 
 .canvas-header h2 {
@@ -2027,7 +2034,7 @@ input[type=range]::-webkit-slider-thumb:hover {
 .canvas-title-block {
     display: flex;
     align-items: center;
-    gap: 18px;
+    gap: 12px;
     flex-wrap: wrap;
     min-width: 0;
 }
@@ -2069,33 +2076,86 @@ input[type=range]::-webkit-slider-thumb:hover {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 16px;
+    gap: 6px;
     font-size: 0.85rem;
 }
 
 .strategy-item {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    color: var(--text-secondary);
     white-space: nowrap;
 }
 
-.strategy-item .strategy-label {
-    color: var(--text-muted);
-    font-weight: 500;
-    font-size: 0.8rem;
+/* Read-only status chips: dot + value, visually distinct from buttons.
+   State classes (flow/open/yell/...) keep supplying bg/color/border. */
+.strategy-strip .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.78rem;
+    padding: 3px 10px 3px 8px;
+    font-weight: 600;
+    border-radius: var(--radius-pill);
+    line-height: 1.4;
 }
 
-.strategy-strip .status-badge {
-    font-size: 0.9rem;
-    padding: 6px 14px;
-    font-weight: 700;
+.strategy-strip .status-badge::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    flex-shrink: 0;
+}
+
+/* Tooltip popup behavior without the [?] circle look — used by status chips.
+   Drops downward (chips sit at the top edge of the viewport). */
+.hover-tip {
+    position: relative;
+    cursor: help;
+}
+
+.hover-tip::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    width: max-content;
+    max-width: 300px;
+    background: #2C2C2C;
+    color: #FFFFFF;
+    padding: 8px 12px;
     border-radius: var(--radius-sm);
-    min-width: 80px;
-    text-align: center;
-    display: inline-block;
-    line-height: 1.3;
+    font-size: 0.8rem;
+    font-weight: 400;
+    line-height: 1.5;
+    text-align: left;
+    white-space: pre-wrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+    z-index: 1000;
+}
+
+.hover-tip::before {
+    content: '';
+    position: absolute;
+    top: calc(100% + 3px);
+    left: 50%;
+    transform: translateX(-50%);
+    border-width: 5px;
+    border-style: solid;
+    border-color: transparent transparent #2C2C2C transparent;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+    z-index: 1000;
+}
+
+.hover-tip:hover::after,
+.hover-tip:hover::before {
+    opacity: 1;
 }
 
 .strategy-strip .toggle-checkbox {
