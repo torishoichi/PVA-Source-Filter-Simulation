@@ -2589,6 +2589,15 @@ body.mode-learn .spectrum-section {
     font-size: 0.78rem;
 }
 
+.harmony-freq-readout {
+    margin: -4px 0 10px;
+    font-size: var(--fs-hint);
+    line-height: 1.6;
+    color: var(--accent-color);
+    font-variant-numeric: tabular-nums;
+    white-space: pre-line;
+}
+
 .harm-level-row {
     display: flex;
     align-items: center;

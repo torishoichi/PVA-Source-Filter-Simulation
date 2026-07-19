@@ -314,6 +314,7 @@ const els = {
     harmTuning: document.getElementById('harm-tuning'),
     harmLevel: document.getElementById('harm-level'),
     harmLevelVal: document.getElementById('harm-level-val'),
+    harmFreq: document.getElementById('harm-freq'),
     btnMic: document.getElementById('mic-toggle'),
     btnMicPause: document.getElementById('mic-pause'),
     btnMicRecord: document.getElementById('mic-record'),
@@ -6479,6 +6480,17 @@ function updateHarmonyUi() {
     if (els.harmThirdType) els.harmThirdType.textContent = state.harmony.minorThird ? '短3' : '長3';
     if (els.harmTuning) els.harmTuning.textContent = state.harmony.just ? '純正律' : '平均律';
     if (els.harmLevelVal) els.harmLevelVal.textContent = Math.round(state.harmony.level * 100) + '%';
+    // Live frequency readout — one line per active voice, e.g. "3rd↑ 275.0 Hz ・ C#4 (-14¢)"
+    if (els.harmFreq) {
+        const voices = activeHarmonyVoices();
+        els.harmFreq.hidden = voices.length === 0;
+        const names = { third: '3rd', fifth: '5th', octave: 'Oct' };
+        els.harmFreq.textContent = voices.map(v => {
+            const f = state.pitch * v.ratio;
+            const arrow = state.harmony[v.kind] > 0 ? '↑' : '↓';
+            return `${names[v.kind]}${arrow} ${f.toFixed(1)} Hz ・ ${noteWithCents(f)}`;
+        }).join('\n');
+    }
 }
 
 function bindHarmonyCycle(el, key) {
@@ -8465,7 +8477,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — bottom-right corner + faint header suffix (bump on each release)
-const APP_VERSION = 'v1.44.0';
+const APP_VERSION = 'v1.45.0';
 (() => {
     // The #app-version element is parsed AFTER this script tag, so on first run
     // getElementById returns null. Defer to DOMContentLoaded if the DOM isn't ready.
@@ -8526,6 +8538,7 @@ function applyVoiceType(value) {
     setPitchValDisplay(state.pitch);
     recenterPitchFine();
     els.pitchNote.textContent = noteWithCents(state.pitch);
+    updateHarmonyUi();
     els.f1Val.textContent = state.formants.f1.freq;
     els.resistanceVal.textContent = state.resistance.toFixed(1);
     els.pressureVal.textContent = state.pressure.toFixed(1);
@@ -8598,6 +8611,7 @@ function applyPitchChange(newPitch) {
     updateSourceParams();
     analyzeAcoustics();
     updateRoughnessReadout();
+    updateHarmonyUi(); // keep the harmony Hz readout in sync with f0
     // Keep both sliders in sync without firing each other's input events
     if (els.pitchSlider.value !== String(state.pitch)) els.pitchSlider.value = state.pitch;
     if (els.pitchMirror && els.pitchMirror.value !== String(state.pitch)) els.pitchMirror.value = state.pitch;
@@ -9418,6 +9432,7 @@ els.presets.forEach(btn => {
                 setPitchValDisplay(p.pitch);
                 recenterPitchFine();
                 els.pitchNote.textContent = noteWithCents(p.pitch);
+                updateHarmonyUi();
                 updateSourceParams();
             }
 

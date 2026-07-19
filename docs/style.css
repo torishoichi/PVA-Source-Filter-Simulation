@@ -4368,6 +4368,15 @@ body.learn-drawer-open { overflow: hidden; }
     margin: 0 2px;
 }
 
+.harmony-freq-readout {
+    margin: 2px 0 6px;
+    font-size: 0.72rem;
+    line-height: 1.6;
+    color: var(--accent-color);
+    font-variant-numeric: tabular-nums;
+    white-space: pre-line;
+}
+
 .harmony-level-row {
     display: flex;
     align-items: center;
