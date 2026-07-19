@@ -840,11 +840,13 @@ input[type="range"]::-moz-range-thumb {
     border-left: 3px solid var(--glass-border);
 }
 
-#tab-filter .formant-card:nth-of-type(1) { border-left-color: var(--f1); }
-#tab-filter .formant-card:nth-of-type(2) { border-left-color: var(--f2); }
-#tab-filter .formant-card:nth-of-type(3) { border-left-color: var(--f3); }
-#tab-filter .formant-card:nth-of-type(4) { border-left-color: var(--f4); }
-#tab-filter .formant-card:nth-of-type(5) { border-left-color: var(--f5); }
+/* Explicit per-card classes: nth-of-type broke whenever a sibling card was
+   added/reordered in #tab-filter (Presets card already shifted it by one). */
+#tab-filter .fc-f1 { border-left-color: var(--f1); }
+#tab-filter .fc-f2 { border-left-color: var(--f2); }
+#tab-filter .fc-f3 { border-left-color: var(--f3); }
+#tab-filter .fc-f4 { border-left-color: var(--f4); }
+#tab-filter .fc-f5 { border-left-color: var(--f5); }
 
 .formant-row {
     display: flex;

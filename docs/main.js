@@ -9384,6 +9384,7 @@ const bindFormantParams = (num) => {
             e.target.textContent = 'OFF';
         }
 
+        syncFormantMasterToggle();
         updateFilterParams();
     });
 };
@@ -9393,6 +9394,33 @@ bindFormantParams(2);
 bindFormantParams(3);
 bindFormantParams(4);
 bindFormantParams(5);
+
+// Master toggle: switch all formants ON/OFF at once (PC & mobile).
+// Shows ON only when every formant is enabled; clicking from a partial state enables all.
+const formantMasterToggle = document.getElementById('formant-all-toggle');
+
+function syncFormantMasterToggle() {
+    if (!formantMasterToggle) return;
+    const allOn = Object.keys(state.formants).every(k => state.formants[k].enabled);
+    formantMasterToggle.classList.toggle('active', allOn);
+    formantMasterToggle.textContent = allOn ? 'ON' : 'OFF';
+}
+
+if (formantMasterToggle) {
+    formantMasterToggle.addEventListener('click', () => {
+        const next = !Object.keys(state.formants).every(k => state.formants[k].enabled);
+        for (const key of Object.keys(state.formants)) {
+            state.formants[key].enabled = next;
+            const btn = els[`${key}Toggle`];
+            if (btn) {
+                btn.classList.toggle('active', next);
+                btn.textContent = next ? 'ON' : 'OFF';
+            }
+        }
+        syncFormantMasterToggle();
+        updateFilterParams();
+    });
+}
 
 // Presets
 const presetsData = {

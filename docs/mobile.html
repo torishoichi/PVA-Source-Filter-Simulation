@@ -412,8 +412,17 @@
             </div>
         </div>
 
-        <!-- F1 -->
+        <!-- Master toggle: all formants at once -->
         <div class="card formant-card">
+            <div class="formant-row">
+                <label class="slider-label">All Formants <span class="tooltip"
+                        data-tooltip="fR1〜fR5 を一括で ON/OFF します。全共鳴を切ると声帯原音（Source）そのものの音色を聴けます。">[?]</span></label>
+                <button class="toggle-btn active" id="formant-all-toggle">ON</button>
+            </div>
+        </div>
+
+        <!-- F1 -->
+        <div class="card formant-card fc-f1">
             <div class="formant-row">
                 <label class="slider-label">fR1 <span class="tooltip"
                         data-tooltip="第1フォルマント（声道の最も低い共鳴）。音の「深さ」や「温かみ」に関与し、母音の開閉（Openness-Closeness）次元を決定します。声道を短くする、または口・顎を開くことでF1は上がり、声道を長くする、または口を閉じることでF1は下がります。このF1と倍音との交差が、音響的レジスター変化の主要な原因となります。">[?]</span>
@@ -432,7 +441,7 @@
         </div>
 
         <!-- F2 -->
-        <div class="card formant-card">
+        <div class="card formant-card fc-f2">
             <div class="formant-row">
                 <label class="slider-label">fR2
                     <span class="slider-val"><span id="f2-val">1500</span> Hz</span>
@@ -449,7 +458,7 @@
         </div>
 
         <!-- F3 -->
-        <div class="card formant-card">
+        <div class="card formant-card fc-f3">
             <div class="formant-row">
                 <label class="slider-label">fR3
                     <span class="slider-val"><span id="f3-val">2800</span> Hz</span>
@@ -466,7 +475,7 @@
         </div>
 
         <!-- F4 -->
-        <div class="card formant-card">
+        <div class="card formant-card fc-f4">
             <div class="formant-row">
                 <label class="slider-label">fR4
                     <span class="slider-val"><span id="f4-val">3800</span> Hz</span>
@@ -483,7 +492,7 @@
         </div>
 
         <!-- F5 -->
-        <div class="card formant-card">
+        <div class="card formant-card fc-f5">
             <div class="formant-row">
                 <label class="slider-label">fR5
                     <span class="slider-val"><span id="f5-val">4800</span> Hz</span>

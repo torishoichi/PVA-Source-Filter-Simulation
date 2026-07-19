@@ -2738,6 +2738,25 @@ canvas {
 }
 
 /* Filter formant list (compact rows keep sliders wide — single column at all widths) */
+/* Master row: toggles all formants at once */
+.formant-master-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.formant-master-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.formant-master-row .toggle-btn {
+    min-width: 44px;
+}
+
 .formant-grid {
     display: grid;
     grid-template-columns: 1fr;
