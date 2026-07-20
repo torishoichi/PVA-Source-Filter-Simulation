@@ -374,6 +374,7 @@ const els = {
     waveZoomIn: document.getElementById('wave-zoom-in'),
     waveZoomOut: document.getElementById('wave-zoom-out'),
     waveZoomLabel: document.getElementById('wave-zoom-label'),
+    waveLegend: document.getElementById('wave-legend'), // PC only (mobile.html has no chip bar)
     viewTabs: document.getElementById('view-tabs'),
     overviewCanvas: document.getElementById('overview-canvas'),
     ovZoom: document.getElementById('ov-zoom'),
@@ -2263,6 +2264,10 @@ let _waveMix = null;
 // still. Matching candidate crossings against this template pins that phase.
 let _waveMixTpl = null;
 let _waveMixTplN = 0;
+// Trace isolation (PC legend chips): 'main' | 'harmony' | 'mix' | null. When set,
+// the non-selected traces draw faint so one line can be counted through the
+// crossings. Render-only state (no persistence); ignored on mic/playback.
+let _waveIsolate = null;
 // Time-axis zoom: displayed window length in ms. Zoomed in → a few cycles
 // (oscilloscope); zoomed out during playback → up to the whole file (DAW-like).
 const WAVE_MS_MIN = 2;
@@ -2422,6 +2427,19 @@ function drawWaveformView() {
     ctx.fillRect(0, 0, w, h);
     const mid = h / 2;
 
+    // Legend chips (PC only) — visible only for the live synth waveform view with
+    // harmony sounding (matches the old on-canvas legend's show condition). Mobile
+    // has no chip bar (parity debt: mobile.html keeps the minimal waveform view).
+    const harmonyLive = !!src && !!count && !centered && !micTrace && harmonyOscs.length > 0;
+    if (els.waveLegend) {
+        els.waveLegend.style.display = harmonyLive ? 'flex' : 'none';
+        if (!harmonyLive && _waveIsolate) { _waveIsolate = null; updateWaveLegendChips(); }
+    }
+    // Trace isolation: dim the non-selected traces (globalAlpha) so one line reads
+    // through the crossings. Live synth only — single-trace mic/playback ignores it.
+    const isoOn = harmonyLive && _waveIsolate;
+    const isoAlpha = (name) => (isoOn && _waveIsolate !== name) ? 0.15 : 1;
+
     if (!src || !count) {
         ctx.strokeStyle = 'rgba(0,0,0,0.25)';
         ctx.beginPath(); ctx.moveTo(0, mid); ctx.lineTo(w, mid); ctx.stroke();
@@ -2466,6 +2484,26 @@ function drawWaveformView() {
     ctx.strokeStyle = 'rgba(0,0,0,0.25)';
     ctx.beginPath(); ctx.moveTo(0, mid); ctx.lineTo(w, mid); ctx.stroke();
 
+    // f0 period grid — live synth view only. Faint vertical marks anchored at the
+    // trigger origin (`start` = window left edge, i=0) spaced one f0 period apart,
+    // so they stand still with the (period-locked) waveform and let you count
+    // harmony cycles against the main pitch. Distinct from the time grid above
+    // (absolute ms, pitch-independent). Drawn under the traces.
+    let f0LabelX = -1;
+    if (!centered && !micTrace && state.pitch > 0) {
+        const period = sr / state.pitch;             // samples per f0 cycle
+        if (period >= 2 && period < count) {         // visible and sane
+            ctx.strokeStyle = 'rgba(200, 105, 0, 0.15)';
+            ctx.lineWidth = 1;
+            for (let k = 1; ; k++) {
+                const x = (k * period / (count - 1)) * w;
+                if (x > w) break;
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+                if (f0LabelX < 0 && x > 44) f0LabelX = x; // first mark clear of the corner readouts
+            }
+        }
+    }
+
     // Composite (main + harmony) — the actual summed wave that reaches the ear.
     // `mixAnalyser` sums both post-formant vis chains, so it's meaningful only
     // when the blue trace IS the synth main (not mic) and harmony is sounding;
@@ -2487,6 +2525,7 @@ function drawWaveformView() {
             if (v > mixPeak) mixPeak = v;
         }
         if (mixPeak > peak) gain = (h * 0.45) / Math.max(mixPeak, 0.02);
+        ctx.globalAlpha = isoAlpha('mix');
         ctx.strokeStyle = 'rgba(142, 68, 173, 0.55)';
         ctx.lineWidth = 2;
         ctx.beginPath();
@@ -2499,6 +2538,7 @@ function drawWaveformView() {
         }
         ctx.stroke();
         ctx.lineWidth = 1;
+        ctx.globalAlpha = 1;
         mixDrawn = true;
     }
 
@@ -2507,6 +2547,7 @@ function drawWaveformView() {
     // Live mic = orange-red (your voice); synth/playback = blue (matches spectrum)
     const traceRGB = micTrace ? '230, 74, 25' : '33, 150, 243';
     const spp = count / w;
+    ctx.globalAlpha = isoAlpha('main');
     if (spp > 3) {
         ctx.fillStyle = `rgba(${traceRGB}, 0.8)`;
         for (let x = 0; x < w; x++) {
@@ -2536,6 +2577,7 @@ function drawWaveformView() {
         }
         ctx.stroke();
     }
+    ctx.globalAlpha = 1;
 
     // Harmony voices — same analyser tap as the spectrum view, drawn in teal so
     // the practice interval reads apart from your own voice / the main voice.
@@ -2549,8 +2591,12 @@ function drawWaveformView() {
         // harmony stays time-aligned with the (zero-cross-triggered) window,
         // and shares `gain` so relative loudness vs the main trace is honest.
         const off = hLen - len;
-        ctx.strokeStyle = 'rgba(46, 163, 155, 0.85)';
-        ctx.lineWidth = 1.2;
+        // Emphasized (wider, more opaque) so the teal reads clearly where it
+        // crosses the blue/violet lines — otherwise the peaks visually fuse and
+        // the harmony period gets miscounted. Drawn last = frontmost.
+        ctx.globalAlpha = isoAlpha('harmony');
+        ctx.strokeStyle = 'rgba(46, 163, 155, 0.95)';
+        ctx.lineWidth = 2;
         ctx.beginPath();
         for (let i = 0; i < count; i++) {
             const idx = start + i + off;
@@ -2561,19 +2607,18 @@ function drawWaveformView() {
         }
         ctx.stroke();
         ctx.lineWidth = 1;
-        // Top-left below the うねり readout — the top-right corner is covered
-        // by the Harmonic EQ / H1 Meter overlay dock
-        ctx.font = '600 10px sans-serif';
-        ctx.textAlign = 'left';
-        ctx.fillStyle = 'rgba(46, 163, 155, 0.95)';
-        ctx.fillText('Harmony', 8, 28);
+        ctx.globalAlpha = 1;
+        // Legend labels ('Harmony' / '合成波') are now DOM chips (#wave-legend),
+        // so nothing is drawn on-canvas here.
     }
-    if (mixDrawn) {
-        // Legend for the violet composite, below the Harmony swatch
-        ctx.font = '600 10px sans-serif';
+
+    // 1/f₀ marker label for the period grid — placed on the first grid mark clear
+    // of the corner readouts, drawn on top (after traces) so it stays legible.
+    if (f0LabelX >= 0) {
+        ctx.font = '600 9px sans-serif';
         ctx.textAlign = 'left';
-        ctx.fillStyle = 'rgba(142, 68, 173, 0.95)';
-        ctx.fillText('合成波', 8, 42);
+        ctx.fillStyle = 'rgba(200, 105, 0, 0.75)';
+        ctx.fillText('1/f₀', f0LabelX + 3, mid - 4);
     }
 
     // うねり: envelope overlay + readout for windows long enough to hold beats
@@ -2637,6 +2682,15 @@ function drawWaveformView() {
     ctx.textAlign = 'right';
     ctx.fillText(`peak ${peak.toFixed(3)}`, w - 8, 14);
     ctx.textAlign = 'left';
+}
+
+// Sync the legend chips' active (isolated) highlight to `_waveIsolate`. PC only
+// (mobile.html has no #wave-legend → null check).
+function updateWaveLegendChips() {
+    if (!els.waveLegend) return;
+    els.waveLegend.querySelectorAll('.wave-legend-chip').forEach(c => {
+        c.classList.toggle('is-active', c.dataset.trace === _waveIsolate);
+    });
 }
 
 // ---------- Overview view — whole-file waveform, DAW-style ----------
@@ -2891,6 +2945,9 @@ function applyViewMode(mode) {
     const logBtn = document.getElementById('log-scale-toggle');
     if (logBtn) logBtn.style.display = (state.viewMode === 'waveform' || state.viewMode === 'overview') ? 'none' : '';
     if (els.waveZoom) els.waveZoom.style.display = state.viewMode === 'waveform' ? 'flex' : 'none';
+    // Legend chips only exist in the waveform view; drawWaveformView shows them
+    // per-frame when harmony is live, so just force-hide on any other view.
+    if (els.waveLegend && state.viewMode !== 'waveform') els.waveLegend.style.display = 'none';
     if (els.ovZoom) els.ovZoom.style.display = state.viewMode === 'overview' ? 'flex' : 'none';
     if (els.ovLoop) els.ovLoop.style.display = state.viewMode === 'overview' ? 'inline-flex' : 'none';
     // Leaving Overview hides the loop button, so the view-range loop must not
@@ -7990,6 +8047,19 @@ if (els.waveformCanvas) {
 if (els.waveZoomIn) els.waveZoomIn.addEventListener('click', () => setWaveZoom(waveViewMs / 1.5));
 if (els.waveZoomOut) els.waveZoomOut.addEventListener('click', () => setWaveZoom(waveViewMs * 1.5));
 
+// Legend chips (PC only): click a chip to isolate that trace (others dim);
+// click the active chip again — or a different one — to release/switch.
+if (els.waveLegend) {
+    els.waveLegend.addEventListener('click', (e) => {
+        const chip = e.target.closest('.wave-legend-chip');
+        if (!chip) return;
+        const trace = chip.dataset.trace;
+        _waveIsolate = (_waveIsolate === trace) ? null : trace;
+        updateWaveLegendChips();
+        if (state.viewMode === 'waveform') drawWaveformView();
+    });
+}
+
 // Overview view: click / drag = seek (playback source only; positions map
 // through the current zoom window). Wheel = zoom around the cursor, horizontal
 // scroll = pan, double-click = reset to full view.
@@ -8740,7 +8810,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — bottom-right corner + faint header suffix (bump on each release)
-const APP_VERSION = 'v1.48.0';
+const APP_VERSION = 'v1.48.1';
 (() => {
     // The #app-version element is parsed AFTER this script tag, so on first run
     // getElementById returns null. Defer to DOMContentLoaded if the DOM isn't ready.

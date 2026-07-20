@@ -512,6 +512,57 @@ input[type=range]::-moz-range-track {
     font-variant-numeric: tabular-nums;
 }
 
+/* Waveform trace legend chips — top-left isolate toggles (PC only). Each chip
+   carries its trace's color as a leading dot; clicking isolates that trace
+   (others dim on-canvas), and the active chip fills. Mirrors the status-chip
+   look. Top-left avoids the top-right overlay dock (Harmonic EQ / H1 Meter). */
+.wave-legend {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: 5;
+    display: flex;
+    gap: 4px;
+    pointer-events: none;      /* gaps between chips stay click-through to the canvas */
+}
+.wave-legend-chip {
+    pointer-events: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px;
+    font-family: inherit;
+    font-size: 0.66rem;
+    font-weight: 600;
+    line-height: 1;
+    color: var(--text-secondary);
+    background: rgba(255, 254, 249, 0.9);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    -webkit-backdrop-filter: blur(3px);
+    backdrop-filter: blur(3px);
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.wave-legend-chip::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--chip-color, currentColor);
+    flex: 0 0 auto;
+}
+.wave-legend-chip.is-main    { --chip-color: rgb(33, 150, 243); }
+.wave-legend-chip.is-harmony { --chip-color: rgb(46, 163, 155); }
+.wave-legend-chip.is-mix     { --chip-color: rgb(142, 68, 173); }
+.wave-legend-chip:hover { border-color: var(--chip-color); }
+.wave-legend-chip.is-active {
+    color: #fff;
+    background: var(--chip-color);
+    border-color: var(--chip-color);
+}
+.wave-legend-chip.is-active::before { background: #fff; }
+
 /* ============================================================
    Unified segmented control (pill tabs)
    Used across: Spectrum/Spectrogram (view-tabs), Vibrato Basic/Advanced

@@ -572,6 +572,18 @@
                         <span id="wave-zoom-label" class="wave-zoom-label">46ms</span>
                         <button id="wave-zoom-in" type="button" title="ズームイン（波形拡大）">＋</button>
                     </div>
+                    <!-- Waveform trace legend + isolate toggles (PC only; top-left).
+                         Each chip isolates its trace (the others dim) so overlapping
+                         cycles can be counted. Shown only in the live synth waveform
+                         view with harmony sounding (managed by drawWaveformView). -->
+                    <div id="wave-legend" class="wave-legend" style="display:none;">
+                        <button type="button" class="wave-legend-chip is-main" data-trace="main"
+                            title="メイン声のみを強調（他を淡色化）。再クリックで解除">Main</button>
+                        <button type="button" class="wave-legend-chip is-harmony" data-trace="harmony"
+                            title="ハモリ声のみを強調。再クリックで解除">Harmony</button>
+                        <button type="button" class="wave-legend-chip is-mix" data-trace="mix"
+                            title="合成波のみを強調。再クリックで解除">合成波</button>
+                    </div>
                     <div id="ov-zoom" class="wave-zoom" style="display:none;">
                         <button id="ov-zoom-out" type="button" title="ズームアウト（広い時間範囲）">−</button>
                         <span id="ov-zoom-label" class="wave-zoom-label">Full</span>
