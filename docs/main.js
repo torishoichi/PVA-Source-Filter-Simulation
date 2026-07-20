@@ -329,6 +329,7 @@ const els = {
     harmLevel: document.getElementById('harm-level'),
     harmLevelVal: document.getElementById('harm-level-val'),
     harmTune: document.getElementById('harm-tune'),         // PC: editable per-voice tuning rows
+    harmBadge: document.getElementById('harmony-badge'),    // PC: collapsed-summary badge (OFF / active intervals)
     harmFreqReadout: document.getElementById('harm-freq'),  // mobile: v1.45.0 text readout (kept for parity)
     // Lab cluster (PC only — clean-waveform observation mode)
     labStrip: document.getElementById('lab-strip'),
@@ -6697,6 +6698,15 @@ function updateHarmonyUi() {
     if (els.harmThirdType) els.harmThirdType.textContent = state.harmony.minorThird ? '短3' : '長3';
     if (els.harmTuning) els.harmTuning.textContent = state.harmony.just ? '純正律' : '平均律';
     if (els.harmLevelVal) els.harmLevelVal.textContent = Math.round(state.harmony.level * 100) + '%';
+    // PC: collapsed-summary badge mirrors the active voice set so the state
+    // stays visible while the panel is stowed.
+    if (els.harmBadge) {
+        const voices = activeHarmonyVoices();
+        els.harmBadge.textContent = voices.length === 0
+            ? 'OFF'
+            : voices.map(v => HARMONY_NAMES[v.kind] + (state.harmony[v.kind] > 0 ? '↑' : '↓')).join('・');
+        els.harmBadge.classList.toggle('on', voices.length > 0);
+    }
     // PC: per-voice tuning rows (v1.45.0 readout evolved into editable rows).
     // Rebuild only when the voice set changes, otherwise just refresh the numbers.
     if (els.harmTune) {
@@ -8810,7 +8820,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — bottom-right corner + faint header suffix (bump on each release)
-const APP_VERSION = 'v1.48.1';
+const APP_VERSION = 'v1.48.2';
 (() => {
     // The #app-version element is parsed AFTER this script tag, so on first run
     // getElementById returns null. Defer to DOMContentLoaded if the DOM isn't ready.

@@ -79,9 +79,13 @@
                     <div class="hint">Hz欄は直接入力可</div>
                 </div>
 
-                <div class="control-group harmony-group">
-                    <label>Harmony（ハモリ練習） <span class="tooltip"
-                            data-tooltip="合成音声に3度・5度・オクターブのハモリ声部を重ねます。各ボタンは OFF→上ハモ→下ハモ の順に切替（J-popの定番は3度下）。純正律(5:4, 3:2, 2:1)では倍音が完全に噛み合い、うねり（ビート）が消えたロックした響きになります。">[?]</span></label>
+                <details id="panel-harmony" class="harmony-panel glass-dark collapsible">
+                    <summary class="collapsible-summary">
+                        <h3 class="tracker-title">Harmony（ハモリ練習） <span class="tooltip"
+                                data-tooltip="合成音声に3度・5度・オクターブのハモリ声部を重ねます。各ボタンは OFF→上ハモ→下ハモ の順に切替（J-popの定番は3度下）。純正律(5:4, 3:2, 2:1)では倍音が完全に噛み合い、うねり（ビート）が消えたロックした響きになります。">[?]</span></h3>
+                        <span class="status-badge harmony-summary-badge" id="harmony-badge">OFF</span>
+                    </summary>
+                    <div class="collapsible-body">
                     <div class="harmony-btns harmony-intervals">
                         <button id="harm-3" class="inline-toggle-btn" type="button" title="3度ハモリ (OFF→上→下)">3rd</button>
                         <button id="harm-5" class="inline-toggle-btn" type="button" title="5度ハモリ (OFF→上→下)">5th</button>
@@ -101,7 +105,8 @@
                         <span class="control-val" id="harm-level-val">70%</span>
                     </div>
                     <div class="hint">Play中のハモリに合わせて歌う練習（Mic ONで自声も確認可）</div>
-                </div>
+                    </div>
+                </details>
 
                 <div class="control-group">
                     <label>Vibrational Mechanism (Register) <span class="tooltip"

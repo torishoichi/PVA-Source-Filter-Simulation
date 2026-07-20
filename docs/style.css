@@ -4551,7 +4551,25 @@ body.learn-drawer-open { overflow: hidden; }
 }
 
 
-/* Harmony (ハモリ練習) — interval toggles under the pitch control */
+/* Harmony (ハモリ練習) — collapsible panel under the pitch control */
+.harmony-panel {
+    margin-bottom: 18px; /* keep the control-group rhythm before Mechanism */
+}
+
+.harmony-summary-badge {
+    flex: 0 0 auto;
+    max-width: 45%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.harmony-summary-badge.on {
+    background: var(--accent-soft);
+    color: var(--accent-hover);
+    border-color: rgba(46, 163, 155, 0.3);
+}
+
 .harmony-btns {
     display: flex;
     align-items: center;
