@@ -66,35 +66,41 @@
                             <span class="range-hint" id="pitch-range">E2 – B4</span>
                         </div>
                     </div>
-                    <input type="range" id="pitch-slider" min="80" max="1000" value="220" step="1">
-                    <div class="notes-display" id="pitch-note">A3</div>
+                    <div class="pitch-slider-row">
+                        <input type="range" id="pitch-slider" min="80" max="1000" value="220" step="1">
+                        <div class="notes-display" id="pitch-note">A3</div>
+                    </div>
                     <details class="pitch-fine-details" id="pitch-fine-details">
                         <summary class="pitch-fine-summary">fine ±5 Hz（0.1 Hz 刻み）</summary>
                         <div class="pitch-fine-row">
                             <input type="range" id="pitch-fine" min="215" max="225" value="220" step="0.1" aria-label="基本周波数の微調整 (0.1 Hz 刻み)">
                         </div>
                     </details>
-                    <div class="hint">歌う音の高さ。数字が大きいほど高い。Hz欄は直接入力可</div>
+                    <div class="hint">Hz欄は直接入力可</div>
                 </div>
 
                 <div class="control-group harmony-group">
                     <label>Harmony（ハモリ練習） <span class="tooltip"
                             data-tooltip="合成音声に3度・5度・オクターブのハモリ声部を重ねます。各ボタンは OFF→上ハモ→下ハモ の順に切替（J-popの定番は3度下）。純正律(5:4, 3:2, 2:1)では倍音が完全に噛み合い、うねり（ビート）が消えたロックした響きになります。">[?]</span></label>
-                    <div class="harmony-btns">
+                    <div class="harmony-btns harmony-intervals">
                         <button id="harm-3" class="inline-toggle-btn" type="button" title="3度ハモリ (OFF→上→下)">3rd</button>
                         <button id="harm-5" class="inline-toggle-btn" type="button" title="5度ハモリ (OFF→上→下)">5th</button>
                         <button id="harm-8" class="inline-toggle-btn" type="button" title="オクターブハモリ (OFF→上→下)">Oct</button>
-                        <span class="harmony-sep" aria-hidden="true"></span>
-                        <button id="harm-third-type" class="inline-toggle-btn" type="button" title="3度の長短切替">長3</button>
-                        <button id="harm-tuning" class="inline-toggle-btn" type="button" title="平均律／純正律の切替">平均律</button>
+                        <button id="harm-2" class="inline-toggle-btn" type="button" title="長2度ハモリ (OFF→上→下)">2度</button>
+                        <button id="harm-min2" class="inline-toggle-btn" type="button" title="半音(短2度)ハモリ (OFF→上→下)">半音</button>
+                        <button id="harm-qtr" class="inline-toggle-btn" type="button" title="半半音(四分音)ハモリ (OFF→上→下)。狭い音程ほど強いうねり／ラフネス">半半</button>
                     </div>
-                    <div id="harm-freq" class="harmony-freq-readout" hidden></div>
+                    <div class="harmony-btns harmony-modifiers">
+                        <button id="harm-third-type" class="inline-toggle-btn" type="button" title="3度の長短切替">長3</button>
+                        <button id="harm-tuning" class="inline-toggle-btn" type="button" title="平均律／純正律の切替（半半音は常に平均律）">平均律</button>
+                    </div>
+                    <div id="harm-tune" class="harmony-tune" hidden></div>
                     <div class="harmony-level-row">
                         <label for="harm-level" class="harmony-level-label">Level</label>
                         <input type="range" id="harm-level" min="0" max="100" value="70" step="1">
                         <span class="control-val" id="harm-level-val">70%</span>
                     </div>
-                    <div class="hint">Play中に鳴るハモリに合わせて歌う練習。Mic ON で自分の声も確認できる</div>
+                    <div class="hint">Play中のハモリに合わせて歌う練習（Mic ONで自声も確認可）</div>
                 </div>
 
                 <div class="control-group">
@@ -538,6 +544,20 @@
                         </div>
                         <button id="spectrum-fullscreen-btn" class="fullscreen-btn" type="button"
                             title="全画面表示（Esc または再クリックで戻る）" aria-label="全画面表示">⛶</button>
+                    </div>
+                    <div class="lab-strip" id="lab-strip">
+                        <span class="lab-strip-label">Lab <span class="tooltip"
+                                data-tooltip="観察用のクリーンモード。Textbook で ビブラートOFF＋フォルマントOFF＋倍音を基音のみ にし、声帯原音を純粋な正弦波の和に近づけます。Waveform ビューの合成波（violet）に教科書どおりのうなり波形が現れます。倍音リミットはメイン声・ハモリ声・スペクトラム表示すべてに一貫適用されます。">[?]</span></span>
+                        <button id="lab-textbook" class="inline-toggle-btn" type="button" title="ビブラートOFF＋フォルマントOFF＋倍音=基音 を一括適用。再押下で直前の状態に復元">Textbook</button>
+                        <button id="lab-vib-off" class="inline-toggle-btn" type="button" title="ビブラート(FM/AM)を OFF/ON。Vibrato パネルと状態を共有">Vib OFF</button>
+                        <button id="lab-formant-off" class="inline-toggle-btn" type="button" title="全フォルマントを OFF/ON（Filter の All Formants マスターと連動）">Formant OFF</button>
+                        <span class="harmony-sep" aria-hidden="true"></span>
+                        <span class="lab-strip-sublabel">倍音</span>
+                        <div class="lab-harmonic-seg" id="lab-harmonic-seg" role="group" aria-label="倍音リミット">
+                            <button type="button" data-limit="inf" class="is-active" title="全倍音">全</button>
+                            <button type="button" data-limit="5" title="第5倍音まで">〜5</button>
+                            <button type="button" data-limit="1" title="基音のみ（純正弦波）">基音</button>
+                        </div>
                     </div>
                 </div>
                 <div class="canvas-container">

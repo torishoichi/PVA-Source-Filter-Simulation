@@ -228,6 +228,11 @@ span[id$="-val"] {
     float: right;
 }
 
+/* Tighter rhythm inside the Voice Source panel */
+.source-panel > .control-group {
+    margin-bottom: 18px;
+}
+
 /* Pitch header: label on left, Voice Type compact toggle + range hint on right */
 .pitch-header {
     display: flex;
@@ -282,6 +287,21 @@ span[id$="-val"] {
 /* Keep the 0.1 Hz stepper visible instead of hover-only */
 .pitch-val-input::-webkit-inner-spin-button { opacity: 1; }
 
+/* Pitch slider + note readout on one line */
+.pitch-slider-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.pitch-slider-row input[type="range"] {
+    flex: 1;
+    margin: 0;
+}
+.pitch-slider-row .notes-display {
+    flex: 0 0 auto;
+    min-width: 5.5rem;
+}
+
 /* f0 fine slider — ±5 Hz around the current pitch, 0.1 Hz steps.
    Tucked behind a small disclosure so the default layout stays clean. */
 .pitch-fine-details { margin-top: 2px; }
@@ -303,6 +323,14 @@ span[id$="-val"] {
 .pitch-fine-row input[type="range"] {
     flex: 1;
     margin: 0;
+}
+/* Direct-entry hint shares the fine-summary line (pulled up); drops below when expanded */
+.pitch-fine-details + .hint {
+    margin-top: -1.05rem;
+    text-align: right;
+}
+.pitch-fine-details[open] + .hint {
+    margin-top: 8px;
 }
 
 /* Compact 2-segment toggle (Treble / Non-Treble) */
@@ -544,6 +572,60 @@ input[type=range]::-moz-range-track {
 .canvas-header-bottom .view-tab {
     padding: 4px 9px;
     letter-spacing: 0.04em;
+}
+
+/* Lab cluster — clean-waveform observation row under the canvas header */
+.lab-strip {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--glass-border);
+}
+.lab-strip-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+}
+.lab-strip-sublabel {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+}
+.lab-strip .inline-toggle-btn { margin-left: 0; }
+.inline-toggle-btn.lab-active {
+    background-color: var(--accent-color);
+    color: #fff;
+    border-color: var(--accent-color);
+}
+.lab-harmonic-seg {
+    display: inline-flex;
+    background: rgba(0, 0, 0, 0.04);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-pill);
+    padding: 2px;
+    gap: 2px;
+}
+.lab-harmonic-seg button {
+    appearance: none;
+    background: transparent;
+    border: none;
+    padding: 3px 10px;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: var(--radius-pill);
+    line-height: 1.2;
+    transition: background 0.12s, color 0.12s;
+}
+.lab-harmonic-seg button:hover { color: var(--text-primary); }
+.lab-harmonic-seg button.is-active {
+    background: var(--accent-color);
+    color: #fff;
 }
 
 .fullscreen-btn {
@@ -1356,13 +1438,17 @@ input[type=range]::-webkit-slider-thumb:hover {
 
 /* Phonation collapsible — mirror Vibrato panel pattern */
 .phonation-subsection {
-    margin-top: 20px;
+    margin-top: 0;
 }
 .phonation-subsection .collapsible-body > .control-group {
-    margin-bottom: 16px;
+    margin-bottom: 12px;
 }
 .phonation-subsection .collapsible-body > .control-group:last-of-type {
-    margin-bottom: 12px;
+    margin-bottom: 8px;
+}
+/* Clean look: hints hidden — [?] tooltips carry the explanations */
+.phonation-subsection .collapsible-body .hint {
+    display: none;
 }
 .phonation-subsection .collapsible-body > .status-panel {
     margin: 12px 0 0;
@@ -2708,27 +2794,20 @@ canvas {
 .vibrato-grid {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
 }
 
 .vibrato-row {
     display: grid;
     grid-template-columns: 110px 1fr 70px;
-    grid-template-rows: auto auto;
     align-items: center;
     column-gap: 10px;
-    row-gap: 2px;
     font-size: 0.82rem;
 }
 
+/* Clean look: per-row hints hidden on PC — [?] tooltips carry the explanations */
 .vibrato-hint {
-    grid-column: 1 / -1;
-    font-size: var(--fs-hint);
-    color: var(--text-muted);
-    line-height: 1.3;
-    margin-left: 2px;
-    margin-bottom: 4px;
-    display: block;
+    display: none;
 }
 
 .vibrato-row label {
@@ -4434,6 +4513,20 @@ body.learn-drawer-open { overflow: hidden; }
     min-width: 46px;
 }
 
+/* Interval chips wrap to two rows of three (3rd/5th/Oct · 2度/半音/半半) */
+.harmony-intervals {
+    flex-wrap: wrap;
+    margin-bottom: 4px;
+}
+.harmony-intervals .inline-toggle-btn {
+    flex: 1 1 calc(33.333% - 4px);
+    min-width: 0;
+}
+.harmony-modifiers {
+    margin-top: 0;
+    margin-bottom: 6px;
+}
+
 .inline-toggle-btn.harmony-active {
     background-color: var(--accent-color);
     color: #fff;
@@ -4447,14 +4540,61 @@ body.learn-drawer-open { overflow: hidden; }
     margin: 0 2px;
 }
 
-.harmony-freq-readout {
-    margin: 2px 0 6px;
+/* Per-voice tuning rows — one editable row per active harmony voice.
+   [name↑] [Hz input] Hz [note±¢]  /  [detune slider ±50¢] [±¢] [↺] */
+.harmony-tune {
+    margin: 4px 0 8px;
+    display: flex;
+    flex-direction: column;
+}
+.harmony-tune-row {
+    display: grid;
+    grid-template-columns: auto 58px auto 1fr auto auto;
+    grid-template-areas:
+        "name hz unit note note note"
+        "detune detune detune detune cents reset";
+    align-items: center;
+    column-gap: 6px;
+    row-gap: 3px;
+    padding: 4px 0;
     font-size: 0.72rem;
-    line-height: 1.6;
     color: var(--accent-color);
     font-variant-numeric: tabular-nums;
-    white-space: pre-line;
+    border-top: 1px solid var(--glass-border);
 }
+.harmony-tune-row:first-child { border-top: none; }
+.ht-name { grid-area: name; font-weight: 700; white-space: nowrap; }
+.ht-hz {
+    grid-area: hz;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 1px 3px;
+    font-size: 0.72rem;
+    text-align: right;
+    border: 1px solid var(--glass-border-strong);
+    border-radius: var(--radius-xs);
+    background: var(--bg-elev);
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+.ht-unit { grid-area: unit; color: var(--text-secondary); }
+.ht-note { grid-area: note; color: var(--text-secondary); white-space: nowrap; }
+.ht-detune { grid-area: detune; width: 100%; margin: 0; }
+.ht-cents { grid-area: cents; text-align: right; min-width: 3.6em; }
+.ht-reset {
+    grid-area: reset;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    line-height: 1;
+    font-size: 0.85rem;
+    cursor: pointer;
+    color: var(--text-secondary);
+    background: var(--bg-elev);
+    border: 1px solid var(--glass-border-strong);
+    border-radius: var(--radius-xs);
+}
+.ht-reset:hover { color: var(--accent-color); border-color: var(--accent-color); }
 
 .harmony-level-row {
     display: flex;

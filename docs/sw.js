@@ -4,7 +4,7 @@
  * offline fallback). Cross-origin (CDN): stale-while-revalidate.
  * Bump VERSION on release to purge old caches.
  */
-const VERSION = 'v1.47.0';
+const VERSION = 'v1.48.0';
 const CACHE = `sf-voice-studio-${VERSION}`;
 const SHELL = [
     './',

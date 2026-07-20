@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WAVEFORM ビューのあるべき姿 — ピヨ解説</title>
+<style>
+:root{
+    --ink:#3a3322; --sub:#7a6f57;
+    --bg:#fdf7ea; --card:#ffffff;
+    --tori:#dff3e6; --tori-br:#9fd6b4; --tori-name:#3f8a5e;
+    --san:#ffe9d6; --san-br:#f3bd8e; --san-name:#c9701f;
+    --quote:#fff7d8; --qbar:#e8a317; --accent:#c9820b;
+    --scene:#fff1c6;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; color:var(--ink);
+    background:
+      radial-gradient(circle at 10% 2%, #e7f5ec 0, transparent 34%),
+      radial-gradient(circle at 92% 3%, #ffe9d4 0, transparent 30%),
+      var(--bg);
+    font-family:"Hiragino Maru Gothic ProN","Hiragino Kaku Gothic ProN","Yu Gothic",system-ui,sans-serif;
+    line-height:1.85; font-size:16px;
+  }
+  .wrap{max-width:760px; margin:0 auto; padding:0 16px 90px;}
+  header{text-align:center; padding:34px 0 10px;}
+  .eyebrow{letter-spacing:.14em; font-size:12px; color:var(--accent); font-weight:700; margin:0 0 4px;}
+  header h1{font-size:23px; color:#5a4a1e; margin:4px 0 2px; line-height:1.4;}
+  header h1 .it{font-style:italic;}
+  header .sub{font-size:13px; color:var(--sub); margin:6px 0 0;}
+  .cast{display:flex; justify-content:center; gap:26px; margin:18px 0 6px; flex-wrap:wrap;}
+  .cast figure{margin:0; width:182px; background:var(--card); border:2px solid #f0e2c2;
+    border-radius:18px; padding:12px 10px; text-align:center;}
+  .cast img{width:84px; height:84px; border-radius:50%; vertical-align:middle;}
+  .cast .nm{font-weight:800; margin-top:6px;}
+  .cast .tori-nm{color:var(--tori-name);} .cast .san-nm{color:var(--san-name);}
+  .cast .role{font-size:11.5px; color:var(--sub); line-height:1.55; margin-top:2px; line-break:strict;}
+  .cite{font-size:12px; color:var(--sub); line-height:1.6; background:var(--card);
+    border:2px dashed #f0d79a; border-radius:14px; padding:11px 15px; margin:16px 0; text-align:left;}
+  .promise{background:#eef8f0; border:2px solid var(--tori-br); border-radius:14px;
+    padding:11px 15px 11px 50px; position:relative; font-size:13px; color:#3f6b50; margin:14px 0 6px;}
+  .promise:before{content:"🐤"; position:absolute; left:14px; top:10px; font-size:22px;}
+  .scene{display:flex; align-items:center; gap:10px; margin:30px 0 8px; }
+  .scene .bar{flex:1; height:2px; background:linear-gradient(90deg,transparent,var(--qbar),transparent);}
+  .scene .lbl{font-size:13.5px; font-weight:800; color:#a06f08; background:var(--scene);
+    border:1.5px solid #f0d79a; border-radius:20px; padding:3px 14px; white-space:nowrap;}
+  .turn{display:flex; gap:10px; margin:13px 0; align-items:flex-end;}
+  .turn.san{flex-direction:row-reverse;}
+  .ava{width:46px; height:46px; border-radius:50%; flex:0 0 46px; align-self:flex-start;
+    box-shadow:0 2px 4px rgba(0,0,0,.08); background-size:cover; background-position:center; background-repeat:no-repeat;}
+  .ava-tori{background-image:url("data:image/webp;base64,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");}
+  .ava-san{background-image:url("data:image/webp;base64,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");}
+  .msg{max-width:80%;}
+  .who{display:block; font-size:11.5px; font-weight:700; margin:0 0 2px 6px;}
+  .san .who{text-align:right; margin:0 6px 2px 0;}
+  .tori .who{color:var(--tori-name);} .san .who{color:var(--san-name);}
+  .bubble{position:relative; padding:11px 15px; border-radius:16px; font-size:15px;}
+  .tori .bubble{background:var(--tori); border:1.5px solid var(--tori-br); border-bottom-left-radius:5px;}
+  .san .bubble{background:var(--san); border:1.5px solid var(--san-br); border-bottom-right-radius:5px;}
+  .bubble p{margin:0 0 8px;} .bubble p:last-child{margin:0;}
+  .bubble b{color:var(--accent);}
+  .san .bubble b{color:#b5610f;}
+  .bubble ul{margin:6px 0 4px; padding-left:20px;} .bubble li{margin:3px 0;}
+  .bubble ol{margin:6px 0 4px; padding-left:22px;}
+  .msg .bubble + .bubble{margin-top:7px;}
+  blockquote.q{margin:9px 0 4px; background:var(--quote); border-left:4px solid var(--qbar);
+    border-radius:0 8px 8px 0; padding:8px 12px; font-size:13px; color:#6a5a30;}
+  blockquote.q .en{font-style:normal; color:#6a5a30;}
+  blockquote.q .ja{display:block; margin-top:4px;}
+  blockquote.q .pg{display:inline-block; margin-top:5px; font-size:11px; color:#fff;
+    background:var(--accent); border-radius:9px; padding:1px 8px; font-weight:700;}
+  .cheer{background:var(--scene); border:1.5px solid #f0d79a; border-radius:14px;
+    padding:10px 15px 10px 44px; position:relative; font-weight:700; color:#b5760a; font-size:14px; margin:16px 0 4px;}
+  .cheer:before{content:"✨"; position:absolute; left:15px; top:9px; font-size:19px;}
+  hr.sep{border:0; border-top:2px dashed #f0d79a; margin:30px 0;}
+  .notes{font-size:12.5px; color:var(--sub); line-height:1.7; background:var(--card);
+    border:2px solid #f0e2c2; border-radius:14px; padding:12px 18px;}
+  .notes ol{padding-left:20px;} .notes li{margin-bottom:5px;} .notes i{font-style:italic;}
+  footer{font-size:11.5px; color:var(--sub); text-align:center; border-top:2px dotted #f0e2c2;
+    padding-top:16px; margin-top:34px;}
+  @media print{ body{background:#fff;} .turn{break-inside:avoid;} }
+  /* たしかめクイズ */
+  .bubble details{background:#f6fbf7; border:1.5px dashed #9fd6b4; border-radius:10px; padding:8px 12px; margin:6px 0 2px;}
+  .bubble details summary{cursor:pointer; font-weight:800; color:#3f8a5e;}
+  .bubble details p{margin:6px 0 0;}
+  /* toc */
+  .toc{background:var(--card); border:2px solid #f0e2c2; border-radius:16px; padding:14px 20px; margin:20px 0 6px;}
+  .toc .tt{font-weight:800; color:#a06f08; font-size:14px; margin:0 0 8px; display:flex; align-items:center; gap:6px;}
+  .toc ol{margin:0; padding:0; list-style:none; columns:2; column-gap:20px;}
+  .toc li{margin:4px 0; break-inside:avoid;}
+  .toc a{color:var(--ink); text-decoration:none; border-bottom:1.5px dotted #f0d79a; font-size:13.5px;}
+  .toc a:hover{color:var(--accent);}
+  .scene{scroll-margin-top:14px;}
+  @media(max-width:520px){ .toc ol{columns:1;} }
+  /* 問いの地図 */
+  .ltree-card{background:var(--card); border:2px solid #f0e2c2; border-radius:16px;
+      padding:16px 18px 12px; margin:14px 0 4px;}
+  .ltree-card .root{display:inline-block; font-size:15px; font-weight:800; color:#5a4a1e;
+      background:var(--scene); border:2px solid #f0d79a; border-radius:12px;
+      padding:6px 14px; margin:0 0 2px;}
+  .ltree{list-style:none; margin:0; padding:0 0 0 13px;}
+  .ltree li{position:relative; list-style:none;}
+  .ltree > li{padding:10px 0 2px 18px;}
+  .ltree > li::before{content:""; position:absolute; left:0; top:0; bottom:0; border-left:2px solid #ead9b0;}
+  .ltree > li:last-child::before{bottom:auto; height:24px;}
+  .ltree > li::after{content:""; position:absolute; left:0; top:24px; width:14px; border-top:2px solid #ead9b0;}
+  .ltree ul{list-style:none; margin:4px 0 4px; padding:0 0 0 13px;}
+  .ltree ul li{padding:5px 0 5px 16px;}
+  .ltree ul li::before{content:""; position:absolute; left:0; top:0; bottom:0; border-left:2px solid #ead9b0;}
+  .ltree ul li:last-child::before{bottom:auto; height:16px;}
+  .ltree ul li::after{content:""; position:absolute; left:0; top:16px; width:12px; border-top:2px solid #ead9b0;}
+  .ltree .bh{display:inline-block; font-size:15px; font-weight:800; margin:0 0 2px;
+      border-radius:10px; padding:2px 12px; border:1.5px solid #eee;}
+  .ltree>li.t-1>.bh{border-color:#bfe3ca; background:#f0f9f2;}
+  .ltree>li.t-2>.bh{border-color:#ddc2f0; background:#faf5fd;}
+  .ltree>li.t-3>.bh{border-color:#b8e0de; background:#f2fafa;}
+  .ltree>li.t-4>.bh{border-color:#f3d6a8; background:#fdf7ec;}
+  .ltree .bsub{font-size:12px; color:#8a7f66; margin:0 0 2px;}
+  .ltree .term{font-weight:800; color:#5a4a1e; font-size:13.5px;}
+  .ltree .yomi{font-size:11px; color:#9a8b66; font-weight:700;}
+  .ltree .def{display:block; font-size:12.5px; color:var(--sub); line-height:1.55; margin-top:1px;}
+  .ntag{display:inline-block;font-size:10px;font-weight:800;line-height:1;padding:3px 7px;border-radius:999px;vertical-align:2px;letter-spacing:.5px;}
+  .nt-term{background:#e3f0fb;color:#2f6ea5;border:1px solid #a9cdea;}
+  .nt-fact{background:#f0ecfa;color:#6a51a3;border:1px solid #c8bce6;}
+  .nt-claim{background:#fdeaea;color:#b0413e;border:1px solid #efb7b5;}
+  /* --- このページ用の追加スタイル --- */
+  .checklist{background:var(--card); border:2px solid var(--tori-br); border-radius:14px; padding:12px 16px; margin:16px 0 6px;}
+  .checklist .ct{font-weight:800; color:var(--tori-name); font-size:13.5px; margin:0 0 8px;}
+  .checklist ol{margin:0; padding-left:22px; columns:2; column-gap:24px;}
+  .checklist li{margin:5px 0; font-size:13px; break-inside:avoid; line-height:1.6;}
+  @media(max-width:520px){.checklist ol{columns:1;}}
+  .diagram{background:var(--card); border:2px solid #f0e2c2; border-radius:16px; padding:14px 16px 12px; margin:14px 0 6px;}
+  .diagram .dt{font-weight:800; color:#a06f08; font-size:13px; margin:0 0 8px;}
+  .diagram svg{display:block; width:100%; height:auto; max-width:100%;}
+  .diagram .cap{font-size:11.5px; color:var(--sub); line-height:1.65; margin-top:8px;}
+  .diagram .cap b{color:var(--accent);}
+  svg text{font-family:inherit;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">PVA SOURCE-FILTER ／ WAVEFORM の読み方</p>
+  <h1>WAVEFORM ビューの<span class="it">“あるべき姿”</span><br>— 止まって見えるとき・変わり続けるのが正しいとき —</h1>
+  <p class="sub">時間領域のオシロスコープを、ピヨ鳥とピヨ猫が読み解くピヨ。</p>
+</header>
+
+<div class="cast">
+  <figure>
+    <img src="data:image/webp;base64,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" alt="ピヨ鳥">
+    <div class="nm tori-nm">ピヨ鳥</div>
+    <div class="role">やさしい先生。<br>語尾は「〜ピヨ」。</div>
+  </figure>
+  <figure>
+    <img src="data:image/webp;base64,UklGRvAeAABXRUJQVlA4WAoAAAAQAAAA7wAA7wAAQUxQSLABAAABCcdtIzkSqkr5Jz2u+sw/ov8ToB+YmTTglIpgl5JgSU1jSBnQlHz8P/pb/lceykw2tHKgk4OhkQsDT7my4eV4sEtgHEmKGzb/oPcrB3MgFzEBjiBJjRuvXLuAsHPfwcU3hlywsAkSgGDhEAhQ7kGpCDHEkIXTIRV7KB0WLgWp0kPpsHBZSGGKU1hIAClHpRClqDSiDJVKlKDSiexrypFcJRWJVWKRVMEK1GHAorPD6nGODqysS+OJACvxknmnwTr0QY2Ehxyk+kvtJph0184RkktwDnwkriXh7lKAJevxx9ykKcDcWxKyS3QZeAGocRe98C4LYLf7Bz8DezOzdtuzbBrlpdtqu6dmqyP3bsBYY8/nf9raG6nQxW8sHnOLfG088cvTOVGGOsAauXcDMs2mtDqZ0m61yWjPsiktrsPc7sn9tYWMG3zclmWg/lYKkIF12X4a1+PSYletGeI9GDSN8Rw7mu7GCoL2ZC7zal8Z9arkQbV5GeVZMsq7ld46BVYI7PmVxb4DA3sFOEty7QRUCGxfQrR9J8H2FQXbNxZsX2CwfZ+x9vXG2rfdYvblFwBWUDggGh0AAHBxAJ0BKvAA8AA+YSqRRiQioaEnk6zQgAwJTdvJQD6AE0BRn+x60cK/zPO4uj+q4UY+Vrz/h+sTlw/Wb5jv3P9aT0r/4/1D/8P1LPojdLr/c8km82/3ztd/x/5dejflE9WfsP7h8v3rzxSffL9v+ZftJ/vPC35L/4nqEfkP89/0P5X8JmAH89/q/+q/w/70f4v4cJungv/f+4B+t3+84+3zT2Av57/i/+j/i/YY/7v87/qvVb+hf5z/3/5b4C/5l/Zf+V/ivbI9mn7dezv+1iD/M64E4lTB2PQgkDq0x23aUN7HJ+NtUSYCo2FebHv15+oHVHClLBX7pJ9Nz1Ut8J5pyZ35tjgkM8R8E4esa8/N2fdz8eiXMx4+eCNL8bFojKf1f44T81eKqkAo+LvHC4VAQtDlIQeCROiWf7rU70L9eWhN3CS1yyL5tCY+/iznWM/jxBpVimdQ9EUVTJrIk+ZISJzlqutN+8DnS42TKOjFwoAbUKEl0J1aCj7YL6S+ylDji5NzkE8ziUKDt8L1IHlpMu6WxNUxTpOz1eeQDsVZWii/RU+reYe4KaMGvo7mOai/ZSwFsTMAMBPEOKtLzKN2VhEyknODXo9x6s+gKVSXiEN0fiRtjFrmWob8vrP+jzyaZcEdyqHTVFBZDICN59kRI3lKltvx1bFYqi2sGCDP+M9GFUhkukkvlng55AvhA+Rk/9k3/1cxdrBzCa4BCgaGrhphr86A3dXPYxAHDXE7okKujOnZBkYYoCLHr7XSOqW7R+TysqW+3KT3oRX4SxvNJHjPdSnUu/hH8IayTL4+LyyyEIcyY4qg7GtuZd1E7BYBAsSwaAlO3TyblsHTjvYH3dy5keDRkuwJgo/fjML9vsEQch2wb9xVynsXpe1SPjNEgwD+Bk74pwvbQ4MI8Cc6sVvPVC2jAAMkfqaaOtH7yQF9Z2MQsxBFhT93g9ceVydXl2qAQ4CLAsqGw0df5CW0+rr+9/jWnR2TBDSYqxWtW1dYkgHPxlhpz/vcf98pfQN65kEEcXT1D3ZDTO8INTPpMHjEa/EOUbq8vd3o4J9FxQrYIk4ZZBJwgM11q29pQgT6KOYYPxms4Wtzf3iO/2HWKf5/mP6EtArSIvZO0Qx3Iph7G+ip/+dCZepcZBD2f0sNBQdBbU3s8fmFLsqCokfZjNDf4woCJO73XeCHSUuA7/pgs8F4tldrEkbv5LdRNjdGRoAA/v0roRntXAHERiHCkg8vfKspaehiUki50tHeIkf4pJCJQGw/gWWckVNrQf8hq7AGMYsOGT8pAFEsIuuPWIADv77a6qvF0YNGQN5R8n9C3f8bnlHlQRSq1Tt8JdcljhZlwjh8+bT2B1mImwsZQ4oVn6sBYTeDYj80E+TE9K2p8k9r+EZEqrTvO0ZyltXYaT0w3HZ2sgwQa1a4keL7qUi/NoF8NbkMbJuKpoCuqnhFesnCsdgdErorswoOuAX8RiSvHoV9eWe0HIR0lj9M6GIKQWL1d3biCUME6vyM7pzRuMAADYVv3Qm2VNcSxsJvfeU+Lt/c1zjYXkT24VGy223jVB9vBsTRlFRIBKeLVCUXbQS/dMUo2LMJnZJTtEZZIvPmEfBPPEKn393uzzKjnTyiDbyT+dC5kemdecTF3svGHV1ZK3nuxxtBh1vW1TUdVw0Ooq9rlV/qYxp7HyG+W6OyRCHIYlqmrPTCL/XAQqcDWz6f2fzaetDF08DrQYNLBNUtwOJ1JxCKlY1taGbudxTucaStAt0r4VYq40nMdI7ry/pHKuq0PDr23OzR7u/4wEpwyqI9LinJSFV5g6oQ9JkNRfLCJUhyljPUi1/6mFSkgL1fPCnhPd+MptMG4uDvfkCO55B30NpXIBjc//FpE3m1x8MfHm+TqHsUVDGjE1UZkLlIjQYI7TOq/l+xHpYWtA7z9alTWTieckquDSzFU3bX/HunZSL/iiDqC5onXSOQwkLmZQxnY31FDS1ObPIjWw0mXKxUH8w+imkq8kpCUnouO27dQOSYqDDrWUJQ0aDaL7a+Zpjepx7eXFUATfl/otLFoXVIJ/yrDUSS1iaphUjAFZ2EZLVciLS92k8IzJwnbY/VwMKayiqbhjbcVMNvmAOstcZO5gsrcLvrXRBk+fjzX0Dr/+GLotg6FwCvvYPExRXJ1SGhEKmx4WQ/pVzVJjxbfW/0qD5FCUEVxFcZBmlS3kyIBYyL/Xfk2sR5gDLzvv1shuCF3sD5GATbb5XLPQurn9VDtJQB9L8F8tZTC2DF7Arn5Jb9I0e/BOkkXIaLrY/rQFubq1mJuAraiB6vO4Jl9t/EFpfuk674PLs3NhMLWj+1nhk5gHeZVR6h9YmLNZlRdstDL76E5LijlI3YeN/q6Xx6N2FWuKYGlP4p0ZvLko+mqwx5pbsgqQFu+Of9LuDsNtaxXS3b2+rN1+zCkkx9vPMBHWcQjSIb9Q8w0JGxUoCs61cBfCjUZdOH0b2uTlDMn8WXxJcW1txrMe3/p7udatjlqLxrDvXDwfR9MG+qv9HZojPjFrB4xZWnbO9/I5rAIXivedWFli30esVlZWgHWZf3pLaLuPhLko0/Mic/ChnI7S4fQE5G0LlGYB/k4VVzHY9ZXzKchcnrwRfkzIf7gBnD9uMB99xlYH61yke5Dju0Kz3j9RnuChJoyBDmHAJjuAwXDu9XLa1/1hcWKxr7FnJFHpauDrO8jOXRuzzVBiCwqgP+DBm5dCuZ5LiOJ8F8idQXEwYNMPHouClGFZ+lSPBpVQSEHZGkIjhDVBrbQnB3Qkr5ZoL8J6ePc8LT2bCMeunv3vO4SgfN90eCQMuTsfG3VB4No+ph6CKP7CkjJJH+JBKp/sAViKDF5z3kNoRH2CJQKBzm3vHOkw1+bbkFonFcZjvu6Lmx/J/WM5ihLA7dxZ8SOB/aaA47nZtoxpT05MZSnl4QFzijUUxuhCZUUwHqOhf6NXgxyQqUO1Ym0cTN+zZhD5a3npWcyszAhmb/cxANla4236wrPTYIrL3wnAR4YP216q2A0g5gouzA6Hkg+fDiNRamZ0thS2uGqgofVIfWdVzv9zvSoPNtiwiSUZagTCXVvO6vz/GCEVH5QmWLZIbfct4LZcO0V0aXcuDwUQOIC+EOh8fi+tdduEc/372pPFYR2ufxw4H/KzLf/Y/uQBj21bwTBPkx0Xuq3WpVPcw+rOTz1AiPiiRHi3fns+JhB1iRPjrE7YRQbTP+vJ0vki8wmrPcGWU9p9joLrYSKoR0dvD/Zlxz6075GdjiP7gSw1LJSWgmfhDlV6amrVAxImMAApoV3f/57yXlKwLz0EYHpx/jf/vv5pSOl8l7Y8xYNhPDqgKSgWBzz9q/U5WUxpmcpq4QGd1+Q5aQ1us75dDtQVm5KD6PiKsg59npfVK/1x4BCCCdXfG0Mg/2HNWyJHOqGVG7b48xA+kRVvpL1SbfyIdFZxA5DdR8hh3UC7z6V3urJL5sESD7Nhw7iZABMGOxhX9PfN14qRda9O3sP5iAWFVa4JmmSRgAqLAwVkMnxPN17UhOxAMs1wB4j3OuaaNmr54kkNbVwOvA+Jl15p2xvhjIES0SvvgsMNbUdsd8MB/7yKlxOIsmDkAWYOCwlBmnQs6IpyqJF52Yb5PhZsTjx0pYgN3J1I+I4emfE7sOk9pgoxM7R2bh53vlR3lx25xLqZ7m/ReLnjozOkfDAjmGDOsSVwNvfGQvrmwrp8zzIWXgBiX4U/NwJOiKN8fSsbRgFbH3/G4J0CVjVi96Sdw/ehqIVI3ta3ws8Km4p14MMedDs8fvS6B3KdcC6K381zBAsSyN1vfvaY/N0B7PtZVSmVgdDA4zVQvFkVXeTf78eaoJZchWMVuALvg10NtTPc1rf/wxAdu47xK2QQVmVKn8lO+EPOF3ME3q7D3gm9v6JEEgLmmKYm4etFHA6LRUzxVHlYkjMD6G+3CMH+smCsXy/odU2a3NWEgRIA3ajbi5QNXlqnfjeilrf0RlxyFEBkpJE0dmqHkzUxFfsw9AXAJ9rtKGMfvK5jpAsCZyGBgmmC7jj0D+Atpu8tOsQZLlj879ydO9tPpyae6xtai694aQ5QgyfT/6Guqkph6RcfMOe2y3Vfo3uRI9lesA0az5T+fRHvUAzW4xkG5wPhoMydQGBlZdfgXJveueTXoF5RILIXsNWTLzZ2StF5ot7x0d81MZ7785RbOMwF7HO70i4q/OJkQxpbMN4hnJzYaT+iTFVMLwpt7veWrtlUC992KlZIU7Hj1jE3cKRgiSUmb2qOVKpZFhlCGhZS66BVSpJ00ziv04d1NfXKB6hlXdGjyK9eqpo58zkusE5j12YZW4+97w0MfeqT43S4/+HIHT/6Kwkus+NWboMgMUrz5V32vYrPhKfRU+C4uauuQjfe/fXrWlgAkC91RjhaAZCV6mQqWW08qjh/eTF8L2lfzNkcHj9t4VRcSrxgWaV1nNxF0WpKpy1XO9NPMyC7KY3Gp4hrnM/06RoYE9LgXpbwMLbShr3cufakN3SWAAJD6bPwOTrw3RgnqFhncwDkptHRFW8+ISZYmdMQbjWmpVsENehFGUMSGVohFpN9k/QytbHVyTm6tE3XrP7NXXmuBi0rMA1tYNmAGXvlACLWhMPpikEKNpc9q6EuhH7hSeWGwL1+V0tOH4KBk9NGdLuKddE/Bt9xiREs5Gx8qnBYFd8ssm918B4YcewKsY8WcsoR1U0lP7dt1VnpYtPLPLH/B5nTQscYZC1vprC5nRKdkG8UvmUjrPvkC4A/oSxTe0c9ivxddb1PCVBDaPDWDL5nygAjvBh2jugcQ2HrpY/8UaFlFrWUw15enlUnMcbVBICV+6NUCz2uSw+3XX9rSj6+x37Vgu+N1nUmM3oRM8pwciFYSg1iRJRInDBvF1GOgpIUMsh6Fu1yat1j+7lYWaMDhI9oBkFabU5pFUAoikQca9AAAbY0TzcAJHNHXRpJPU0Dvr6T/m4Z9+OzW+U3Tdty6RrLVQ/gSKABkCPInTXP4IhX9YKg3HKPAhzoyQnxXeTsCXEgiWcwuqMqdCz3uAOI4mVXdzOCoynIfaRXvHehpyFvi9tLb0/MLzodr6y/LsokSluP45sl11YAYq/PkLVwfOsaps0fdjcVIH7U3He9YJS/10xuFIM1OVVX41xnSWzbLRpRNrRXFqbUckhtzCudm/bia8bnVOEe7KGBnYv9EnaCjvay3qhZ01YLOVk5XNspMabQBShvvmyDKrjzylouquuWphC/LT8V31Y3TWxes4J58GTfNz+rfGt3BW0qbrc6BlzYa7DnLvudW2e45QxekHlL+UQ5BhayWxuafy4MohbZlbMsjbXAGhpfCjSiioi8cmdbOsLvvDBJgAyw5D+cKNpK53PeSyKRXN+aJR1PXWivoo1EaFFVbzZhcUxXqm0AeABC3B3X0x1nKI48DeMY76Px6uuBt/UR7K+RAR1v1Cgey38vLWRPnvI2bm/4K51J8PfnxdTthyJBsOtGzqPAqlo2E4e1OnXY/9IioMTw6kduZtuSgFoNuStuay0s8BJ0ZFwHK+u4O6/y1DnEucD3HSdYdG46368v8nlnZ34whiej3bzOe5bRJhXLah2XgcTx11g1VS3+VDG19dOa32l49Bs/r/3gQ0x0DWbI4GnxlCLwi1p547OpnMdVpPY2sWouHIHyO3Ys+aLsMvJn5NXn0L7ei+QoIslkR6YzbN8yPXpcbCGMv/QetR+W5E04I+VZA+xKlH5hjzxTMxhNIedjE34TDHNWzkxSnxCsZKfRPlAhaSssvPunHFOwPhB75VbyQVra6tCeqQmngoOrzvFWHN/MXt/7rRfL/ECw2+QVtFOYhlDsBZwrbtpNbzWr/lf7PPsxQKZC66uFL+0TPu/t7FbiL0Hu1hPsrQXYYQYmG4urZe7iQ+RrQREWSRy/GHM1Hlt0Lt6ppwV/sZQtKEjZ8Cs5AubdueQa5FqjmsOlXM6tzhU5kf7kClrTOyqE0tjo4JExe8abUSzpHGN8TLfqMcw80KJ3uNfhljUCOHziEQaTPdvO2xif3mBxk3m251QMKueRW1woxdYxzZMMltfrYuY5rA2F9dydw17pq1kMsuYMidV+9ra3YLuj4j2cp2Wew4sj9Fwx4jObYLuP+0c2mwXzzDOKraI595tziz4knmZR5Aqks/0j36MDW2dP8GIztpqH9gn637f4WhPjHLH10j54p/JIxLmnzFpHp7g8GRADyapg/+xcvBk134hjXj8U973OXawj66YPGktZ89HLax3PBRgE+tDUrK2LzHTgteqT0uqVIXNHWnIO0eFBuodoUNKxpHbbzQ7eH9V7M4o920o7gh7aDlwxODMtMQN0tgOOTWXYzJ7JB336JN8Na5WcCQRuS3b93zOsiow8DQaNBeNoHpAk9kOipegoHKhNutOzwPswn80jrzYH18BC29TPidPaQETVpj7dImUsJTicGSm6BNu7jDvNL82XWz4fWqT/IW2j7p+qbNhwHNpbevljDO9O2WXaMJ8AgWUP4v/UjUH1cQ+6BG5KmLzrDgFMtQF5XjhOSmToiI3yN4Dmr/XIPG9vvaytYK3X3K9ioHPtQG9Gtj7pTwkMpj3jN87+5X1nh5O31lMsXUE1uplZ/rRRjkSQ1+PSt3stLG4Zv4KySFqQVVTcwA1AeSq6laeEq9uJO1YIV+r1/b7dEEL+f/o/rB4sfXT/xudrFCNveORwOZjnwGeNWLuKWHaWup1Re9/xfanW8/QGitP603e9VicJdJuVLCjGG9g6B7hJe40LHy2f8dL7ZIHAJ+VHSA/BR76Hto1+6hhkMnx1NjdMdlPDFO4gRqBp9058WR4cT7Aaa27BP9viSwOZo7V94pgAkKsv2s7w3nlm/iQF0p8oS5Sgy0nDxhUCm4qUUOXQLx30UIF/M7HhezYldfsm/+ySNerOb5UvipjZQL+UrsimD/mgmMZqm/K3BP11NrDQosDfAif7hBbIn6Mobkeaf9FTGyXzgnCBh1kEoRYvCBr7QJin+Rc2moQ++WqVETm6oS+eHPYmJMF0vop3rtDtQ9s0ZC6jYzBb0/+06KJEACsBnTZ3/47x/DCFWVIuDrZ04z0eczWXEIZz6SIm1iRxrm3RkW0nRtvtzh+f96mR2Uj5TL2MdwlqIOybuzPpD6tfhEPN7W3H9H6Ni06M2Ndqt1kKRG2MHLsptMxkthUQ/CeD1XCi9IH11Bx/dKo5lfRi9YsGmKyBzVhyScwXmQtjpSqWlI0zxeWY8SV9BRKu09uBebHPHWe2NPhCYRmzoMTweDl2b6Y3T1WQ+0/rSIm8FpTDZP4rvKVLHFOcowf51eFv3Tc1U8AAjL/TVFX8JlPu+U35hRGm12QFg3HFWg46OBAjyhcPtqdhSUBp4KGb6G5MGnD1l0kT67nUy4W+Nt+OTaX5Kx7yQhjrNbmFr5YCb8dG+Ti9khwfa2nZh6K37y5escHI9QvwycK70axFunLJGnpSGbAvDh/09v7wkO7nSgeTKlDpQG978FS4Aj9WxH17UaTD8YX4TaJlnK+am1VMIX7of4NP7xYL0plw3kfqeFXHuMydPqnJ0tZJcgvfPCuH6lqXiD7+ZgIw333kuFhIuS2mvJ3x5+3zvIlxSTjmWYXBzjnMvmjGhKC+NrPIAOyTKhv/CisIs3vbZ2yy8E0j01mDx7KjgrghpJYldQzW7oWPjw4f6Z8oPoRUrEdMHmZoUvyfNEQdZo2il5psHvCCTN4Xk2l9NfIpm3fB/EtrzpIckC4cX9V3VBkkOb/0k5YnRwfnKhEuZLaTwqSB04Z3xnednWOC0LenyyAzucpB8fcN+Asdq4JBDwoRpWRo6lVC+QjsqNQcoWx8dgmGkj29ySH52RLL67h2ZD/mlqN0cNAB4EdxvuIamU5BgCCzhM/l4+8dUVy5n6G/ByVnzDo+lKvXl1JXnGnPpjUdDKRSV6jj4YwEnEKvfiDVLiEaNcZfPb8P4pl01txN48KbAiz8YHB0l1+Ga5IZN7CncZhY3R8HuiorhqSpmuIwZT8Hm8pCstXFi0mSKDOApikr4NSbXBd6gdPncawuwuyXFITpFy7rrKO2/ApruAo1BsRjc6miZDApjMdnYC5F69+aeS2n77Qn3KR0PJUtM94E8G8wgdnQ53+sGgDHbrIjtppK3FDIcxj2h3/94koms/LtPjO3T1EIzDcWbgRozfAwb8yIMafMHeGOfIIOHXnPeD/7ZEge2yDeR0G4r3PaNGRqNyy1K9cb4UXE7FLBH8iPsArkK4sUClSXcvX1knhcL3M2dnG3oerMEt+BJr65I7wYjsQwaRN0GO1emFbikKUVOWF2d0neWO5q8AacIvP7+zS8PfxsG3rKaF8G9EyLi87dCddo1ZqQUbyftwF6e1PN1cN1IWSznbDKKqQ+2UypMR/movf+Sf2LGmHr8CyGW9VBhIBnMUZdNOOC1eIfV3aS2uNyPlKoH9rjHAyvWDMMG8Wa7yMyvgrxh3ebhmwnBsy8kvGKmWewcpqUWMc2h/sjDa7IlyieoiG6iqO1sS9WiZc6HtzpFcGoJyHgJDb59S2ocs9metPyVwAm2V5Um7hX7a/OQros1k+qfSwNL2gr/fxVCrih8+vQQqJENSoINLl/N5OSfZjM1Y2W/ArTIa5o7x9pYZGT115HvJDwROiG/gKLPSuoka9p0/ZKc5+fGXcJM+2iEa/ziKUESJrtNUaapbPBEr1uMP1C5QMhNfg+72EaXYP1+wMrU4iraVyElE0x0yB+uw4N4hM4o/xP2LXaLP80XA24f76wKVlRJ6iR1AiERa369zmSj1fF5KM7w5+IczKwzqr+f7ln7ljxWIUokZkeIEXcRqu0xdCvJcfOlDuolN0YzXixJ9lpS+GbR3ZXnZX8r2Es0Sfck+Wf6dspnDE711ePGKvpPWoX8aD6h3jIEaD3jSw1vMPRE606FKAsWH3GmsNcUih6KBGWwAKedJDzoWm+S1ks10QlBOtlD1d+q16ZXvmq/Lc/6EpJX0OFOZpqpQdAiDtR/H9dsiqzTGPoW0wqljB8iBGZj4/CD026XnlPEL6foLQpt4rcxMBjb4YrXekzf5p+kQB7anDWxCoDi62jkKed9XxBzQpOnTWzNa3fjBMdQw5xZylk6HMWBn+evyk7h/SCbv85uNNAFpEbgvL/NzH5JiFN57BKMpinIKPuam9G1uvlS6829b0yxEH2Qbn3JSpGSkMDegCHoZ8kcv7cTV9ag/8kl/IgUPYgDc1CzdaI7T2dPIcHaReZf27sF5wjyZ0N9W14RGldjL51lnTiRNf/EjPLAhlJ88HyjuyPPvrq6SBN2ZNlsGaSFFgDXeHCwGPR/097NQC85Gf21qRmFOERf3vZgqzAth6D3G2HUskYnJ0qZXsl1nJSy7q7ySfuzSluG6S27inpSLRWeEml7HQKn/MKbf7fWdpe8xbdi7YnoP9WVkxwtZ+pxuYK/UkWkbtpBFqqWasAB5+WrbfCz8bvvuR7UxsYRyZ8pJ+Kz3cnJ7aiy3wvBc90db6jxSyDtPXf02/1bl7BiUL4vNvXCjiCwSZLcXzSWTNFp2YTqvmEtutuP1TPDVHiYocUZJ7x6F1baAYA0GD0gs2mz/hh7t5ymoeAeaFfzEa2Y9BAj8XGkHVpO3LDlfp7q/yNVnkXRSX3qO/w5Z6XIKMiNHiaxgGG0R1kZ5BeFmByd0V697xmBNRr6QydiqSWSfXgWqeNqKW5F0PJAWqIe/dhXLrZa1GHhsj+iM6DhnWydEN+9JytWDiIOhEPp+xSQgLh1EiJWjfvMpJBll98vIO4mVHMGZR8LI+UMxLr6B0Odq2lhIWFnqotmAWA3BJPMLJlVVuSlRVoULBLQv72InDFB+48esh7hqBmutyVCHnngr3DSTYmdivYgZpauba8MGwAExPF06uxfgAAAAAAA=" alt="ピヨ猫">
+    <div class="nm san-nm">ピヨ猫</div>
+    <div class="role">お笑い好きの生徒。<br>素朴な疑問をぶつける。</div>
+  </figure>
+</div>
+
+<div class="checklist">
+  <div class="ct">📋 このページで“理解すべき”7項目</div>
+  <ol>
+    <li>時間領域 vs 周波数領域（WAVEFORM と SPECTRUM）</li>
+    <li>合成波＝線形和（重ね合わせの原理）</li>
+    <li>オシロのトリガーの原理</li>
+    <li>共通周期（周期の最小公倍数）</li>
+    <li>有理数比／無理数比と周期性（純正律・平均律）</li>
+    <li>うなりと波形変化の関係</li>
+    <li>建設的／破壊的干渉と振幅</li>
+  </ol>
+</div>
+
+<div class="cite">
+  <b>出典：</b>本アプリ内部仕様書「WAVEFORM ビューのあるべき姿」（PVA Source-Filter Simulation）。
+  実装の確認先は <code>docs/main.js</code> の <code>drawWaveformView</code> / <code>createHarmonyVoices</code>。
+  引用の locator は仕様の項番号（仕様①〜⑦）で示す。個人学習用の整理ピヨ。
+</div>
+
+<div class="promise">
+  このページは提供された仕様書だけを根拠に、WAVEFORM の“正しい挙動”を説明するピヨ。
+  数値（4.5ms・9.1ms・8.7Hz・比 1.4983 など）は仕様の値そのままで、勝手に作らないピヨ。
+</div>
+
+<nav class="toc">
+  <p class="tt">🗺 もくじ</p>
+  <ol>
+    <li><a href="#scene0">0. WAVEFORMって何を見る画面？</a></li>
+    <li><a href="#scene1">1. 問いの地図</a></li>
+    <li><a href="#scene2">2. ① 時間領域 vs 周波数領域</a></li>
+    <li><a href="#scene3">3. ② 3本の線＝重ね合わせ</a></li>
+    <li><a href="#scene4">4. ③ オシロのトリガー</a></li>
+    <li><a href="#scene5">5. ④ 共通周期とちらつき</a></li>
+    <li><a href="#scene6">6. ⑤ 純正律 vs 平均律</a></li>
+    <li><a href="#scene7">7. ⑥⑦ うなり・干渉・振幅</a></li>
+    <li><a href="#scene8">8. モード別・あるべき表</a></li>
+    <li><a href="#scene9">9. FAQ</a></li>
+    <li><a href="#scene10">10. たしかめクイズ＆まとめ</a></li>
+  </ol>
+</nav>
+
+<!-- ============ scene0 ============ -->
+<div class="scene" id="scene0"><span class="lbl">🎬 0. WAVEFORMって何を見る画面？</span><span class="bar"></span></div>
+
+<div class="turn san"><span class="ava ava-san" role="img" aria-label="ピヨ猫"></span>
+  <div class="msg"><span class="who">ピヨ猫</span>
+    <div class="bubble"><p>WAVEFORM のタブ、波がウニョウニョ動いたり、ピタッと止まったり、たまに高速でパカパカする。あれって全部“正常”なの？</p></div></div></div>
+
+<div class="turn tori"><span class="ava ava-tori" role="img" aria-label="ピヨ鳥"></span>
+  <div class="msg"><span class="who">ピヨ鳥</span>
+    <div class="bubble"><p>いい入り口だピヨ！WAVEFORM は<b>時間領域のオシロスコープ</b>ピヨ。</p></div>
+    <div class="bubble"><p>スペクトラムが「周波数の絵」なら、こっちは<b>耳に実際に届く圧力波形</b>を時間で見る場所ピヨ。</p></div>
+    <div class="bubble"><p>今日おさえる背骨はこの3つだピヨ：</p>
+      <ul>
+        <li>静止して見えるのは、トリガーが波形に<b>位相同期</b>しているから</li>
+        <li>純正律（有理数比）は静止、平均律（無理数比）は<b>ゆっくり変化</b>が正しい</li>
+        <li>高速な<b>パカパカ切り替わり“だけ”がバグ</b></li>
+      </ul>
+      <p>この3つが今日の背骨ピヨ！</p></div></div></div>
+
+<div class="turn san"><span class="ava ava-san" role="img" aria-label="ピヨ猫"></span>
+  <div class="msg"><span class="who">ピヨ猫</span>
+    <div class="bubble"><p>なるほど…“止まってる＝正常”とは限らないってことニャ？</p></div></div></div>
+
+<div class="turn tori"><span class="ava ava-tori" role="img" aria-label="ピヨ鳥"></span>
+  <div class="msg"><span class="who">ピヨ鳥</span>
+    <div class="bubble"><p>その通りピヨ。“いつ止まって、いつ変わるのが正しいか”を、順番にほどいていこうピヨ！</p></div></div></div>
+
+<!-- ============ scene1 問いの地図 ============ -->
+<div class="scene" id="scene1"><span class="lbl">🗺 1. 問いの地図</span><span class="bar"></span></div>
+
+<div class="ltree-card">
+  <p class="root">🌳 中心の問い：WAVEFORM が「止まる／変わり続ける」のは、いつ正しくて、いつバグ？<br>
+  <span style="font-weight:600;font-size:13px;">— 答え：トリガーが波形に位相同期していれば正常。比が有理数なら静止、無理数なら“ゆっくり変化”が物理的に正しく、高速パカパカだけがバグ —</span></p>
+  <ul class="ltree">
+    <li class="t-1">
+      <p class="bh">🖥 問1　WAVEFORM は何を映し、何本の線が出る？</p>
+      <p class="bsub">答え：時間領域のオシロで、青=メイン・teal=ハモリ・violet=合成波の3本。</p>
+      <ul>
+        <li><span class="term">時間領域オシロ <span class="ntag nt-term">用語</span></span><span class="def">耳に届く圧力波形を時間軸で見る画面。SPECTRUM と対をなす。</span></li>
+        <li><span class="term">合成波＝各時点の線形和 <span class="ntag nt-fact">事実</span></span><span class="def">violet は青＋teal の和で、実際に鳴っている音そのもの。</span></li>
+        <li><span class="term">violet を描く条件 <span class="ntag nt-claim">主張</span></span><span class="def">synth＋ハモリON のときだけ。Mic・ハモリOFF では描かない。</span></li>
+      </ul>
+    </li>
+    <li class="t-2">
+      <p class="bh">🎯 問2　動く波がなぜ止まって見える？</p>
+      <p class="bsub">答え：毎フレーム“立ち上がりゼロ交差”に表示窓を吸着させるから。</p>
+      <ul>
+        <li><span class="term">立ち上がりゼロ交差トリガー <span class="ntag nt-term">用語</span></span><span class="def">実機オシロと同じ、同じ位相で窓を切る仕組み。</span></li>
+        <li><span class="term">相関トリガー <span class="ntag nt-fact">事実</span></span><span class="def">前フレームに最も似た候補を選び、合成波の位相も固定する。</span></li>
+        <li><span class="term">ちらつきバグ <span class="ntag nt-claim">主張</span></span><span class="def">素朴に“最初の交差”を拾うと候補間を往復して発生する。</span></li>
+      </ul>
+    </li>
+    <li class="t-3">
+      <p class="bh">⚖️ 問3　いつ静止でき、いつ変わり続けるのが正しい？</p>
+      <p class="bsub">答え：純正律（有理数比）は真に周期的で静止、平均律（無理数比）は非周期で変化が正しい。</p>
+      <ul>
+        <li><span class="term">共通周期＝周期の最小公倍数 <span class="ntag nt-term">用語</span></span><span class="def">220Hz と 110Hz なら合成波の真の周期は 9.1ms。</span></li>
+        <li><span class="term">Oct は平均律でも 2:1 <span class="ntag nt-fact">事実</span></span><span class="def">厳密な整数比なので、平均律でも Oct だけは静止する。</span></li>
+        <li><span class="term">高速パカパカ＝常にバグ <span class="ntag nt-claim">主張</span></span><span class="def">物理は“ゆっくり変化”まで。高速な往復は実装の誤り。</span></li>
+      </ul>
+    </li>
+    <li class="t-4">
+      <p class="bh">🌊 問4　画面の“形の変化”は何を教える？</p>
+      <p class="bsub">答え：近接部分音のうなりが形の変化として見え、干渉で振幅が正直に振れる。</p>
+      <ul>
+        <li><span class="term">うなり（beat） <span class="ntag nt-term">用語</span></span><span class="def">近い周波数差でできる、周期的な強弱の脈。</span></li>
+        <li><span class="term">8.7Hz のうなり <span class="ntag nt-fact">事実</span></span><span class="def">平均律長3度で 1100Hz と 1108.7Hz が約 8.7Hz でうなる。</span></li>
+        <li><span class="term">合成波ピーク基準の共有スケール <span class="ntag nt-claim">主張</span></span><span class="def">建設的干渉の最大約2倍まで、3本を正直に比較。</span></li>
+      </ul>
+    </li>
+  </ul>
+</div>
+
+<div class="turn san"><span class="ava ava-san" role="img" aria-label="ピヨ猫"></span>
+  <div class="msg"><span class="who">ピヨ猫</span>
+    <div class="bubble"><p>上の“問いの地図”って、どう読むの？</p></div></div></div>
+
+<div class="turn tori"><span class="ava ava-tori" role="img" aria-label="ピヨ鳥"></span>
+  <div class="msg"><span class="who">ピヨ鳥</span>
+    <div class="bubble"><p>資料の論理を“問いのリレー”で1枚にした地図ピヨ。前の枝の答えが、次の枝の問いを生むピヨ。</p></div>
+    <div class="bubble"><p>読み方は、帯（見出し）＝問い、すぐ下の一行＝答え。色タグは <b>用語=青・事実=紫・主張=赤</b>ピヨ。</p></div>
+    <div class="bubble"><p>問1→問4の“答え”だけ拾い読みすれば、WAVEFORM の理屈が上から下へ流れるピヨ！</p></div></div></div>
+
+<!-- ============ scene2 ============ -->
+<div class="scene" id="scene2"><span class="lbl">①  2. 時間領域 vs 周波数領域</span><span class="bar"></span></div>
+
+<div class="diagram">
+  <div class="dt">図1：同じ音の“2つの顔”</div>
+  <svg viewBox="0 0 520 132" role="img" aria-label="時間領域と周波数領域">
+    <text x="10" y="14" font-size="11" font-weight="700" fill="#2196f3">WAVEFORM ＝ 時間領域</text>
+    <rect x="6" y="20" width="250" height="98" rx="8" fill="#fbfdff" stroke="#eadfc2"/>
+    <line x1="10" y1="65" x2="252" y2="65" stroke="#d9cba6" stroke-width="1"/>
+    <g transform="translate(0,20)">
+      <polyline fill="none" stroke="#2196f3" stroke-width="2.2" points="10.0,45.0 14.0,38.8 18.0,32.8 22.0,27.4 26.0,22.7 30.0,19.0 34.0,16.5 38.0,15.2 42.0,15.2 46.0,16.5 50.0,19.0 54.0,22.7 58.0,27.4 62.0,32.8 66.0,38.8 70.0,45.0 74.0,51.2 78.0,57.2 82.0,62.6 86.0,67.3 90.0,71.0 94.0,73.5 98.0,74.8 102.0,74.8 106.0,73.5 110.0,71.0 114.0,67.3 118.0,62.6 122.0,57.2 126.0,51.2 130.0,45.0 134.0,38.8 138.0,32.8 142.0,27.4 146.0,22.7 150.0,19.0 154.0,16.5 158.0,15.2 162.0,15.2 166.0,16.5 170.0,19.0 174.0,22.7 178.0,27.4 182.0,32.8 186.0,38.8 190.0,45.0 194.0,51.2 198.0,57.2 202.0,62.6 206.0,67.3 210.0,71.0 214.0,73.5 218.0,74.8 222.0,74.8 226.0,73.5 230.0,71.0 234.0,67.3 238.0,62.6 242.0,57.2 246.0,51.2 250.0,45.0"/>
+    </g>
+    <text x="10" y="128" font-size="10" fill="#7a6f57">横軸＝時間 →</text>
+
+    <text x="264" y="14" font-size="11" font-weight="700" fill="#8e44ad">SPECTRUM ＝ 周波数領域</text>
+    <rect x="264" y="20" width="250" height="98" rx="8" fill="#fdfbff" stroke="#eadfc2"/>
+    <line x1="270" y1="110" x2="510" y2="110" stroke="#d9cba6" stroke-width="1"/>
+    <g fill="#8e44ad">
+      <rect x="282" y="32" width="9" height="78"/>
+      <rect x="302" y="46" width="9" height="64"/>
+      <rect x="322" y="60" width="9" height="50"/>
+      <rect x="342" y="40" width="9" height="70"/>
+      <rect x="362" y="24" width="9" height="86"/>
+      <rect x="382" y="48" width="9" height="62"/>
+      <rect x="402" y="66" width="9" height="44"/>
+      <rect x="422" y="76" width="9" height="34"/>
+      <rect x="442" y="84" width="9" height="26"/>
+      <rect x="462" y="90" width="9" height="20"/>
+      <rect x="482" y="95" width="9" height="15"/>
+    </g>
+    <text x="264" y="128" font-size="10" fill="#7a6f57">横軸＝周波数 →（棒＝倍音）</text>
+  </svg>
+  <p class="cap"><b>左＝時間の揺れ／右＝倍音の内訳。</b>どちらも「同じ1つの音」を別の軸で見ているだけ。WAVEFORM は耳に届く圧力そのものを映す。</p>
+</div>
+
+<div class="turn san"><span class="ava ava-san" role="img" aria-label="ピヨ猫"></span>
+  <div class="msg"><span class="who">ピヨ猫</span>
+    <div class="bubble"><p>SPECTRUM の倍音の棒グラフはもう慣れてる。WAVEFORM はそれと何が違うの？</p></div></div></div>
+
+<div class="turn tori"><span class="ava ava-tori" role="img" aria-label="ピヨ鳥"></span>
+  <div class="msg"><span class="who">ピヨ鳥</span>
+    <div class="bubble"><p>同じ音を“別の軸”で見てるだけピヨ。SPECTRUM は横軸が周波数、WAVEFORM は横軸が時間ピヨ。</p></div>
+    <div class="bubble"><p>仕様でも、その役割はこう言ってるピヨ：</p>
+      <blockquote class="q"><span class="en">「WAVEFORM は時間領域のオシロスコープ。スペクトラム（周波数領域）と対をなし、『耳に実際に届く圧力波形』を見る場所。」</span><span class="pg">仕様①</span></blockquote></div></div></div>
+
+<div class="turn san"><span class="ava ava-san" role="img" aria-label="ピヨ猫"></span>
+  <div class="msg"><span class="who">ピヨ猫</span>
+    <div class="bubble"><p>じゃあ WAVEFORM は“耳のマイクが拾う生の揺れ”そのものってことね。</p></div></div></div>
+
+<div class="turn tori"><span class="ava ava-tori" role="img" aria-label="ピヨ鳥"></span>
+  <div class="msg"><span class="who">ピヨ鳥</span>
+    <div class="bubble"><p>そうピヨ。SPECTRUM が“成分表”なら、WAVEFORM は“実際の圧力の時間変化”ピヨ。だから「今どんな音か」はここに全部出るピヨ！</p></div></div></div>
+
+<!-- ============ scene3 ============ -->
+<div class="scene" id="scene3"><span class="lbl">②  3. 3本の線＝重ね合わせ</span><span class="bar"></span></div>
+
+<div class="turn san"><span class="ava ava-san" role="img" aria-label="ピヨ猫"></span>
+  <div class="msg"><span class="who">ピヨ猫</span>
+    <div class="bubble"><p>線が3色出るときがある。青・緑っぽいの・紫。あれは何を表してるの？</p></div></div></div>
+
+<div class="turn tori"><span class="ava ava-tori" role="img" aria-label="ピヨ鳥"></span>
+  <div class="msg"><span class="who">ピヨ鳥</span>
+    <div class="bubble"><p>色で役割が違うピヨ：</p>
+      <ul>
+        <li><b style="color:#2196f3">青</b>＝メイン声（Source→Tilt→F1..F5 を通過した後）</li>
+        <li><b style="color:#2ea39b">teal</b>＝ハモリ声部（<b>同じフィルタチェーン</b>を通過した後）</li>
+        <li><b style="color:#8e44ad">violet</b>＝合成波（青＋teal の各時点の和）</li>
+      </ul></div>
+    <div class="bubble"><p>violet の定義は、仕様ではこうピヨ：</p>
+      <blockquote class="q"><span class="en">「violet=合成波（青+teal の各時点の和 = 実際に鳴っている音）」</span><span class="pg">仕様②</span></blockquote></div></div></div>
+
+<div class="turn san"><span class="ava ava-san" role="img" aria-label="ピヨ猫"></span>
+  <div class="msg"><span class="who">ピヨ猫</span>
+    <div class="bubble"><p>なるほど。じゃあ紫は“実際に鳴ってる音”そのものなんだ。</p></div></div></div>
+
+<div class="turn tori"><span class="ava ava-tori" role="img" aria-label="ピヨ鳥"></span>
+  <div class="msg"><span class="who">ピヨ鳥</span>
+    <div class="bubble"><p>その通りピヨ。だから<b>紫が主役</b>、青と teal はその部品ピヨ。</p></div>
+    <div class="bubble"><p>ハモリ OFF なら合成≡メインだから、紫は描かない（青1本が正常）ピヨ。Mic のときも紫は出さないピヨ。</p></div>
+    <div class="bubble"><p>Mic で紫を消す理由は、仕様でこう言ってるピヨ：</p>
+      <blockquote class="q"><span class="en">「Mic 時も violet 非表示（青 trace が mic になり成分関係が成立しないため）。」</span><span class="pg">仕様②</span></blockquote></div></div></div>
+
+<!-- ============ scene4 ============ -->
+<div class="scene" id="scene4"><span class="lbl">③  4. オシロのトリガー</span><span class="bar"></span></div>
+
+<div class="diagram">
+  <div class="dt">図2：毎フレーム、同じ位相に窓を合わせる → 波が静止して見える</div>
+  <svg viewBox="0 0 720 122" role="img" aria-label="オシロのトリガー">
+    <line x1="40" y1="64" x2="712" y2="64" stroke="#d9cba6" stroke-width="1"/>
+    <polyline fill="none" stroke="#2196f3" stroke-width="2" points="46.0,64.0 51.4,59.0 56.9,54.2 62.3,49.9 67.8,46.2 73.2,43.2 78.7,41.2 84.1,40.1 89.6,40.1 95.0,41.2 100.4,43.2 105.9,46.2 111.3,49.9 116.8,54.2 122.2,59.0 127.7,64.0 133.1,69.0 138.6,73.8 144.0,78.1 149.5,81.8 154.9,84.8 160.3,86.8 165.8,87.9 171.2,87.9 176.7,86.8 182.1,84.8 187.6,81.8 193.0,78.1 198.5,73.8 203.9,69.0 209.3,64.0 214.8,59.0 220.2,54.2 225.7,49.9 231.1,46.2 236.6,43.2 242.0,41.2 247.5,40.1 252.9,40.1 258.4,41.2 263.8,43.2 269.2,46.2 274.7,49.9 280.1,54.2 285.6,59.0 291.0,64.0 296.5,69.0 301.9,73.8 307.4,78.1 312.8,81.8 318.3,84.8 323.7,86.8 329.1,87.9 334.6,87.9 340.0,86.8 345.5,84.8 350.9,81.8 356.4,78.1 361.8,73.8 367.3,69.0 372.7,64.0 378.1,59.0 383.6,54.2 389.0,49.9 394.5,46.2 399.9,43.2 405.4,41.2 410.8,40.1 416.3,40.1 421.7,41.2 427.2,43.2 432.6,46.2 438.0,49.9 443.5,54.2 448.9,59.0 454.4,64.0 459.8,69.0 465.3,73.8 470.7,78.1 476.2,81.8 481.6,84.8 487.0,86.8 492.5,87.9 497.9,87.9 503.4,86.8 508.8,84.8 514.3,81.8 519.7,78.1 525.2,73.8 530.6,69.0 536.1,64.0 541.5,59.0 546.9,54.2 552.4,49.9 557.8,46.2 563.3,43.2 568.7,41.2 574.2,40.1 579.6,40.1 585.1,41.2 590.5,43.2 595.9,46.2 601.4,49.9 606.8,54.2 612.3,59.0 617.7,64.0 623.2,69.0 628.6,73.8 634.1,78.1 639.5,81.8 645.0,84.8 650.4,86.8 655.8,87.9 661.3,87.9 666.7,86.8 672.2,84.8 677.6,81.8 683.1,78.1 688.5,73.8 694.0,69.0 699.4,64.0 704.8,59.0"/>
+    <!-- rising zero-crossings -->
+    <g fill="#3f8a5e"><circle cx="209.3" cy="64" r="4"/><circle cx="372.7" cy="64" r="4"/><circle cx="536.1" cy="64" r="4"/><circle cx="699.4" cy="64" r="4"/></g>
+    <line x1="46" y1="14" x2="46" y2="110" stroke="#3f8a5e" stroke-width="1.5" stroke-dasharray="4 3"/>
+    <circle cx="46" cy="64" r="8" fill="none" stroke="#3f8a5e" stroke-width="2.2"/>
+    <text x="52" y="20" font-size="11" font-weight="700" fill="#3f8a5e">窓の左端＝立ち上がりゼロ交差</text>
+    <g font-size="9.5" fill="#7a6f57" text-anchor="middle">
+      <text x="46" y="120">0</text><text x="209.3" y="120">4.5ms</text><text x="372.7" y="120">9.0ms</text><text x="536.1" y="120">13.5ms</text><text x="699.4" y="120">18.0ms</text>
+    </g>
+  </svg>
+  <p class="cap">緑の点＝波形の“立ち上がりゼロ交差”。毎フレーム、ここに表示窓の左端を吸着させると、波は動いていても切り取る位相が揃い、<b>静止画</b>になる。</p>
+</div>
+
+<div class="turn san"><span class="ava ava-san" role="img" aria-label="ピヨ猫"></span>
+  <div class="msg"><span class="who">ピヨ猫</span>
+    <div class="bubble"><p>動く波が止まって見えるって…もしかして、こっそり<b>一時停止ボタン</b>を押してるだけ？</p></div></div></div>
+
+<div class="turn tori"><span class="ava ava-tori" role="img" aria-label="ピヨ鳥"></span>
+  <div class="msg"><span class="who">ピヨ鳥</span>
+    <div class="bubble"><p>ピヨピヨピヨヨヨヨ、止め絵じゃないピヨ！</p></div>
+    <div class="bubble"><p>毎フレーム、波形の<b>立ち上がりゼロ交差</b>に表示窓を合わせてるピヨ。実機オシロスコープと同じ原理ピヨ。</p></div>
+    <div class="bubble"><p>仕様の言葉ではこうピヨ：</p>
+      <blockquote class="q"><span class="en">「毎フレーム、波形の『立ち上がりゼロ交差』に表示窓を吸着させる（実機オシロスコープと同じ原理）。周期波形なら毎回同じ位相で切れる → 静止して見える。」</span><span class="pg">仕様③</span></blockquote></div></div></div>
+
+<div class="turn san"><span class="ava ava-san" role="img" aria-label="ピヨ猫"></span>
+  <div class="msg"><span class="who">ピヨ猫</span>
+    <div class="bubble"><p>同じ位相で切るから、周期波なら毎回同じ形になって、止まって見えるのね。</p></div></div></div>
+
+<div class="turn tori"><span class="ava ava-tori" role="img" aria-label="ピヨ鳥"></span>
+  <div class="msg"><span class="who">ピヨ鳥</span>
+    <div class="bubble"><p>まさにそれピヨ。波は動いてるのに、切り取る位相を揃えるから“静止画”になるピヨ。図の緑の点が、毎フレーム合わせにいく立ち上がりゼロ交差ピヨ！</p></div></div></div>
+
+<!-- ============ scene5 ============ -->
+<div class="scene" id="scene5"><span class="lbl">④  5. 共通周期とちらつき（実際に起きたバグ）</span><span class="bar"></span></div>
+
+<div class="diagram">
+  <div class="dt">図3：メイン220Hz＋Oct↓110Hz — 真の周期は9.1ms、候補は4.5ms毎</div>
+  <svg viewBox="0 0 720 320" role="img" aria-label="共通周期とちらつき">
+    <!-- candidate trigger verticals -->
+    <g>
+      <line x1="46" y1="24" x2="46" y2="300" stroke="#3f8a5e" stroke-width="1.6"/>
+      <line x1="372.7" y1="24" x2="372.7" y2="300" stroke="#3f8a5e" stroke-width="1.6"/>
+      <line x1="699.4" y1="24" x2="699.4" y2="300" stroke="#3f8a5e" stroke-width="1.6"/>
+      <line x1="209.3" y1="24" x2="209.3" y2="300" stroke="#c0392b" stroke-width="1.6" stroke-dasharray="5 4"/>
+      <line x1="536.1" y1="24" x2="536.1" y2="300" stroke="#c0392b" stroke-width="1.6" stroke-dasharray="5 4"/>
+    </g>
+    <g font-size="10" font-weight="700" text-anchor="middle">
+      <text x="46" y="20" fill="#3f8a5e">同位相</text>
+      <text x="372.7" y="20" fill="#3f8a5e">同位相</text>
+      <text x="699.4" y="20" fill="#3f8a5e">同位相</text>
+      <text x="209.3" y="20" fill="#c0392b">逆位相</text>
+      <text x="536.1" y="20" fill="#c0392b">逆位相</text>
+    </g>
+    <!-- true period bracket -->
+    <line x1="46" y1="308" x2="376.3" y2="308" stroke="#8e44ad" stroke-width="1.4"/>
+    <line x1="46" y1="304" x2="46" y2="312" stroke="#8e44ad" stroke-width="1.4"/>
+    <line x1="376.3" y1="304" x2="376.3" y2="312" stroke="#8e44ad" stroke-width="1.4"/>
+    <text x="211" y="318" font-size="10" font-weight="700" fill="#8e44ad" text-anchor="middle">合成波の真の周期 = 9.1ms（最小公倍数）</text>
+    <!-- baselines -->
+    <line x1="46" y1="64" x2="705" y2="64" stroke="#eadfc2" stroke-width="1"/>
+    <line x1="46" y1="150" x2="705" y2="150" stroke="#eadfc2" stroke-width="1"/>
+    <line x1="46" y1="250" x2="705" y2="250" stroke="#eadfc2" stroke-width="1"/>
+    <!-- row labels -->
+    <text x="50" y="38" font-size="10.5" font-weight="700" fill="#2196f3">メイン 220Hz（周期4.5ms）</text>
+    <text x="50" y="124" font-size="10.5" font-weight="700" fill="#2ea39b">ハモリ Oct↓ 110Hz（周期9.1ms）</text>
+    <text x="50" y="224" font-size="10.5" font-weight="700" fill="#8e44ad">合成波（青＋teal）</text>
+    <!-- main -->
+    <polyline fill="none" stroke="#2196f3" stroke-width="1.8" points="46.0,64.0 51.4,59.0 56.9,54.2 62.3,49.9 67.8,46.2 73.2,43.2 78.7,41.2 84.1,40.1 89.6,40.1 95.0,41.2 100.4,43.2 105.9,46.2 111.3,49.9 116.8,54.2 122.2,59.0 127.7,64.0 133.1,69.0 138.6,73.8 144.0,78.1 149.5,81.8 154.9,84.8 160.3,86.8 165.8,87.9 171.2,87.9 176.7,86.8 182.1,84.8 187.6,81.8 193.0,78.1 198.5,73.8 203.9,69.0 209.3,64.0 214.8,59.0 220.2,54.2 225.7,49.9 231.1,46.2 236.6,43.2 242.0,41.2 247.5,40.1 252.9,40.1 258.4,41.2 263.8,43.2 269.2,46.2 274.7,49.9 280.1,54.2 285.6,59.0 291.0,64.0 296.5,69.0 301.9,73.8 307.4,78.1 312.8,81.8 318.3,84.8 323.7,86.8 329.1,87.9 334.6,87.9 340.0,86.8 345.5,84.8 350.9,81.8 356.4,78.1 361.8,73.8 367.3,69.0 372.7,64.0 378.1,59.0 383.6,54.2 389.0,49.9 394.5,46.2 399.9,43.2 405.4,41.2 410.8,40.1 416.3,40.1 421.7,41.2 427.2,43.2 432.6,46.2 438.0,49.9 443.5,54.2 448.9,59.0 454.4,64.0 459.8,69.0 465.3,73.8 470.7,78.1 476.2,81.8 481.6,84.8 487.0,86.8 492.5,87.9 497.9,87.9 503.4,86.8 508.8,84.8 514.3,81.8 519.7,78.1 525.2,73.8 530.6,69.0 536.1,64.0 541.5,59.0 546.9,54.2 552.4,49.9 557.8,46.2 563.3,43.2 568.7,41.2 574.2,40.1 579.6,40.1 585.1,41.2 590.5,43.2 595.9,46.2 601.4,49.9 606.8,54.2 612.3,59.0 617.7,64.0 623.2,69.0 628.6,73.8 634.1,78.1 639.5,81.8 645.0,84.8 650.4,86.8 655.8,87.9 661.3,87.9 666.7,86.8 672.2,84.8 677.6,81.8 683.1,78.1 688.5,73.8 694.0,69.0 699.4,64.0 704.8,59.0"/>
+    <!-- harmony -->
+    <polyline fill="none" stroke="#2ea39b" stroke-width="1.8" points="46.0,150.0 51.4,147.7 56.9,145.5 62.3,143.3 67.8,141.1 73.2,139.1 78.7,137.2 84.1,135.4 89.6,133.8 95.0,132.3 100.4,131.1 105.9,130.0 111.3,129.2 116.8,128.6 122.2,128.2 127.7,128.0 133.1,128.1 138.6,128.4 144.0,128.9 149.5,129.7 154.9,130.7 160.3,131.9 165.8,133.3 171.2,134.9 176.7,136.6 182.1,138.5 187.6,140.5 193.0,142.6 198.5,144.7 203.9,147.0 209.3,149.2 214.8,151.5 220.2,153.8 225.7,156.0 231.1,158.2 236.6,160.2 242.0,162.2 247.5,164.0 252.9,165.7 258.4,167.2 263.8,168.5 269.2,169.7 274.7,170.6 280.1,171.3 285.6,171.7 291.0,172.0 296.5,172.0 301.9,171.7 307.4,171.3 312.8,170.6 318.3,169.7 323.7,168.5 329.1,167.2 334.6,165.7 340.0,164.0 345.5,162.2 350.9,160.2 356.4,158.2 361.8,156.0 367.3,153.8 372.7,151.5 378.1,149.2 383.6,147.0 389.0,144.7 394.5,142.6 399.9,140.5 405.4,138.5 410.8,136.6 416.3,134.9 421.7,133.3 427.2,131.9 432.6,130.7 438.0,129.7 443.5,128.9 448.9,128.4 454.4,128.1 459.8,128.0 465.3,128.2 470.7,128.6 476.2,129.2 481.6,130.0 487.0,131.1 492.5,132.3 497.9,133.8 503.4,135.4 508.8,137.2 514.3,139.1 519.7,141.1 525.2,143.3 530.6,145.5 536.1,147.7 541.5,150.0 546.9,152.3 552.4,154.5 557.8,156.7 563.3,158.9 568.7,160.9 574.2,162.8 579.6,164.6 585.1,166.2 590.5,167.7 595.9,168.9 601.4,170.0 606.8,170.8 612.3,171.4 617.7,171.8 623.2,172.0 628.6,171.9 634.1,171.6 639.5,171.1 645.0,170.3 650.4,169.3 655.8,168.1 661.3,166.7 666.7,165.1 672.2,163.4 677.6,161.5 683.1,159.5 688.5,157.4 694.0,155.3 699.4,153.0 704.8,150.8"/>
+    <!-- composite -->
+    <polyline fill="none" stroke="#8e44ad" stroke-width="2.2" points="46.0,250.0 51.4,243.0 56.9,236.2 62.3,229.9 67.8,224.4 73.2,219.8 78.7,216.2 84.1,213.8 89.6,212.6 95.0,212.7 100.4,214.1 105.9,216.5 111.3,219.9 116.8,224.2 122.2,229.1 127.7,234.4 133.1,239.9 138.6,245.3 144.0,250.3 149.5,254.9 154.9,258.8 160.3,261.9 165.8,264.0 171.2,265.1 176.7,265.2 182.1,264.3 187.6,262.6 193.0,260.0 198.5,256.8 203.9,253.3 209.3,249.5 214.8,245.7 220.2,242.1 225.7,239.0 231.1,236.5 236.6,234.7 242.0,233.9 247.5,234.1 252.9,235.3 258.4,237.5 263.8,240.6 269.2,244.6 274.7,249.3 280.1,254.5 285.6,260.0 291.0,265.6 296.5,271.0 301.9,276.0 307.4,280.4 312.8,283.9 318.3,286.5 323.7,287.9 329.1,288.1 334.6,287.0 340.0,284.7 345.5,281.2 350.9,276.6 356.4,271.1 361.8,264.8 367.3,258.1 372.7,251.1 378.1,244.1 383.6,237.3 389.0,231.0 394.5,225.4 399.9,220.7 405.4,217.1 410.8,214.6 416.3,213.4 421.7,213.4 427.2,214.6 432.6,217.0 438.0,220.3 443.5,224.5 448.9,229.3 454.4,234.5 459.8,239.8 465.3,245.1 470.7,250.1 476.2,254.6 481.6,258.3 487.0,261.3 492.5,263.3 497.9,264.4 503.4,264.4 508.8,263.4 514.3,261.6 519.7,259.0 525.2,255.8 530.6,252.2 536.1,248.4 541.5,244.6 546.9,241.0 552.4,237.9 557.8,235.4 563.3,233.8 568.7,233.0 574.2,233.2 579.6,234.5 585.1,236.8 590.5,240.0 595.9,244.1 601.4,248.9 606.8,254.2 612.3,259.8 617.7,265.5 623.2,271.0 628.6,276.1 634.1,280.6 639.5,284.3 645.0,286.9 650.4,288.4 655.8,288.7 661.3,287.7 666.7,285.5 672.2,282.0 677.6,277.5 683.1,272.1 688.5,265.9 694.0,259.1 699.4,252.1 704.8,245.1"/>
+  </svg>
+  <p class="cap"><b>メインのゼロ交差は4.5ms毎（縦線＝トリガー候補）。</b>だが合成波の真の周期は9.1ms。緑（0/9/18ms）では合成波が一致、赤（4.5/13.5ms）ではハモリの位相がちょうど反転している。</p>
+</div>
+
+<div class="diagram">
+  <div class="dt">図4：素朴なトリガーが行き来する“2つの形”＝ちらつきの正体</div>
+  <svg viewBox="0 0 620 168" role="img" aria-label="ちらつきの2つの窓">
+    <rect x="8" y="24" width="290" height="130" rx="8" fill="#f5fbf6" stroke="#3f8a5e" stroke-width="2"/>
+    <text x="14" y="18" font-size="11" font-weight="700" fill="#3f8a5e">窓A：t0 = 0ms（緑の交差）</text>
+    <g transform="translate(0,20)">
+      <polyline fill="none" stroke="#8e44ad" stroke-width="2.2" points="10.0,70.0 14.6,61.9 19.2,54.1 23.8,46.9 28.5,40.5 33.1,35.1 37.7,31.0 42.3,28.2 46.9,26.9 51.5,27.0 56.2,28.5 60.8,31.4 65.4,35.3 70.0,40.2 74.6,45.9 79.2,52.0 83.8,58.3 88.5,64.5 93.1,70.4 97.7,75.7 102.3,80.2 106.9,83.7 111.5,86.2 116.2,87.4 120.8,87.6 125.4,86.5 130.0,84.5 134.6,81.5 139.2,77.9 143.8,73.8 148.5,69.4 153.1,65.0 157.7,60.9 162.3,57.3 166.9,54.4 171.5,52.4 176.2,51.4 180.8,51.6 185.4,53.0 190.0,55.5 194.6,59.2 199.2,63.8 203.8,69.2 208.5,75.2 213.1,81.5 217.7,88.0 222.3,94.2 226.9,100.0 231.5,105.0 236.2,109.1 240.8,112.1 245.4,113.7 250.0,113.9 254.6,112.7 259.2,110.0 263.8,105.9 268.5,100.7 273.1,94.3 277.7,87.1 282.3,79.3 286.9,71.2"/>
+    </g>
+    <rect x="322" y="24" width="290" height="130" rx="8" fill="#fdf5f5" stroke="#c0392b" stroke-width="2"/>
+    <text x="328" y="18" font-size="11" font-weight="700" fill="#c0392b">窓B：t0 = 4.5ms（赤の交差）</text>
+    <g transform="translate(314,20)">
+      <polyline fill="none" stroke="#8e44ad" stroke-width="2.2" points="10.0,69.4 14.6,65.0 19.2,60.9 23.8,57.3 28.5,54.4 33.1,52.4 37.7,51.4 42.3,51.6 46.9,53.0 51.5,55.5 56.2,59.2 60.8,63.8 65.4,69.2 70.0,75.2 74.6,81.5 79.2,88.0 83.8,94.2 88.5,100.0 93.1,105.0 97.7,109.1 102.3,112.1 106.9,113.7 111.5,113.9 116.2,112.7 120.8,110.0 125.4,105.9 130.0,100.7 134.6,94.3 139.2,87.1 143.8,79.3 148.5,71.2 153.1,63.1 157.7,55.3 162.3,48.1 166.9,41.6 171.5,36.2 176.2,32.0 180.8,29.2 185.4,27.8 190.0,27.8 194.6,29.2 199.2,31.9 203.8,35.8 208.5,40.6 213.1,46.1 217.7,52.1 222.3,58.2 226.9,64.3 231.5,70.1 236.2,75.3 240.8,79.6 245.4,83.0 250.0,85.4 254.6,86.6 259.2,86.6 263.8,85.5 268.5,83.4 273.1,80.4 277.7,76.7 282.3,72.5 286.9,68.1"/>
+    </g>
+  </svg>
+  <p class="cap">同じ音でも、切り出す位相が違えば別の形になる。素朴に“最初の交差”を拾うと窓Aと窓Bをフレーム毎に往復＝<b>ちらつき</b>。<b>相関トリガー</b>は前フレームに似た方（＝いつも窓A）を選び続けて固定する。</p>
+</div>
+
+<div class="turn san"><span class="ava ava-san" role="img" aria-label="ピヨ猫"></span>
+  <div class="msg"><span class="who">ピヨ猫</span>
+    <div class="bubble"><p>トリガーがあるのに、なんでパカパカ暴れることがあったの？</p></div></div></div>
+
+<div class="turn tori"><span class="ava ava-tori" role="img" aria-label="ピヨ鳥"></span>
+  <div class="msg"><span class="who">ピヨ鳥</span>
+    <div class="bubble"><p>ハモリを足すと、話が一段むずかしくなるピヨ。</p></div>
+    <div class="bubble"><p>メイン220Hz（周期4.5ms）に Oct↓110Hz（周期9.1ms）を重ねると、合成波の“真の周期”は<b>9.1ms</b>ピヨ。両方の周期の<b>最小公倍数（共通周期）</b>ピヨ。</p></div>
+    <div class="bubble"><p>でもトリガー候補＝メインのゼロ交差は<b>4.5ms毎</b>にあるピヨ。図3の縦線ピヨ。</p></div></div></div>
+
+<div class="turn san"><span class="ava ava-san" role="img" aria-label="ピヨ猫"></span>
+  <div class="msg"><span class="who">ピヨ猫</span>
+    <div class="bubble"><p>4.5msごとに候補があるのに、真の周期は9.1ms…半分ズレた候補があるってこと？</p></div></div></div>
+
+<div class="turn tori"><span class="ava ava-tori" role="img" aria-label="ピヨ鳥"></span>
+  <div class="msg"><span class="who">ピヨ鳥</span>
+    <div class="bubble"><p>鋭いピヨ！1個おきの候補（赤）では、ハモリの位相がちょうど<b>反転</b>してるピヨ。</p></div>
+    <div class="bubble"><p>素朴に“最初の交差を拾う”と、フレーム毎に緑と赤のどちらを拾うかがランダムピヨ。だから2つの形を高速で行き来＝<b>ちらつき</b>ピヨ。</p></div>
+    <div class="bubble"><p>図4の窓Aと窓Bが、その2つの形ピヨ。</p></div></div></div>
+
+<div class="turn san"><span class="ava ava-san" role="img" aria-label="ピヨ猫"></span>
+  <div class="msg"><span class="who">ピヨ猫</span>
+    <div class="bubble"><p>同じ音なのに、切る位置で別の形…これがパカパカの正体か。じゃあ直し方は？</p></div></div></div>
+
+<div class="turn tori"><span class="ava ava-tori" role="img" aria-label="ピヨ鳥"></span>
+  <div class="msg"><span class="who">ピヨ鳥</span>
+    <div class="bubble"><p>あるべき解決は<b>相関トリガー</b>ピヨ：</p>
+      <blockquote class="q"><span class="en">「相関トリガー: 前フレームの合成波と最も似た候補を選び、メインのロックを保ったまま合成波の位相も固定する。」</span><span class="pg">仕様④</span></blockquote></div></div></div>
+
+<div class="turn san"><span class="ava ava-san" role="img" aria-label="ピヨ猫"></span>
+  <div class="msg"><span class="who">ピヨ猫</span>
+    <div class="bubble"><p>メインのロックは保ったまま、合成波の位相も固定するのね。</p></div></div></div>
+
+<div class="turn tori"><span class="ava ava-tori" role="img" aria-label="ピヨ鳥"></span>
+  <div class="msg"><span class="who">ピヨ鳥</span>
+    <div class="bubble"><p>そうピヨ。“青は青で止めつつ、紫も同じ形で止める”ピヨ。これでちらつきは消えるピヨ！</p></div></div></div>
+
+<!-- ============ scene6 ============ -->
+<div class="scene" id="scene6"><span class="lbl">⑤  6. 純正律 vs 平均律（教材のキモ）</span><span class="bar"></span></div>
+
+<div class="diagram">
+  <div class="dt">図5：純正律 Oct（2:1）— 合成波は9.1msごとに“完全に同じ形”＝静止</div>
+  <svg viewBox="0 0 720 128" role="img" aria-label="純正律は静止する">
+    <g stroke="#c9b98a" stroke-width="1.2" stroke-dasharray="4 3">
+      <line x1="20" y1="16" x2="20" y2="120"/>
+      <line x1="246.7" y1="16" x2="246.7" y2="120"/>
+      <line x1="473.3" y1="16" x2="473.3" y2="120"/>
+      <line x1="700" y1="16" x2="700" y2="120"/>
+    </g>
+    <g font-size="10" fill="#7a6f57" text-anchor="middle" font-weight="700">
+      <text x="133" y="14">9.1ms</text><text x="360" y="14">9.1ms</text><text x="586" y="14">9.1ms</text>
+    </g>
+    <g fill="#3f8a5e" font-size="13" font-weight="800" text-anchor="middle">
+      <text x="246.7" y="126">＝</text><text x="473.3" y="126">＝</text>
+    </g>
+    <polyline fill="none" stroke="#8e44ad" stroke-width="2.2" points="20.0,70.0 23.7,62.4 27.5,55.2 31.2,48.4 34.9,42.4 38.7,37.4 42.4,33.6 46.2,31.0 49.9,29.8 53.6,29.9 57.4,31.3 61.1,33.9 64.8,37.6 68.6,42.2 72.3,47.5 76.0,53.2 79.8,59.1 83.5,64.9 87.3,70.4 91.0,75.3 94.7,79.5 98.5,82.8 102.2,85.1 105.9,86.3 109.7,86.4 113.4,85.4 117.1,83.5 120.9,80.8 124.6,77.4 128.4,73.5 132.1,69.4 135.8,65.3 139.6,61.5 143.3,58.1 147.0,55.4 150.8,53.6 154.5,52.7 158.2,52.9 162.0,54.1 165.7,56.5 169.5,59.9 173.2,64.2 176.9,69.3 180.7,74.9 184.4,80.8 188.1,86.8 191.9,92.6 195.6,98.0 199.3,102.7 203.1,106.5 206.8,109.3 210.5,110.8 214.3,111.0 218.0,109.8 221.8,107.3 225.5,103.6 229.2,98.6 233.0,92.7 236.7,86.0 240.4,78.7 244.2,71.2 247.9,63.6 251.6,56.3 255.4,49.5 259.1,43.5 262.9,38.5 266.6,34.6 270.3,31.9 274.1,30.6 277.8,30.6 281.5,31.9 285.3,34.5 289.0,38.0 292.7,42.5 296.5,47.7 300.2,53.3 304.0,59.0 307.7,64.7 311.4,70.1 315.2,74.9 318.9,79.0 322.6,82.2 326.4,84.4 330.1,85.5 333.8,85.5 337.6,84.5 341.3,82.5 345.1,79.7 348.8,76.3 352.5,72.4 356.3,68.3 360.0,64.2 363.7,60.3 367.5,57.0 371.2,54.3 374.9,52.5 378.7,51.7 382.4,51.9 386.2,53.3 389.9,55.8 393.6,59.2 397.4,63.6 401.1,68.8 404.8,74.5 408.6,80.6 412.3,86.7 416.0,92.6 419.8,98.1 423.5,103.0 427.3,106.9 431.0,109.7 434.7,111.4 438.5,111.7 442.2,110.6 445.9,108.2 449.7,104.5 453.4,99.6 457.1,93.7 460.9,87.1 464.6,79.8 468.4,72.3 472.1,64.8 475.8,57.5 479.6,50.7 483.3,44.6 487.0,39.5 490.8,35.6 494.5,32.8 498.2,31.5 502.0,31.4 505.7,32.6 509.5,35.0 513.2,38.5 516.9,42.9 520.7,47.9 524.4,53.4 528.1,59.0 531.9,64.6 535.6,69.9 539.3,74.6 543.1,78.5 546.8,81.6 550.5,83.7 554.3,84.7 558.0,84.6 561.8,83.5 565.5,81.5 569.2,78.7 573.0,75.2 576.7,71.2 580.4,67.1 584.2,63.0 587.9,59.2 591.6,55.9 595.4,53.2 599.1,51.4 602.9,50.7 606.6,51.0 610.3,52.4 614.1,54.9 617.8,58.5 621.5,63.0 625.3,68.3 629.0,74.1 632.7,80.3 636.5,86.5 640.2,92.6 644.0,98.2 647.7,103.1 651.4,107.2 655.2,110.2 658.9,111.9 662.6,112.3 666.4,111.3 670.1,109.0 673.8,105.4 677.6,100.6 681.3,94.8 685.1,88.2 688.8,81.0 692.5,73.5 696.3,65.9 700.0,58.6"/>
+  </svg>
+  <p class="cap">純正律 Oct は比が厳密な <b>2:1</b>（有理数）。合成波は 9.1ms ごとに完全に一致（<b>＝</b>）するので、トリガーで切れば<b>静止</b>する。</p>
+</div>
+
+<div class="turn san"><span class="ava ava-san" role="img" aria-label="ピヨ猫"></span>
+  <div class="msg"><span class="who">ピヨ猫</span>
+    <div class="bubble"><p>純正律だと止まって、平均律だと止まらないって聞いた。なんで“律”で変わるの？</p></div></div></div>
+
+<div class="turn tori"><span class="ava ava-tori" role="img" aria-label="ピヨ鳥"></span>
+  <div class="msg"><span class="who">ピヨ鳥</span>
+    <div class="bubble"><p>比が“<b>有理数か無理数か</b>”で決まるピヨ。</p></div>
+    <div class="bubble"><p>純正律は周波数比が 3/2・5/4・6/5・2/1 みたいな<b>有理数</b>ピヨ。だから合成波は真に周期的で、静止できるピヨ。図5がOct（2:1）で、9.1ms ごとに完全に同じ形ピヨ。</p></div></div></div>
+
+<div class="turn san"><span class="ava ava-san" role="img" aria-label="ピヨ猫"></span>
+  <div class="msg"><span class="who">ピヨ猫</span>
+    <div class="bubble"><p>じゃあ平均律で止まらないのは…画面が<b>バグって壊れてる</b>ってこと？</p></div></div></div>
+
+<div class="turn tori"><span class="ava ava-tori" role="img" aria-label="ピヨ鳥"></span>
+  <div class="msg"><span class="who">ピヨ鳥</span>
+    <div class="bubble"><p>ちがうピヨ、そこが今日いちばん大事ピヨ！</p></div>
+    <div class="bubble"><p>平均律は完全5度でも比が <b>2<sup>(7/12)</sup>≈1.4983</b> の<b>無理数</b>ピヨ。合成波は厳密には二度と同じ形にならない＝<b>非周期</b>ピヨ。</p></div>
+    <div class="bubble"><p>だから、仕様ではこう言い切ってるピヨ：</p>
+      <blockquote class="q"><span class="en">「平均律（Oct以外）= 比が無理数（例 完全5度 2^(7/12)≈1.4983）→『完全静止』は原理的に不可能で、ゆっくり形が変わり続けるのが物理的に正しい姿。」</span><span class="pg">仕様⑤</span></blockquote></div></div></div>
+
+<div class="turn san"><span class="ava ava-san" role="img" aria-label="ピヨ猫"></span>
+  <div class="msg"><span class="who">ピヨ猫</span>
+    <div class="bubble"><p>“完全静止”は無理で、ゆっくり変わり続けるのが正しい姿…。オクターブだけ別なの？</p></div></div></div>
+
+<div class="turn tori"><span class="ava ava-tori" role="img" aria-label="ピヨ鳥"></span>
+  <div class="msg"><span class="who">ピヨ鳥</span>
+    <div class="bubble"><p>Oct だけは特別ピヨ。平均律でも Oct は厳密に整数比だから、静止するピヨ：</p>
+      <blockquote class="q"><span class="en">「Oct だけは平均律でも厳密に 2:1 なので静止する。高速なパカパカ切り替わりは常にバグであり物理ではない。」</span><span class="pg">仕様⑤</span></blockquote></div></div></div>
+
+<div class="turn san"><span class="ava ava-san" role="img" aria-label="ピヨ猫"></span>
+  <div class="msg"><span class="who">ピヨ猫</span>
+    <div class="bubble"><p>まとめると、ゆっくり変化＝物理、高速パカパカ＝バグ、だね。</p></div></div></div>
+
+<div class="turn tori"><span class="ava ava-tori" role="img" aria-label="ピヨ鳥"></span>
+  <div class="msg"><span class="who">ピヨ鳥</span>
+    <div class="bubble"><p>その線引きが命ピヨ。ゆっくり形が変わるのは近接倍音が干渉してる証拠で、正しい表示ピヨ。<b>高速な行き来だけ</b>を疑えばいいピヨ！</p></div></div></div>
+
+<!-- ============ scene7 ============ -->
+<div class="scene" id="scene7"><span class="lbl">⑥⑦  7. うなり・干渉・振幅</span><span class="bar"></span></div>
+
+<div class="diagram">
+  <div class="dt">図6：平均律の長3度 — 1100Hz と 1108.7Hz が 8.7Hz でうなる</div>
+  <svg viewBox="0 0 720 165" role="img" aria-label="うなりの包絡線">
+    <polygon fill="#f6e2b8" fill-opacity="0.55" stroke="none" points="20.0,32.0 28.9,32.2 37.7,32.8 46.6,33.7 55.5,35.1 64.3,36.8 73.2,38.9 82.1,41.3 91.0,44.0 99.8,47.1 108.7,50.4 117.6,54.0 126.4,57.9 135.3,61.9 144.2,66.2 153.0,70.6 161.9,75.2 170.8,79.8 179.7,84.5 188.5,89.3 197.4,86.0 206.3,81.3 215.1,76.6 224.0,72.0 232.9,67.6 241.7,63.3 250.6,59.1 259.5,55.2 268.3,51.5 277.2,48.1 286.1,45.0 295.0,42.1 303.8,39.6 312.7,37.4 321.6,35.6 330.4,34.1 339.3,33.0 348.2,32.3 357.0,32.0 365.9,32.1 374.8,32.6 383.7,33.4 392.5,34.6 401.4,36.2 410.3,38.2 419.1,40.5 428.0,43.1 436.9,46.1 445.7,49.4 454.6,52.9 463.5,56.6 472.3,60.6 481.2,64.8 490.1,69.2 499.0,73.7 507.8,78.3 516.7,83.0 525.6,87.8 534.4,87.5 543.3,82.7 552.2,78.1 561.0,73.5 569.9,69.0 578.8,64.6 587.7,60.4 596.5,56.4 605.4,52.7 614.3,49.2 623.1,45.9 632.0,43.0 640.9,40.4 649.7,38.1 658.6,36.1 667.5,34.5 676.3,33.3 685.2,32.5 694.1,32.1 694.1,147.9 685.2,147.5 676.3,146.7 667.5,145.5 658.6,143.9 649.7,141.9 640.9,139.6 632.0,137.0 623.1,134.1 614.3,130.8 605.4,127.3 596.5,123.6 587.7,119.6 578.8,115.4 569.9,111.0 561.0,106.5 552.2,101.9 543.3,97.3 534.4,92.5 525.6,92.2 516.7,97.0 507.8,101.7 499.0,106.3 490.1,110.8 481.2,115.2 472.3,119.4 463.5,123.4 454.6,127.1 445.7,130.6 436.9,133.9 428.0,136.9 419.1,139.5 410.3,141.8 401.4,143.8 392.5,145.4 383.7,146.6 374.8,147.4 365.9,147.9 357.0,148.0 348.2,147.7 339.3,147.0 330.4,145.9 321.6,144.4 312.7,142.6 303.8,140.4 295.0,137.9 286.1,135.0 277.2,131.9 268.3,128.5 259.5,124.8 250.6,120.9 241.7,116.7 232.9,112.4 224.0,108.0 215.1,103.4 206.3,98.7 197.4,94.0 188.5,90.7 179.7,95.5 170.8,100.2 161.9,104.8 153.0,109.4 144.2,113.8 135.3,118.1 126.4,122.1 117.6,126.0 108.7,129.6 99.8,132.9 91.0,136.0 82.1,138.7 73.2,141.1 64.3,143.2 55.5,144.9 46.6,146.3 37.7,147.2 28.9,147.8 20.0,148.0"/>
+    <line x1="20" y1="90" x2="700" y2="90" stroke="#e6d5a6" stroke-width="1"/>
+    <polyline fill="none" stroke="#e68a00" stroke-width="2" points="20.0,32.0 28.9,32.2 37.7,32.8 46.6,33.7 55.5,35.1 64.3,36.8 73.2,38.9 82.1,41.3 91.0,44.0 99.8,47.1 108.7,50.4 117.6,54.0 126.4,57.9 135.3,61.9 144.2,66.2 153.0,70.6 161.9,75.2 170.8,79.8 179.7,84.5 188.5,89.3 197.4,86.0 206.3,81.3 215.1,76.6 224.0,72.0 232.9,67.6 241.7,63.3 250.6,59.1 259.5,55.2 268.3,51.5 277.2,48.1 286.1,45.0 295.0,42.1 303.8,39.6 312.7,37.4 321.6,35.6 330.4,34.1 339.3,33.0 348.2,32.3 357.0,32.0 365.9,32.1 374.8,32.6 383.7,33.4 392.5,34.6 401.4,36.2 410.3,38.2 419.1,40.5 428.0,43.1 436.9,46.1 445.7,49.4 454.6,52.9 463.5,56.6 472.3,60.6 481.2,64.8 490.1,69.2 499.0,73.7 507.8,78.3 516.7,83.0 525.6,87.8 534.4,87.5 543.3,82.7 552.2,78.1 561.0,73.5 569.9,69.0 578.8,64.6 587.7,60.4 596.5,56.4 605.4,52.7 614.3,49.2 623.1,45.9 632.0,43.0 640.9,40.4 649.7,38.1 658.6,36.1 667.5,34.5 676.3,33.3 685.2,32.5 694.1,32.1 698.5,32.0"/>
+    <polyline fill="none" stroke="#e68a00" stroke-width="2" points="20.0,148.0 28.9,147.8 37.7,147.2 46.6,146.3 55.5,144.9 64.3,143.2 73.2,141.1 82.1,138.7 91.0,136.0 99.8,132.9 108.7,129.6 117.6,126.0 126.4,122.1 135.3,118.1 144.2,113.8 153.0,109.4 161.9,104.8 170.8,100.2 179.7,95.5 188.5,90.7 197.4,94.0 206.3,98.7 215.1,103.4 224.0,108.0 232.9,112.4 241.7,116.7 250.6,120.9 259.5,124.8 268.3,128.5 277.2,131.9 286.1,135.0 295.0,137.9 303.8,140.4 312.7,142.6 321.6,144.4 330.4,145.9 339.3,147.0 348.2,147.7 357.0,148.0 365.9,147.9 374.8,147.4 383.7,146.6 392.5,145.4 401.4,143.8 410.3,141.8 419.1,139.5 428.0,136.9 436.9,133.9 445.7,130.6 454.6,127.1 463.5,123.4 472.3,119.4 481.2,115.2 490.1,110.8 499.0,106.3 507.8,101.7 516.7,97.0 525.6,92.2 534.4,92.5 543.3,97.3 552.2,101.9 561.0,106.5 569.9,111.0 578.8,115.4 587.7,119.6 596.5,123.6 605.4,127.3 614.3,130.8 623.1,134.1 632.0,137.0 640.9,139.6 649.7,141.9 658.6,143.9 667.5,145.5 676.3,146.7 685.2,147.5 694.1,147.9 698.5,148.0"/>
+    <g stroke="#c0392b" stroke-width="1.5" stroke-dasharray="4 3">
+      <line x1="189.9" y1="25" x2="189.9" y2="155"/>
+      <line x1="529.7" y1="25" x2="529.7" y2="155"/>
+    </g>
+    <g fill="#c0392b" font-size="10" font-weight="700" text-anchor="middle">
+      <text x="189.9" y="163">打ち消し（節）</text><text x="529.7" y="163">打ち消し（節）</text>
+    </g>
+    <text x="24" y="20" font-size="10.5" font-weight="700" fill="#c8811a">包絡線＝うなり 8.7Hz（1周期 ≈ 115ms）</text>
+  </svg>
+  <p class="cap"><b>1100Hz（=5×220）と 1108.7Hz（=4×277.18）が約8.7Hzでうなる。</b>振幅の“節（打ち消し）”が周期的に来て、波形の形がゆっくり脈打つ。※搬送波(~1100Hz)は密集のため省略、包絡線のみ図示。</p>
+</div>
+
+<div class="turn san"><span class="ava ava-san" role="img" aria-label="ピヨ猫"></span>
+  <div class="msg"><span class="who">ピヨ猫</span>
+    <div class="bubble"><p>その“ゆっくりの変化”って、具体的に何が見えてるの？</p></div></div></div>
+
+<div class="turn tori"><span class="ava ava-tori" role="img" aria-label="ピヨ鳥"></span>
+  <div class="msg"><span class="who">ピヨ鳥</span>
+    <div class="bubble"><p><b>うなり（beat）</b>が“形の変化”として見えてるピヨ。仕様の例で言うとこうピヨ：</p>
+      <blockquote class="q"><span class="en">「近接部分音のうなり（例: 平均律長3度 277.18Hz では 5×220=1100Hz と 4×277.18=1108.7Hz が約8.7Hzでうなる）が『形の変化』として見える。」</span><span class="pg">仕様⑤</span></blockquote></div></div></div>
+
+<div class="turn san"><span class="ava ava-san" role="img" aria-label="ピヨ猫"></span>
+  <div class="msg"><span class="who">ピヨ猫</span>
+    <div class="bubble"><p>1100Hz と 1108.7Hz で 8.7Hz…上の図の“くびれ”がその節ね。</p></div></div></div>
+
+<div class="turn tori"><span class="ava ava-tori" role="img" aria-label="ピヨ鳥"></span>
+  <div class="msg"><span class="who">ピヨ鳥</span>
+    <div class="bubble"><p>そうピヨ。近い周波数どうしが強め合ったり打ち消し合ったりして、振幅がゆっくり脈打つピヨ。図6のくびれが打ち消し（節）ピヨ。</p></div></div></div>
+
+<div class="turn san"><span class="ava ava-san" role="img" aria-label="ピヨ猫"></span>
+  <div class="msg"><span class="who">ピヨ猫</span>
+    <div class="bubble"><p>合成波は建設的干渉で2倍まで振れるって…音量も2倍でご近所に怒られる？</p></div></div></div>
+
+<div class="turn tori"><span class="ava ava-tori" role="img" aria-label="ピヨ鳥"></span>
+  <div class="msg"><span class="who">ピヨ鳥</span>
+    <div class="bubble"><p>ピヨピヨピヨヨヨヨ、それは“表示の振れ幅”の話ピヨ！</p></div>
+    <div class="bubble"><p>縦軸の作りは、仕様でこう決めてるピヨ：</p>
+      <blockquote class="q"><span class="en">「合成波は建設的干渉で成分の和（最大約2倍）まで振れる → 縦軸は合成波ピーク基準の共有スケール（3本の相対振幅が正直に比較できる）。」</span><span class="pg">仕様⑥</span></blockquote></div></div></div>
+
+<div class="turn san"><span class="ava ava-san" role="img" aria-label="ピヨ猫"></span>
+  <div class="msg"><span class="who">ピヨ猫</span>
+    <div class="bubble"><p>合成波ピーク基準の共有スケールだから、3本の相対の大きさが正直に比べられるのね。</p></div></div></div>
+
+<div class="turn tori"><span class="ava ava-tori" role="img" aria-label="ピヨ鳥"></span>
+  <div class="msg"><span class="who">ピヨ鳥</span>
+    <div class="bubble"><p>その通りピヨ。建設的干渉で膨らむ所も、破壊的干渉で凹む所も、同じ物差しで正直に出るピヨ！</p></div></div></div>
+
+<!-- ============ scene8 ============ -->
+<div class="scene" id="scene8"><span class="lbl">⑦  8. モード別・あるべき表</span><span class="bar"></span></div>
+
+<div class="turn san"><span class="ava ava-san" role="img" aria-label="ピヨ猫"></span>
+  <div class="msg"><span class="who">ピヨ猫</span>
+    <div class="bubble"><p>結局、どのモードでどんな絵が出てれば正常なの？一覧が欲しい。</p></div></div></div>
+
+<div class="turn tori"><span class="ava ava-tori" role="img" aria-label="ピヨ鳥"></span>
+  <div class="msg"><span class="who">ピヨ鳥</span>
+    <div class="bubble"><p>頭に入れておくと一発で異常判定できるピヨ。あるべき一覧はこうピヨ：</p>
+      <ul>
+        <li><b>synth のみ</b> → 青1本</li>
+        <li><b>synth ＋ Harmony</b> → 青＋teal＋violet</li>
+        <li><b>Mic</b> → 橙赤（violet なし）</li>
+        <li><b>録音再生</b> → 青・プレイヘッド中心・violet なし</li>
+        <li><b>長窓ズームアウト</b> → 包絡線＋うねり(beat)読み出し</li>
+      </ul></div>
+    <div class="bubble"><p>この一覧と違う絵が出たら、そこが疑いどころピヨ！</p></div></div></div>
+
+<!-- ============ scene9 ============ -->
+<div class="scene" id="scene9"><span class="lbl">❓ 9. FAQ</span><span class="bar"></span></div>
+
+<div class="turn san"><span class="ava ava-san" role="img" aria-label="ピヨ猫"></span>
+  <div class="msg"><span class="who">ピヨ猫</span>
+    <div class="bubble"><p>青が1本しか出てない。壊れてる？</p></div></div></div>
+
+<div class="turn tori"><span class="ava ava-tori" role="img" aria-label="ピヨ鳥"></span>
+  <div class="msg"><span class="who">ピヨ鳥</span>
+    <div class="bubble"><p>壊れてないピヨ。ハモリ OFF なら合成≡メインだから、紫は出さず<b>青1本が正常</b>ピヨ。Mic 時も紫は出ないピヨ！</p></div></div></div>
+
+<div class="turn san"><span class="ava ava-san" role="img" aria-label="ピヨ猫"></span>
+  <div class="msg"><span class="who">ピヨ猫</span>
+    <div class="bubble"><p>マイクで歌ったら紫が消えた。なんで？</p></div></div></div>
+
+<div class="turn tori"><span class="ava ava-tori" role="img" aria-label="ピヨ鳥"></span>
+  <div class="msg"><span class="who">ピヨ鳥</span>
+    <div class="bubble"><p>Mic 時は青 trace がマイク波形そのものになって、青＝メイン合成の“成分関係”が成り立たないからピヨ。だから合成波（紫）は非表示が正しいピヨ！</p></div></div></div>
+
+<div class="turn san"><span class="ava ava-san" role="img" aria-label="ピヨ猫"></span>
+  <div class="msg"><span class="who">ピヨ猫</span>
+    <div class="bubble"><p>ズームアウトしたら波が包絡線みたいになった。</p></div></div></div>
+
+<div class="turn tori"><span class="ava ava-tori" role="img" aria-label="ピヨ鳥"></span>
+  <div class="msg"><span class="who">ピヨ鳥</span>
+    <div class="bubble"><p>それも正常ピヨ。長い窓では1画素に何周期も入るから、min/max の<b>包絡線＋うねり(beat)読み出し</b>に切り替わるピヨ！</p></div></div></div>
+
+<div class="turn san"><span class="ava ava-san" role="img" aria-label="ピヨ猫"></span>
+  <div class="msg"><span class="who">ピヨ猫</span>
+    <div class="bubble"><p>平均律でゆっくり形が変わる。直すべき？</p></div></div></div>
+
+<div class="turn tori"><span class="ava ava-tori" role="img" aria-label="ピヨ鳥"></span>
+  <div class="msg"><span class="who">ピヨ鳥</span>
+    <div class="bubble"><p>直さなくていいピヨ。無理数比だから非周期で、<b>ゆっくり変化が物理的に正しい姿</b>ピヨ。高速パカパカだけがバグピヨ！</p></div></div></div>
+
+<!-- ============ scene10 ============ -->
+<div class="scene" id="scene10"><span class="lbl">✅ 10. たしかめクイズ＆まとめ</span><span class="bar"></span></div>
+
+<div class="turn san"><span class="ava ava-san" role="img" aria-label="ピヨ猫"></span>
+  <div class="msg"><span class="who">ピヨ猫</span>
+    <div class="bubble"><p>最後に理解チェックしたい。</p></div></div></div>
+
+<div class="turn tori"><span class="ava ava-tori" role="img" aria-label="ピヨ鳥"></span>
+  <div class="msg"><span class="who">ピヨ鳥</span>
+    <div class="bubble"><p>たしかめクイズだピヨ！</p>
+      <details><summary>Q. 220Hz に、平均律の完全5度（比 2<sup>(7/12)</sup>≈1.4983）を重ねた。合成波は“静止”する？</summary>
+      <p>静止しないピヨ。比が無理数で合成波は非周期だから、ゆっくり形が変わり続けるのが正しい姿ピヨ。もし高速でパカパカ切り替わったら、それはトリガーのバグピヨ。</p></details></div></div></div>
+
+<div class="cheer">まとめ：トリガーは“同位相で切る道具”。有理数比なら静止、無理数比ならゆっくり変化が正解、高速パカパカだけがバグ。3本の線（青＝メイン／teal＝ハモリ／violet＝合成波）を、合成波ピーク基準の共有スケールで正直に読むピヨ！</div>
+
+<hr class="sep">
+
+<div class="notes">
+  <b>出典・注記</b>
+  <ol>
+    <li>本ページの根拠は、提供された内部仕様書「WAVEFORM ビューのあるべき姿（仕様①〜⑦＋理解チェックリスト）」のみ。数値（220Hz/4.5ms・110Hz/9.1ms・完全5度 2<sup>(7/12)</sup>≈1.4983・長3度 277.18Hz・1100Hz/1108.7Hz・うなり約8.7Hz・建設的干渉 最大約2倍）はすべて仕様の記載値。</li>
+    <li>実装上の確認先は <code>docs/main.js</code> の <code>drawWaveformView</code>（波形描画・ゼロ交差／相関トリガー・合成波・包絡線うねり）と <code>createHarmonyVoices</code>（ハモリ声部生成）。仕様とコードで表現が食い違う場合は仕様側を正とする。</li>
+    <li>図はすべて仕様の数値をもとにピヨ側で作図した模式図（原典に図版はなし）。図6の搬送波は密集のため省略し、包絡線（うなり）のみを図示している。</li>
+    <li>個人学習用の整理・解説。</li>
+  </ol>
+</div>
+
+<footer>🐤 ピヨ鳥＆🐱 ピヨ猫 が、PVA Source-Filter Simulation の内部仕様書をもとに整理したピヨ。</footer>
+
+</div>
+
+<script>
+document.addEventListener('click', function(e){
+  var a = e.target.closest ? e.target.closest('a[href^="#"]') : null;
+  if(!a) return;
+  var t = document.getElementById(a.getAttribute('href').slice(1));
+  if(t){ e.preventDefault(); t.scrollIntoView({behavior:'smooth', block:'start'}); }
+});
+</script>
+</body>
+</html>

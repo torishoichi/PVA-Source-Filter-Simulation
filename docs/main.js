@@ -32,6 +32,9 @@ let harmonyVisF1Node = null, harmonyVisF2Node = null, harmonyVisF3Node = null, h
 let harmonyVisTiltNode = null;
 let harmonyVisGain = null;
 let harmonyAnalyser = null;
+// Composite (main + harmony) time-domain tap — sums both vis chains so the
+// waveform view can draw the actual summed wave that reaches the ear.
+let mixAnalyser = null;
 
 let noiseNode = null;
 let noiseFilter = null;
@@ -260,10 +263,18 @@ const state = {
         third: 0,          // 0 off, +1 above, -1 below
         fifth: 0,
         octave: 0,
+        maj2: 0,           // major 2nd (2度) — narrow interval, strong beating/roughness
+        min2: 0,           // minor 2nd / semitone (半音)
+        qtr: 0,            // quarter tone (半半音) — always equal-tempered (see harmonyRatio)
         minorThird: false, // false = major third (+4st / 5:4), true = minor (+3st / 6:5)
         just: false,       // false = equal temperament, true = just intonation (beat-free)
-        level: 0.7         // gain relative to the main voice
+        level: 0.7,        // gain relative to the main voice
+        detune: {}         // per-voice fine tuning, { kind: cents } — stored as cents so it tracks f0
     },
+    // Lab "harmonic limit": Infinity (all) | 5 (H1–H5) | 1 (fundamental only).
+    // Applies to BOTH main and harmony stacks + their vis chains so the spectrum
+    // and the audible/waveform result never disagree.
+    harmonicLimit: Infinity,
     viewMode: 'spectrum', // 'spectrum' | 'spectrogram' | 'waveform' | 'overview'
     vowelSpace: {
         trail: [],       // [{t, f1, f2}], rolling ~1.5s
@@ -310,11 +321,21 @@ const els = {
     harm3: document.getElementById('harm-3'),
     harm5: document.getElementById('harm-5'),
     harm8: document.getElementById('harm-8'),
+    harm2: document.getElementById('harm-2'),
+    harmMin2: document.getElementById('harm-min2'),
+    harmQtr: document.getElementById('harm-qtr'),
     harmThirdType: document.getElementById('harm-third-type'),
     harmTuning: document.getElementById('harm-tuning'),
     harmLevel: document.getElementById('harm-level'),
     harmLevelVal: document.getElementById('harm-level-val'),
-    harmFreq: document.getElementById('harm-freq'),
+    harmTune: document.getElementById('harm-tune'),         // PC: editable per-voice tuning rows
+    harmFreqReadout: document.getElementById('harm-freq'),  // mobile: v1.45.0 text readout (kept for parity)
+    // Lab cluster (PC only — clean-waveform observation mode)
+    labStrip: document.getElementById('lab-strip'),
+    labTextbook: document.getElementById('lab-textbook'),
+    labVibOff: document.getElementById('lab-vib-off'),
+    labFormantOff: document.getElementById('lab-formant-off'),
+    labHarmonicSeg: document.getElementById('lab-harmonic-seg'),
     btnMic: document.getElementById('mic-toggle'),
     btnMicPause: document.getElementById('mic-pause'),
     btnMicRecord: document.getElementById('mic-record'),
@@ -741,6 +762,16 @@ function initAudio() {
     harmonyVisGain.connect(harmonyAnalyser);
     harmonyAnalyser.connect(silentTarget);
 
+    // Composite tap: both post-formant vis outputs summed into one analyser, so
+    // its time-domain frame IS main+harmony (same fftSize/len as `analyser` →
+    // the main trace's zero-cross `start` indexes it directly, off = 0).
+    mixAnalyser = audioCtx.createAnalyser();
+    mixAnalyser.fftSize = 4096;
+    mixAnalyser.smoothingTimeConstant = 0.8;
+    visMasterGain.connect(mixAnalyser);
+    harmonyVisGain.connect(mixAnalyser);
+    mixAnalyser.connect(silentTarget);
+
     // Vibrato LFO + modulation gains
     vibratoLFO = audioCtx.createOscillator();
     vibratoLFO.type = state.vibrato.waveform;
@@ -936,6 +967,9 @@ function createSource() {
         // Calculate amplitude based on spectral slope (M1 vs M2) and Phonation Mode
         const dbGain = calcHarmonicGainDb(i, state.mechanism, state.phonationMode, state.airflow);
         let linearGain = dbToLinear(dbGain + harmonicEqDb(i)) * (1 / Math.sqrt(maxHarmonics));
+        // Lab harmonic limit — gate at `gain` (feeds BOTH audio and vis) so a
+        // limited harmonic disappears from the spectrum and the sound together.
+        linearGain *= harmonicLimitMask(i);
 
         // Always pass to visualizer
         gain.gain.value = linearGain;
@@ -995,15 +1029,41 @@ function harmonyRatio(kind, dir) {
             : Math.pow(2, (state.harmony.minorThird ? 3 : 4) / 12);
     } else if (kind === 'fifth') {
         up = just ? 3 / 2 : Math.pow(2, 7 / 12);
+    } else if (kind === 'maj2') {
+        // Major 2nd. Just intonation uses the 9:8 major tone.
+        up = just ? 9 / 8 : Math.pow(2, 2 / 12);
+    } else if (kind === 'min2') {
+        // Minor 2nd / semitone. Just intonation uses the 16:15 diatonic semitone.
+        up = just ? 16 / 15 : Math.pow(2, 1 / 12);
+    } else if (kind === 'qtr') {
+        // Quarter tone (half-semitone). No consonant just-intonation ratio exists
+        // for a quarter tone, so it is ALWAYS equal-tempered 2^(1/24) — the
+        // just/equal toggle is intentionally ignored for this interval.
+        up = Math.pow(2, 1 / 24);
     } else {
         up = 2; // octave — identical in both tunings
     }
     return dir < 0 ? 1 / up : up;
 }
 
+// Per-voice fine detune (cents → linear multiplier). Stored as cents so it
+// tracks f0: the audible offset scales with pitch instead of being a fixed Hz.
+function harmonyDetuneFactor(kind) {
+    const c = (state.harmony.detune && state.harmony.detune[kind]) || 0;
+    return c ? Math.pow(2, c / 1200) : 1;
+}
+
+// Lab harmonic-limit gate. Harmonic index n is audible only while n ≤ the limit;
+// shared by the main stack, the harmony stacks, and both vis chains so spectrum
+// and sound stay identical.
+function harmonicLimitMask(n) {
+    return n <= state.harmonicLimit ? 1 : 0;
+}
+
 function activeHarmonyVoices() {
     const out = [];
-    for (const kind of ['third', 'fifth', 'octave']) {
+    // Order = chip order: 3rd/5th/Oct (row 1), 2度/半音/半半 (row 2).
+    for (const kind of ['third', 'fifth', 'octave', 'maj2', 'min2', 'qtr']) {
         const dir = state.harmony[kind];
         if (dir) out.push({ kind, ratio: harmonyRatio(kind, dir) });
     }
@@ -1037,8 +1097,9 @@ function createHarmonyVoices() {
     const time = audioCtx.currentTime;
     for (const v of activeHarmonyVoices()) {
         const maxH = harmonyVoiceMaxHarmonics(v.ratio);
+        const detuneFactor = harmonyDetuneFactor(v.kind);
         for (let i = 1; i <= maxH; i++) {
-            const freq = state.pitch * v.ratio * i;
+            const freq = state.pitch * v.ratio * detuneFactor * i;
             if (freq > audioCtx.sampleRate / 2) break;
 
             const osc = audioCtx.createOscillator();
@@ -1049,7 +1110,9 @@ function createHarmonyVoices() {
             osc.frequency.value = freq;
 
             const dbGain = calcHarmonicGainDb(i, state.mechanism, state.phonationMode, state.airflow);
-            const baseGain = dbToLinear(dbGain + harmonicEqDb(i)) * (1 / Math.sqrt(maxH));
+            // Fold the harmonic-limit mask into baseGain so every place that reuses
+            // baseGain (the Level slider handler, updateSourceParams) inherits it.
+            const baseGain = dbToLinear(dbGain + harmonicEqDb(i)) * (1 / Math.sqrt(maxH)) * harmonicLimitMask(i);
             gain.gain.value = baseGain * state.harmony.level;
             audioMute.gain.value = harmonySelectionMute(freq);
 
@@ -1062,7 +1125,7 @@ function createHarmonyVoices() {
             if (vibratoFMGain) vibratoFMGain.connect(osc.detune);
 
             osc.start(time);
-            harmonyOscs.push({ osc, gain, audioMute, harmonic: i, ratio: v.ratio, maxH, baseGain });
+            harmonyOscs.push({ osc, gain, audioMute, harmonic: i, ratio: v.ratio, kind: v.kind, maxH, baseGain });
         }
     }
 }
@@ -1193,6 +1256,7 @@ function updateSourceParams() {
             // Calculate new amplitude based on current state
             const dbGain = calcHarmonicGainDb(h.harmonic, state.mechanism, state.phonationMode, state.airflow);
             let linearGain = dbToLinear(dbGain + harmonicEqDb(h.harmonic)) * (1 / Math.sqrt(maxHarmonics));
+            linearGain *= harmonicLimitMask(h.harmonic); // Lab harmonic limit
 
             // Apply Frequency Selection Mute
             let muteVal = 1;
@@ -1212,11 +1276,11 @@ function updateSourceParams() {
             createHarmonyVoices();
         } else {
             harmonyOscs.forEach(h => {
-                const freq = state.pitch * h.ratio * h.harmonic;
+                const freq = state.pitch * h.ratio * harmonyDetuneFactor(h.kind) * h.harmonic;
                 if (freq > audioCtx.sampleRate / 2) return;
                 h.osc.frequency.setTargetAtTime(freq, time, 0.05);
                 const dbGain = calcHarmonicGainDb(h.harmonic, state.mechanism, state.phonationMode, state.airflow);
-                h.baseGain = dbToLinear(dbGain + harmonicEqDb(h.harmonic)) * (1 / Math.sqrt(h.maxH));
+                h.baseGain = dbToLinear(dbGain + harmonicEqDb(h.harmonic)) * (1 / Math.sqrt(h.maxH)) * harmonicLimitMask(h.harmonic);
                 h.gain.gain.setTargetAtTime(h.baseGain * state.harmony.level, time, 0.05);
                 h.audioMute.gain.setTargetAtTime(harmonySelectionMute(freq), time, 0.05);
             });
@@ -2191,6 +2255,14 @@ function renderSpectrogram() {
 let waveformCtx = null;
 let _waveTime = null;
 let _waveHarm = null;
+let _waveMix = null;
+// Correlation-trigger template: first samples of last frame's composite window.
+// Zero crossings repeat every MAIN period, but main+harmony repeats only every
+// COMMON period (Oct↓ = 2 main periods), so a bare first-crossing trigger lands
+// on a different harmony phase each frame → teal/violet flicker while blue holds
+// still. Matching candidate crossings against this template pins that phase.
+let _waveMixTpl = null;
+let _waveMixTplN = 0;
 // Time-axis zoom: displayed window length in ms. Zoomed in → a few cycles
 // (oscilloscope); zoomed out during playback → up to the whole file (DAW-like).
 const WAVE_MS_MIN = 2;
@@ -2279,6 +2351,7 @@ function drawWaveformView() {
     let src = null, len = 0, start = 0, count = 0;
     let centered = false;  // playback: window centered on the playhead
     let micTrace = false;  // trace shows the live mic → draw it in orange-red
+    let mixReady = false;  // _waveMix read this frame (synth main + harmony)
     let sr = audioCtx ? audioCtx.sampleRate : 44100;
     if (playbackAudio && playbackBuffer) {
         sr = playbackBuffer.sampleRate;
@@ -2308,10 +2381,39 @@ function drawWaveformView() {
             len = src.length;
             count = Math.min(len, want);
             // Rising zero-crossing trigger in the headroom before the displayed
-            // window → periodic waveforms hold still
+            // window → periodic waveforms hold still. With harmony sounding,
+            // read the mix tap here too and pick, among candidate crossings,
+            // the one whose composite segment best matches last frame's
+            // (correlation trigger) — see _waveMixTpl for why.
             const searchEnd = Math.max(1, len - count);
-            for (let i = 1; i < searchEnd; i++) {
-                if (src[i - 1] <= 0 && src[i] > 0) { start = i; break; }
+            const wantMix = !micTrace && mixAnalyser && harmonyOscs.length && count <= mixAnalyser.fftSize;
+            if (wantMix) {
+                if (!_waveMix || _waveMix.length !== mixAnalyser.fftSize) _waveMix = new Float32Array(mixAnalyser.fftSize);
+                mixAnalyser.getFloatTimeDomainData(_waveMix);
+                mixReady = true;
+                const tplN = Math.min(256, count);
+                const haveTpl = _waveMixTpl && _waveMixTplN === tplN;
+                let bestErr = Infinity, found = 0;
+                for (let i = 1; i < searchEnd; i++) {
+                    if (!(src[i - 1] <= 0 && src[i] > 0)) continue;
+                    if (!haveTpl) { start = i; break; }
+                    // i + tplN ≤ searchEnd + count ≤ len — in bounds
+                    let err = 0;
+                    for (let k = 0; k < tplN; k++) {
+                        const d = _waveMix[i + k] - _waveMixTpl[k];
+                        err += d * d;
+                    }
+                    if (err < bestErr) { bestErr = err; start = i; }
+                    if (++found >= 64) break; // plenty of periods; cap the work
+                }
+                if (!_waveMixTpl || _waveMixTpl.length < tplN) _waveMixTpl = new Float32Array(tplN);
+                _waveMixTplN = tplN;
+                for (let k = 0; k < tplN; k++) _waveMixTpl[k] = _waveMix[start + k];
+            } else {
+                _waveMixTplN = 0; // drop stale template (harmony off / mic view)
+                for (let i = 1; i < searchEnd; i++) {
+                    if (src[i - 1] <= 0 && src[i] > 0) { start = i; break; }
+                }
             }
         }
     }
@@ -2333,8 +2435,10 @@ function drawWaveformView() {
         const v = (idx >= 0 && idx < len) ? Math.abs(src[idx]) : 0;
         if (v > peak) peak = v;
     }
-    // Auto vertical scale, capped so near-silence doesn't blow noise up to full height
-    const gain = (h * 0.45) / Math.max(peak, 0.02);
+    // Auto vertical scale, capped so near-silence doesn't blow noise up to full
+    // height. `let` because the composite trace (below) may reach ~2× the main
+    // peak on constructive interference, and the shared scale must fit it.
+    let gain = (h * 0.45) / Math.max(peak, 0.02);
 
     // Adaptive time grid — pick a 1/2/5-series tick giving >= 70px spacing.
     // Live view labels relative ms; playback labels absolute file time.
@@ -2361,6 +2465,42 @@ function drawWaveformView() {
     // Zero line
     ctx.strokeStyle = 'rgba(0,0,0,0.25)';
     ctx.beginPath(); ctx.moveTo(0, mid); ctx.lineTo(w, mid); ctx.stroke();
+
+    // Composite (main + harmony) — the actual summed wave that reaches the ear.
+    // `mixAnalyser` sums both post-formant vis chains, so it's meaningful only
+    // when the blue trace IS the synth main (not mic) and harmony is sounding;
+    // otherwise main+harmony === main and this line would just shadow the blue.
+    // Drawn first (underneath) in violet so the blue/teal components read on top.
+    // `_waveMix` was read in the trigger step (mixReady) — same frame as the
+    // trigger decision, same fftSize as `analyser`, so `start` indexes it
+    // directly and it shares `gain` so amplitude is honest against the parts.
+    let mixDrawn = false;
+    if (mixReady) {
+        const mLen = _waveMix.length;
+        // Re-fit the shared vertical scale to the composite peak so constructive
+        // interference doesn't push the violet line off-canvas. Main + harmony,
+        // drawn after this, inherit the same `gain` → one honest amplitude axis.
+        let mixPeak = 0;
+        for (let i = 0; i < count; i += pkStep) {
+            const idx = start + i;
+            const v = (idx >= 0 && idx < mLen) ? Math.abs(_waveMix[idx]) : 0;
+            if (v > mixPeak) mixPeak = v;
+        }
+        if (mixPeak > peak) gain = (h * 0.45) / Math.max(mixPeak, 0.02);
+        ctx.strokeStyle = 'rgba(142, 68, 173, 0.55)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (let i = 0; i < count; i++) {
+            const idx = start + i;
+            const v = (idx >= 0 && idx < mLen) ? _waveMix[idx] : 0;
+            const x = (i / (count - 1)) * w;
+            const y = mid - v * gain;
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        ctx.lineWidth = 1;
+        mixDrawn = true;
+    }
 
     // Trace — polyline when zoomed in; min/max envelope per pixel column when
     // there are many samples per pixel (zoomed-out / whole-file view).
@@ -2427,6 +2567,13 @@ function drawWaveformView() {
         ctx.textAlign = 'left';
         ctx.fillStyle = 'rgba(46, 163, 155, 0.95)';
         ctx.fillText('Harmony', 8, 28);
+    }
+    if (mixDrawn) {
+        // Legend for the violet composite, below the Harmony swatch
+        ctx.font = '600 10px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillStyle = 'rgba(142, 68, 173, 0.95)';
+        ctx.fillText('合成波', 8, 42);
     }
 
     // うねり: envelope overlay + readout for windows long enough to hold beats
@@ -6468,8 +6615,21 @@ els.btnPlay.addEventListener('click', () => {
 });
 
 // Harmony (ハモリ練習) — interval buttons cycle OFF → above → below
+const HARMONY_NAMES = { third: '3rd', fifth: '5th', octave: 'Oct', maj2: '2度', min2: '半音', qtr: '半半' };
+// Tracks which set of voices the tuning rows were last built for, so we only
+// rebuild the interactive row DOM when the active voice set changes (rebuilding
+// on every readout tick would kill focus while typing into an Hz field).
+let _harmTuneRendered = null;
+
+function harmonyTuneKeySet() {
+    return activeHarmonyVoices().map(v => v.kind).join(',');
+}
+
 function updateHarmonyUi() {
-    const map = [['harm3', 'third', '3rd'], ['harm5', 'fifth', '5th'], ['harm8', 'octave', 'Oct']];
+    const map = [
+        ['harm3', 'third', '3rd'], ['harm5', 'fifth', '5th'], ['harm8', 'octave', 'Oct'],
+        ['harm2', 'maj2', '2度'], ['harmMin2', 'min2', '半音'], ['harmQtr', 'qtr', '半半']
+    ];
     for (const [el, key, base] of map) {
         const btn = els[el];
         if (!btn) continue;
@@ -6480,17 +6640,117 @@ function updateHarmonyUi() {
     if (els.harmThirdType) els.harmThirdType.textContent = state.harmony.minorThird ? '短3' : '長3';
     if (els.harmTuning) els.harmTuning.textContent = state.harmony.just ? '純正律' : '平均律';
     if (els.harmLevelVal) els.harmLevelVal.textContent = Math.round(state.harmony.level * 100) + '%';
-    // Live frequency readout — one line per active voice, e.g. "3rd↑ 275.0 Hz ・ C#4 (-14¢)"
-    if (els.harmFreq) {
+    // PC: per-voice tuning rows (v1.45.0 readout evolved into editable rows).
+    // Rebuild only when the voice set changes, otherwise just refresh the numbers.
+    if (els.harmTune) {
+        if (harmonyTuneKeySet() !== _harmTuneRendered) buildHarmonyTuneRows();
+        else updateHarmonyTuneReadouts();
+    }
+    // mobile parity debt: mobile.html keeps the v1.45.0 read-only text readout
+    // (#harm-freq) — it has no per-voice tuning UI. Populate it here so the mobile
+    // frequency/note readout keeps working while PC uses the richer rows above.
+    if (els.harmFreqReadout) {
         const voices = activeHarmonyVoices();
-        els.harmFreq.hidden = voices.length === 0;
-        const names = { third: '3rd', fifth: '5th', octave: 'Oct' };
-        els.harmFreq.textContent = voices.map(v => {
-            const f = state.pitch * v.ratio;
+        els.harmFreqReadout.hidden = voices.length === 0;
+        els.harmFreqReadout.textContent = voices.map(v => {
+            const f = state.pitch * v.ratio * harmonyDetuneFactor(v.kind);
             const arrow = state.harmony[v.kind] > 0 ? '↑' : '↓';
-            return `${names[v.kind]}${arrow} ${f.toFixed(1)} Hz ・ ${noteWithCents(f)}`;
+            return `${HARMONY_NAMES[v.kind]}${arrow} ${f.toFixed(1)} Hz ・ ${noteWithCents(f)}`;
         }).join('\n');
     }
+}
+
+// Build one editable tuning row per active harmony voice:
+//   [name↑] [Hz input] Hz [note±¢] [detune slider ±50¢] [±¢ readout] [↺]
+function buildHarmonyTuneRows() {
+    if (!els.harmTune) return; // PC-only element — mobile parity debt (see below)
+    const voices = activeHarmonyVoices();
+    els.harmTune.hidden = voices.length === 0;
+    els.harmTune.innerHTML = '';
+    for (const v of voices) {
+        const kind = v.kind;
+        const arrow = state.harmony[kind] > 0 ? '↑' : '↓';
+        const cents = (state.harmony.detune && state.harmony.detune[kind]) || 0;
+
+        const row = document.createElement('div');
+        row.className = 'harmony-tune-row';
+        row.dataset.kind = kind;
+
+        const name = document.createElement('span');
+        name.className = 'ht-name';
+        name.textContent = HARMONY_NAMES[kind] + arrow;
+
+        const hz = document.createElement('input');
+        hz.type = 'number'; hz.className = 'ht-hz'; hz.step = '0.1'; hz.min = '20';
+        hz.setAttribute('aria-label', HARMONY_NAMES[kind] + arrow + ' 周波数(Hz)');
+
+        const hzUnit = document.createElement('span');
+        hzUnit.className = 'ht-unit'; hzUnit.textContent = 'Hz';
+
+        const note = document.createElement('span');
+        note.className = 'ht-note';
+
+        const detune = document.createElement('input');
+        detune.type = 'range'; detune.className = 'ht-detune';
+        detune.min = '-50'; detune.max = '50'; detune.step = '0.1'; detune.value = String(cents);
+        detune.setAttribute('aria-label', HARMONY_NAMES[kind] + arrow + ' detune (¢)');
+
+        const centsLbl = document.createElement('span');
+        centsLbl.className = 'ht-cents';
+
+        const reset = document.createElement('button');
+        reset.type = 'button'; reset.className = 'ht-reset';
+        reset.textContent = '↺'; reset.title = 'detune をリセット';
+
+        row.append(name, hz, hzUnit, note, detune, centsLbl, reset);
+        els.harmTune.appendChild(row);
+
+        detune.addEventListener('input', () => setHarmonyDetune(kind, parseFloat(detune.value) || 0));
+        // Hz is stored as cents vs the interval's base freq → it tracks f0 rather
+        // than pinning an absolute Hz. Out-of-range clamps to ±50¢.
+        hz.addEventListener('change', () => {
+            const base = state.pitch * harmonyRatio(kind, state.harmony[kind]);
+            const entered = parseFloat(hz.value);
+            if (isFinite(entered) && entered > 0 && base > 0) {
+                let c = 1200 * Math.log2(entered / base);
+                c = Math.max(-50, Math.min(50, c));
+                setHarmonyDetune(kind, c);
+            } else {
+                updateHarmonyTuneReadouts(); // reject → snap display back
+            }
+        });
+        reset.addEventListener('click', () => setHarmonyDetune(kind, 0));
+    }
+    _harmTuneRendered = harmonyTuneKeySet();
+    updateHarmonyTuneReadouts();
+}
+
+function updateHarmonyTuneReadouts() {
+    if (!els.harmTune) return;
+    for (const row of els.harmTune.querySelectorAll('.harmony-tune-row')) {
+        const kind = row.dataset.kind;
+        const dir = state.harmony[kind];
+        if (!dir) continue;
+        const f = state.pitch * harmonyRatio(kind, dir) * harmonyDetuneFactor(kind);
+        const cents = (state.harmony.detune && state.harmony.detune[kind]) || 0;
+        const hz = row.querySelector('.ht-hz');
+        if (hz && document.activeElement !== hz) hz.value = f.toFixed(1);
+        const note = row.querySelector('.ht-note');
+        if (note) note.textContent = noteWithCents(f);
+        const detune = row.querySelector('.ht-detune');
+        if (detune && document.activeElement !== detune) detune.value = String(cents);
+        const centsLbl = row.querySelector('.ht-cents');
+        if (centsLbl) centsLbl.textContent = (cents > 0 ? '+' : '') + cents.toFixed(1) + '¢';
+    }
+}
+
+function setHarmonyDetune(kind, cents) {
+    if (!state.harmony.detune) state.harmony.detune = {};
+    state.harmony.detune[kind] = cents;
+    updateHarmonyTuneReadouts();
+    // Live-apply: updateSourceParams folds detune into the harmony osc frequencies
+    // (setTargetAtTime) with no recreate. No-op when stopped.
+    if (isPlaying) updateSourceParams();
 }
 
 function bindHarmonyCycle(el, key) {
@@ -6505,6 +6765,9 @@ function bindHarmonyCycle(el, key) {
 bindHarmonyCycle(els.harm3, 'third');
 bindHarmonyCycle(els.harm5, 'fifth');
 bindHarmonyCycle(els.harm8, 'octave');
+bindHarmonyCycle(els.harm2, 'maj2');
+bindHarmonyCycle(els.harmMin2, 'min2');
+bindHarmonyCycle(els.harmQtr, 'qtr');
 
 if (els.harmThirdType) {
     els.harmThirdType.addEventListener('click', () => {
@@ -8477,7 +8740,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — bottom-right corner + faint header suffix (bump on each release)
-const APP_VERSION = 'v1.45.0';
+const APP_VERSION = 'v1.48.0';
 (() => {
     // The #app-version element is parsed AFTER this script tag, so on first run
     // getElementById returns null. Defer to DOMContentLoaded if the DOM isn't ready.
@@ -8891,11 +9154,8 @@ function applyVibratoLive() {
 if (els.vibratoEnable) {
     els.vibratoEnable.addEventListener('change', (e) => {
         state.vibrato.enabled = e.target.checked;
-        const pill = e.target.parentElement.querySelector('.vibrato-enable-text');
-        if (pill) pill.textContent = state.vibrato.enabled ? 'ON' : 'OFF';
-        e.target.parentElement.classList.toggle('on', state.vibrato.enabled);
-        if (isPlaying) startVibratoOnset();
-        else applyVibratoLive();
+        // Shared helper also syncs the Lab "Vib OFF" chip (no duplicate state).
+        applyVibratoEnabled();
     });
     els.vibratoEnable.parentElement.addEventListener('click', (e) => {
         // Prevent collapsible summary toggle when clicking enable toggle
@@ -9399,28 +9659,138 @@ bindFormantParams(5);
 // Shows ON only when every formant is enabled; clicking from a partial state enables all.
 const formantMasterToggle = document.getElementById('formant-all-toggle');
 
+function allFormantsOn() {
+    return Object.keys(state.formants).every(k => state.formants[k].enabled);
+}
+
 function syncFormantMasterToggle() {
-    if (!formantMasterToggle) return;
-    const allOn = Object.keys(state.formants).every(k => state.formants[k].enabled);
-    formantMasterToggle.classList.toggle('active', allOn);
-    formantMasterToggle.textContent = allOn ? 'ON' : 'OFF';
+    const allOn = allFormantsOn();
+    if (formantMasterToggle) {
+        formantMasterToggle.classList.toggle('active', allOn);
+        formantMasterToggle.textContent = allOn ? 'ON' : 'OFF';
+    }
+    // Lab "Formant OFF" shares this state — it highlights when all formants are off.
+    if (els.labFormantOff) els.labFormantOff.classList.toggle('lab-active', !allOn);
+}
+
+// Single source of truth for the All-Formants master; the Lab "Formant OFF"
+// chip calls this too so both UIs stay in sync (no duplicate state).
+function setAllFormants(next) {
+    for (const key of Object.keys(state.formants)) {
+        state.formants[key].enabled = next;
+        const btn = els[`${key}Toggle`];
+        if (btn) {
+            btn.classList.toggle('active', next);
+            btn.textContent = next ? 'ON' : 'OFF';
+        }
+    }
+    syncFormantMasterToggle();
+    updateFilterParams();
 }
 
 if (formantMasterToggle) {
-    formantMasterToggle.addEventListener('click', () => {
-        const next = !Object.keys(state.formants).every(k => state.formants[k].enabled);
-        for (const key of Object.keys(state.formants)) {
-            state.formants[key].enabled = next;
-            const btn = els[`${key}Toggle`];
-            if (btn) {
-                btn.classList.toggle('active', next);
-                btn.textContent = next ? 'ON' : 'OFF';
-            }
-        }
-        syncFormantMasterToggle();
-        updateFilterParams();
+    formantMasterToggle.addEventListener('click', () => setAllFormants(!allFormantsOn()));
+}
+
+// --- Lab cluster (clean-waveform observation mode) — PC only ---
+// mobile parity debt: mobile.html has no Lab strip; if ported, drive the SAME
+// state (state.harmonicLimit, state.vibrato.enabled, All-Formants master) — do
+// not add a parallel state.
+
+// Vibrato enable is shared state (state.vibrato.enabled). This syncs every UI
+// that reflects it (Vibrato panel toggle + Lab "Vib OFF" chip) from that state.
+function syncLabVibBtn() {
+    if (els.labVibOff) els.labVibOff.classList.toggle('lab-active', !state.vibrato.enabled);
+}
+function applyVibratoEnabled() {
+    if (els.vibratoEnable) {
+        els.vibratoEnable.checked = state.vibrato.enabled;
+        const pill = els.vibratoEnable.parentElement.querySelector('.vibrato-enable-text');
+        if (pill) pill.textContent = state.vibrato.enabled ? 'ON' : 'OFF';
+        els.vibratoEnable.parentElement.classList.toggle('on', state.vibrato.enabled);
+    }
+    syncLabVibBtn();
+    if (isPlaying) startVibratoOnset();
+    else applyVibratoLive();
+}
+if (els.labVibOff) {
+    els.labVibOff.addEventListener('click', () => {
+        state.vibrato.enabled = !state.vibrato.enabled;
+        applyVibratoEnabled();
     });
 }
+
+// Formant OFF chip → the same master used by the Filter panel. setAllFormants →
+// syncFormantMasterToggle keeps both this chip and the master button in sync.
+if (els.labFormantOff) {
+    els.labFormantOff.addEventListener('click', () => setAllFormants(!allFormantsOn()));
+}
+
+// Harmonic limit: Infinity (全) | 5 (〜5) | 1 (基音). Applied via harmonicLimitMask
+// to main + harmony + vis, so spectrum and sound never disagree.
+function syncLabHarmonicSeg() {
+    if (!els.labHarmonicSeg) return;
+    const cur = state.harmonicLimit === Infinity ? 'inf' : String(state.harmonicLimit);
+    for (const b of els.labHarmonicSeg.querySelectorAll('button[data-limit]')) {
+        b.classList.toggle('is-active', b.dataset.limit === cur);
+    }
+}
+function setHarmonicLimit(limit) {
+    state.harmonicLimit = limit;
+    syncLabHarmonicSeg();
+    // updateSourceParams re-sets every main+harmony gain through harmonicLimitMask
+    // (no oscillator recreate — the counts are unchanged). No-op while stopped.
+    if (isPlaying) updateSourceParams();
+}
+if (els.labHarmonicSeg) {
+    els.labHarmonicSeg.addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-limit]');
+        if (!btn) return;
+        setHarmonicLimit(btn.dataset.limit === 'inf' ? Infinity : Number(btn.dataset.limit));
+    });
+}
+
+// Textbook: one-shot preset = Vib OFF + Formant OFF + fundamental only. Re-press
+// restores the exact state captured just before activation.
+let _labTextbookPrev = null;
+function syncLabTextbookBtn() {
+    if (els.labTextbook) els.labTextbook.classList.toggle('lab-active', _labTextbookPrev !== null);
+}
+if (els.labTextbook) {
+    els.labTextbook.addEventListener('click', () => {
+        if (_labTextbookPrev === null) {
+            _labTextbookPrev = {
+                vib: state.vibrato.enabled,
+                formants: Object.fromEntries(Object.keys(state.formants).map(k => [k, state.formants[k].enabled])),
+                harmonicLimit: state.harmonicLimit,
+            };
+            state.vibrato.enabled = false; applyVibratoEnabled();
+            setAllFormants(false);
+            setHarmonicLimit(1);
+        } else {
+            const prev = _labTextbookPrev;
+            _labTextbookPrev = null;
+            state.vibrato.enabled = prev.vib; applyVibratoEnabled();
+            for (const k of Object.keys(state.formants)) {
+                if (k in prev.formants) state.formants[k].enabled = prev.formants[k];
+                const btn = els[`${k}Toggle`];
+                if (btn) {
+                    btn.classList.toggle('active', state.formants[k].enabled);
+                    btn.textContent = state.formants[k].enabled ? 'ON' : 'OFF';
+                }
+            }
+            syncFormantMasterToggle();
+            updateFilterParams();
+            setHarmonicLimit(prev.harmonicLimit);
+        }
+        syncLabTextbookBtn();
+    });
+}
+
+// Reflect defaults on the Lab chips at load
+syncFormantMasterToggle();
+syncLabVibBtn();
+syncLabHarmonicSeg();
 
 // Presets
 const presetsData = {
