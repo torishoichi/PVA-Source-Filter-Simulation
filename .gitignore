@@ -12,3 +12,10 @@ CLAUDE.md
 
 # Local memory notes (never commit)
 memory/
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+.env*
+!.env.example
