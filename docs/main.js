@@ -376,6 +376,10 @@ const els = {
     waveZoomOut: document.getElementById('wave-zoom-out'),
     waveZoomLabel: document.getElementById('wave-zoom-label'),
     waveLegend: document.getElementById('wave-legend'), // PC only (mobile.html has no chip bar)
+    specZoom: document.getElementById('spec-zoom'),     // PC only (mobile stays at Full)
+    specZoomIn: document.getElementById('spec-zoom-in'),
+    specZoomOut: document.getElementById('spec-zoom-out'),
+    specZoomLabel: document.getElementById('spec-zoom-label'),
     viewTabs: document.getElementById('view-tabs'),
     overviewCanvas: document.getElementById('overview-canvas'),
     ovZoom: document.getElementById('ov-zoom'),
@@ -559,21 +563,145 @@ function noteWithCents(freq) {
 // Map frequency to canvas x coordinate (linear or logarithmic)
 const MAX_FREQ_DISPLAY = 6000;
 const MIN_FREQ_LOG = 50; // Lower bound for log scale
+
+// --- Spectrum frequency-axis zoom window (Hz) ---
+// Full view = [0, MAX_FREQ_DISPLAY]; wheel/buttons narrow it. All spectrum
+// drawing goes through freqToX/xToFreq, so the whole view (harmonic bars,
+// formant envelopes, selection, EQ, roughness strips) follows automatically.
+// Mobile has no zoom UI and simply stays at Full.
+const SPEC_ZOOM_MIN_SPAN = 250; // Hz — keeps at least a couple of harmonics visible
+let specViewMin = 0;
+let specViewMax = MAX_FREQ_DISPLAY;
+
+function isSpecZoomed() {
+    return specViewMin > 0 || specViewMax < MAX_FREQ_DISPLAY;
+}
+
+// Effective log-scale lower bound of the current window
+function specLogLo() {
+    return Math.max(MIN_FREQ_LOG, specViewMin);
+}
+
 function freqToX(freq, width) {
     if (state.logScale) {
+        const lo = specLogLo();
+        const hi = Math.max(lo * 1.01, specViewMax);
         const clampedFreq = Math.max(MIN_FREQ_LOG, freq);
-        return (Math.log10(clampedFreq / MIN_FREQ_LOG) / Math.log10(MAX_FREQ_DISPLAY / MIN_FREQ_LOG)) * width;
+        return (Math.log10(clampedFreq / lo) / Math.log10(hi / lo)) * width;
     }
-    return (freq / MAX_FREQ_DISPLAY) * width;
+    return ((freq - specViewMin) / (specViewMax - specViewMin)) * width;
 }
 
 // Inverse: canvas x coordinate back to frequency
 function xToFreq(x, width) {
     if (state.logScale) {
-        const ratio = x / width;
-        return MIN_FREQ_LOG * Math.pow(MAX_FREQ_DISPLAY / MIN_FREQ_LOG, ratio);
+        const lo = specLogLo();
+        const hi = Math.max(lo * 1.01, specViewMax);
+        return lo * Math.pow(hi / lo, x / width);
     }
-    return (x / width) * MAX_FREQ_DISPLAY;
+    return specViewMin + (x / width) * (specViewMax - specViewMin);
+}
+
+function setSpecZoom(min, max) {
+    min = Math.max(0, min);
+    max = Math.min(MAX_FREQ_DISPLAY, max);
+    if (max - min < SPEC_ZOOM_MIN_SPAN) {
+        const c = (min + max) / 2;
+        min = c - SPEC_ZOOM_MIN_SPAN / 2;
+        max = c + SPEC_ZOOM_MIN_SPAN / 2;
+        if (min < 0) { max -= min; min = 0; }
+        if (max > MAX_FREQ_DISPLAY) { min -= max - MAX_FREQ_DISPLAY; max = MAX_FREQ_DISPLAY; }
+    }
+    // Snap back to Full when (nearly) everything is visible again.
+    // In log mode, min ≤ MIN_FREQ_LOG already displays the full lower end.
+    if (max >= MAX_FREQ_DISPLAY - 2 && (min <= 2 || (state.logScale && min <= MIN_FREQ_LOG))) {
+        min = 0;
+        max = MAX_FREQ_DISPLAY;
+    }
+    specViewMin = min;
+    specViewMax = max;
+    updateSpecZoomUI();
+}
+
+function resetSpecZoom() {
+    setSpecZoom(0, MAX_FREQ_DISPLAY);
+}
+
+// Zoom keeping fFocus fixed on screen. factor < 1 → in, > 1 → out.
+// Log scale zooms in log-frequency space so the cursor anchor holds there too.
+function specZoomAround(fFocus, factor) {
+    if (state.logScale) {
+        const lo = specLogLo();
+        const hi = specViewMax;
+        const uLo = Math.log10(lo), uHi = Math.log10(hi);
+        const uF = Math.log10(Math.max(lo, Math.min(hi, fFocus)));
+        setSpecZoom(Math.pow(10, uF - (uF - uLo) * factor),
+                    Math.pow(10, uF + (uHi - uF) * factor));
+    } else {
+        const f = Math.max(specViewMin, Math.min(specViewMax, fFocus));
+        setSpecZoom(f - (f - specViewMin) * factor,
+                    f + (specViewMax - f) * factor);
+    }
+}
+
+// Horizontal pan by a pixel delta (trackpad two-finger scroll)
+function specPanByPixels(dx, width) {
+    if (!isSpecZoomed()) return;
+    if (state.logScale) {
+        const lo = specLogLo(), hi = specViewMax;
+        let f = Math.pow(10, (dx / width) * Math.log10(hi / lo));
+        f = Math.min(f, MAX_FREQ_DISPLAY / hi);
+        f = Math.max(f, MIN_FREQ_LOG / lo);
+        setSpecZoom(lo * f, hi * f);
+    } else {
+        const span = specViewMax - specViewMin;
+        let shift = (dx / width) * span;
+        shift = Math.max(-specViewMin, Math.min(MAX_FREQ_DISPLAY - specViewMax, shift));
+        setSpecZoom(specViewMin + shift, specViewMax + shift);
+    }
+}
+
+function fmtSpecFreq(f) {
+    return f >= 1000 ? `${+(f / 1000).toFixed(2)}k` : `${Math.round(f)}`;
+}
+
+function updateSpecZoomUI() {
+    const zoomed = isSpecZoomed();
+    if (els.specZoomLabel) {
+        els.specZoomLabel.textContent = zoomed
+            ? `${fmtSpecFreq(state.logScale ? specLogLo() : specViewMin)}–${fmtSpecFreq(specViewMax)}`
+            : 'Full';
+    }
+    // Static HTML x-axis labels only match the unzoomed linear scale
+    const xAxis = document.querySelector('.canvas-container .axis-labels.x-axis');
+    if (xAxis && state.viewMode === 'spectrum') {
+        xAxis.style.display = (state.logScale || zoomed) ? 'none' : '';
+    }
+}
+
+// Adaptive grid ticks for the current zoom window (nice 1/2/5 steps)
+function specGridTicks() {
+    const lo = state.logScale ? specLogLo() : specViewMin;
+    const hi = specViewMax;
+    if (state.logScale && hi / lo > 4) {
+        // Wide log window → decade-style ticks
+        const ticks = [];
+        for (let d = Math.pow(10, Math.floor(Math.log10(lo))); d < hi * 10; d *= 10) {
+            for (const m of [1, 2, 5]) {
+                const f = d * m;
+                if (f >= lo && f <= hi) ticks.push(f);
+            }
+        }
+        return ticks;
+    }
+    const span = hi - lo;
+    const pow = Math.pow(10, Math.floor(Math.log10(span / 6)));
+    const step = [1, 2, 5, 10].map(m => m * pow).find(s => span / s <= 7) || 10 * pow;
+    const ticks = [];
+    for (let f = Math.ceil(lo / step) * step; f <= hi; f += step) {
+        if (f > 0) ticks.push(f);
+    }
+    return ticks;
 }
 
 // Calculate the dB gain for a specific harmonic based on mechanism & phonation mode
@@ -2941,7 +3069,8 @@ function applyViewMode(mode) {
     if (els.overviewCanvas) els.overviewCanvas.style.display = state.viewMode === 'overview' ? 'block' : 'none';
     // Spectrum's x-axis (freq labels) is meaningless in spectrogram (freq on Y) and waveform/overview (X is time)
     const xAxis = document.querySelector('.canvas-container .axis-labels.x-axis');
-    if (xAxis) xAxis.style.display = state.viewMode !== 'spectrum' ? 'none' : (state.logScale ? 'none' : '');
+    if (xAxis) xAxis.style.display = state.viewMode !== 'spectrum' ? 'none' : ((state.logScale || isSpecZoomed()) ? 'none' : '');
+    if (els.specZoom) els.specZoom.style.display = state.viewMode === 'spectrum' ? 'flex' : 'none';
     // Log/Linear toggle applies to freq axes only — hide in time-axis modes
     const logBtn = document.getElementById('log-scale-toggle');
     if (logBtn) logBtn.style.display = (state.viewMode === 'waveform' || state.viewMode === 'overview') ? 'none' : '';
@@ -5248,26 +5377,30 @@ function drawVisualizer() {
     canvasCtx.lineWidth = 1;
     canvasCtx.beginPath();
 
-    const gridFreqs = state.logScale
-        ? [100, 200, 500, 1000, 2000, 5000]
-        : [1000, 2000, 3000, 4000, 5000];
+    const specZoomed = isSpecZoomed();
+    const gridFreqs = specZoomed
+        ? specGridTicks()
+        : (state.logScale ? [100, 200, 500, 1000, 2000, 5000] : [1000, 2000, 3000, 4000, 5000]);
 
     for (const gf of gridFreqs) {
         const x = freqToX(gf, width);
+        if (x < -1 || x > width + 1) continue;
         canvasCtx.moveTo(x, 0);
         canvasCtx.lineTo(x, height);
     }
     canvasCtx.stroke();
 
-    // Grid frequency labels (drawn on canvas so they match the actual scale)
-    if (state.logScale) {
+    // Grid frequency labels (drawn on canvas so they match the actual scale;
+    // the static HTML axis only covers the unzoomed linear view)
+    if (state.logScale || specZoomed) {
         canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.2)';
         canvasCtx.font = '9px Inter, sans-serif';
         canvasCtx.textAlign = 'center';
         canvasCtx.textBaseline = 'bottom';
         for (const gf of gridFreqs) {
             const x = freqToX(gf, width);
-            const label = gf >= 1000 ? `${gf / 1000}k` : `${gf}`;
+            if (x < 8 || x > width - 8) continue;
+            const label = gf >= 1000 ? `${+(gf / 1000).toFixed(2)}k` : `${Math.round(gf)}`;
             canvasCtx.fillText(label, x, height - 2);
         }
     }
@@ -6011,7 +6144,7 @@ function drawVisualizer() {
             canvasCtx.save();
             const step = 2; // 2-px resolution for the gradient strip
             for (let px = 0; px < width; px += step) {
-                const f = (px / width) * MAX_FREQ_DISPLAY;
+                const f = xToFreq(px, width); // zoom/log-aware
                 canvasCtx.fillStyle = colorAt(f);
                 canvasCtx.fillRect(px, ROUGHNESS_Y, step, STRIP_H);
             }
@@ -6415,11 +6548,14 @@ function drawVisualizer() {
             // bandwidth approx freq / Q
             const bw = freq / q;
 
+            // Sample the bell in the frequency domain and map each point through
+            // freqToX, so the curve stays correct under zoom and log scale.
             for (let j = 0; j <= numPoints; j++) {
-                const px = cx - (freqToX(bw, width) * 2) + (freqToX(bw, width) * 4 * (j / numPoints));
+                const f = freq - bw * 2 + bw * 4 * (j / numPoints);
+                const px = freqToX(f, width);
 
                 // Gaussian bell curve approximation for visual
-                const dist = Math.abs(px - cx) / freqToX(bw, width);
+                const dist = Math.abs(f - freq) / bw;
                 let val = Math.exp(-0.5 * Math.pow(dist * 1.5, 2));
 
                 const py = height - (val * height * 0.8);
@@ -8820,7 +8956,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — bottom-right corner + faint header suffix (bump on each release)
-const APP_VERSION = 'v1.48.2';
+const APP_VERSION = 'v1.49.0';
 (() => {
     // The #app-version element is parsed AFTER this script tag, so on first run
     // getElementById returns null. Defer to DOMContentLoaded if the DOM isn't ready.
@@ -9618,9 +9754,23 @@ if (els.btnLogScale) {
         // Hide static HTML x-axis labels when in log mode (canvas draws its own)
         const xAxis = document.querySelector('.x-axis');
         if (xAxis) {
-            xAxis.style.display = state.logScale ? 'none' : '';
+            xAxis.style.display = (state.logScale || isSpecZoomed()) ? 'none' : '';
         }
+        updateSpecZoomUI(); // range label lower bound differs between log/linear
     });
+}
+
+// Spectrum frequency-axis zoom controls (PC only; wheel zoom lives on the canvas)
+if (els.specZoomIn && els.specZoomOut) {
+    const btnZoom = (factor) => {
+        const center = state.logScale
+            ? Math.sqrt(specLogLo() * specViewMax)
+            : (specViewMin + specViewMax) / 2;
+        specZoomAround(center, factor);
+    };
+    els.specZoomIn.addEventListener('click', () => btnZoom(1 / 1.5));
+    els.specZoomOut.addEventListener('click', () => btnZoom(1.5));
+    if (els.specZoomLabel) els.specZoomLabel.addEventListener('click', resetSpecZoom);
 }
 
 // Fullscreen Toggle for Power Spectrum panel
@@ -10029,8 +10179,9 @@ function handleCanvasInteraction(e) {
             isDraggingSelection = false;
 
             // If dragging distance is very small, treat as a click to reset/clear selection
+            // (threshold scales with the zoom window so zoomed-in selections stay possible)
             const freqDiff = Math.abs(state.selectionMaxFreq - state.selectionMinFreq);
-            if (freqDiff < (MAX_FREQ_DISPLAY * 0.02)) {
+            if (freqDiff < ((specViewMax - specViewMin) * 0.02)) {
                 state.selectionActive = false;
                 state.selectionMinFreq = 0;
                 state.selectionMaxFreq = 0;
@@ -10131,9 +10282,15 @@ function handleEqPointerInteraction(e) {
     }
 }
 
-// Double-click: empty area → add a point; on a handle → remove it.
+// Double-click: EQ active → add/remove a point; otherwise → reset freq zoom.
 els.canvas.addEventListener('dblclick', (e) => {
-    if (!isRecEqActive()) return;
+    if (!isRecEqActive()) {
+        if (isSpecZoomed()) {
+            resetSpecZoom();
+            e.preventDefault();
+        }
+        return;
+    }
     const { x, y, width, height } = eqCanvasXY(e);
     const hit = eqHitTest(x, y, width, height);
     if (hit) removeRecEqPoint(hit.id);
@@ -10141,17 +10298,30 @@ els.canvas.addEventListener('dblclick', (e) => {
     e.preventDefault();
 });
 
-// Wheel over a handle: adjust its Q (bandwidth).
+// Wheel: over an EQ handle → adjust its Q (bandwidth). Anywhere else →
+// frequency-axis zoom around the cursor; horizontal scroll pans while zoomed.
 els.canvas.addEventListener('wheel', (e) => {
-    if (!isRecEqActive()) return;
     const { x, y, width, height } = eqCanvasXY(e);
-    const hit = eqHitTest(x, y, width, height);
-    if (!hit) return;
-    e.preventDefault();
-    const idx = state.recordingEq.points.findIndex(p => p.id === hit.id);
-    const factor = Math.exp(-e.deltaY * 0.001);
-    hit.q = Math.max(REC_EQ_Q_MIN, Math.min(REC_EQ_Q_MAX, hit.q * factor));
-    updateRecEqPoint(idx);
+    if (isRecEqActive()) {
+        const hit = eqHitTest(x, y, width, height);
+        if (hit) {
+            e.preventDefault();
+            const idx = state.recordingEq.points.findIndex(q => q.id === hit.id);
+            const factor = Math.exp(-e.deltaY * 0.001);
+            hit.q = Math.max(REC_EQ_Q_MIN, Math.min(REC_EQ_Q_MAX, hit.q * factor));
+            updateRecEqPoint(idx);
+            return;
+        }
+    }
+    if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+        if (!isSpecZoomed()) return; // nothing to pan — let the page scroll
+        e.preventDefault();
+        specPanByPixels(e.deltaX, width);
+    } else if (e.deltaY !== 0) {
+        e.preventDefault();
+        const factor = Math.exp(e.deltaY * 0.002); // wheel up → zoom in
+        specZoomAround(xToFreq(x, width), factor);
+    }
 }, { passive: false });
 
 // Right-click a handle to delete it.

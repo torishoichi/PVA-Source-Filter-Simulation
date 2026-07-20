@@ -512,6 +512,15 @@ input[type=range]::-moz-range-track {
     font-variant-numeric: tabular-nums;
 }
 
+/* Spectrum view: freq-zoom chip (same look, range label is wider; click = reset) */
+.spec-zoom .wave-zoom-label {
+    min-width: 72px;
+    cursor: pointer;
+}
+.spec-zoom .wave-zoom-label:hover {
+    color: var(--text-primary);
+}
+
 /* Waveform trace legend chips — top-left isolate toggles (PC only). Each chip
    carries its trace's color as a leading dot; clicking isolates that trace
    (others dim on-canvas), and the active chip fills. Mirrors the status-chip

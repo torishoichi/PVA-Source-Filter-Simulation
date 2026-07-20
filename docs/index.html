@@ -572,6 +572,12 @@
                     <canvas id="overview-canvas" style="display:none;"></canvas>
                     <button id="log-scale-toggle" class="axis-scale-btn"
                         title="Toggle Log/Linear frequency scale">Log</button>
+                    <div id="spec-zoom" class="wave-zoom spec-zoom"
+                        title="周波数軸ズーム（ホイール＝カーソル位置を拡大縮小 / 横スクロール＝パン / ダブルクリック＝リセット）">
+                        <button id="spec-zoom-out" type="button" title="ズームアウト（広い周波数範囲）">−</button>
+                        <span id="spec-zoom-label" class="wave-zoom-label" title="クリックでリセット">Full</span>
+                        <button id="spec-zoom-in" type="button" title="ズームイン（低倍音域などを拡大）">＋</button>
+                    </div>
                     <div id="wave-zoom" class="wave-zoom" style="display:none;">
                         <button id="wave-zoom-out" type="button" title="ズームアウト（広い時間範囲）">−</button>
                         <span id="wave-zoom-label" class="wave-zoom-label">46ms</span>
