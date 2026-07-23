@@ -4,6 +4,9 @@ PVA/
 # OS files
 .DS_Store
 
+# Local sync metadata (never commit)
+.ds-sync/
+
 # AI agent project files (local only)
 AGENTS.md
 GEMINI.md

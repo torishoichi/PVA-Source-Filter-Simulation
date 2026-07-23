@@ -37,7 +37,7 @@
 - **Loudness Ceiling**（声量の上限ガード、押し込み・大声の抑制練習）
 - スペクトログラム
 
-![Vowel Space — F1×F2 母音空間マップ](docs/vowel-space.png)
+![Vowel Space — F1×F2 母音空間マップ](assets/vowel-space.png)
 *Vowel Space：検出した F1×F2 を IPA 母音図にマッピング（軌跡＋現在位置）*
 
 ### ⏺ 録音・再生
