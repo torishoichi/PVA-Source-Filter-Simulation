@@ -533,7 +533,7 @@
                                         <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
                                     </svg>Pause</button>
                                 <button id="mic-record" class="btn btn-sm" style="display:none;"
-                                    title="Record (max 15s)" aria-label="Record">
+                                    title="Record (max 60s)" aria-label="Record">
                                     <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"
                                         style="vertical-align: -1px; margin-right: 4px;">
                                         <circle cx="12" cy="12" r="6" />
@@ -1130,7 +1130,8 @@
         </div><!-- /.learn-drawer-body -->
     </aside>
 
-    <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
+    <!-- lamejs (MP3 encoder) is self-hosted and lazy-loaded on first MP3 export;
+         see ensureLamejs() in main.js. -->
     <script src="recordings-db.js"></script>
     <script src="dsp-core.js"></script>
     <script src="main.js"></script>

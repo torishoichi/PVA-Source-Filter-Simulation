@@ -961,7 +961,7 @@ function startVisualizerLoop() {
 
 function startAudio() {
     initAudio();
-    if (audioCtx.state === 'suspended') audioCtx.resume();
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(err => console.warn('AudioContext resume failed:', err));
 
     createSource();
     startNoise();
@@ -1351,19 +1351,6 @@ function analyzeAcoustics() {
 
     els.acousticMode.textContent = state.acousticMode;
     els.acousticMode.className = `status-badge ${state.acousticMode.toLowerCase()}`;
-}
-
-function triggerTurningOver() {
-    els.eventFlash.classList.remove('hidden');
-    els.eventFlash.classList.remove('flash-anim');
-    // Force DOM reflow to restart animation
-    void els.eventFlash.offsetWidth;
-    els.eventFlash.classList.add('flash-anim');
-
-    setTimeout(() => {
-        els.eventFlash.classList.add('hidden');
-        els.eventFlash.classList.remove('flash-anim');
-    }, 1500);
 }
 
 function updateSourceParams() {
@@ -7186,6 +7173,7 @@ let recChunks = [];
 let recStartTs = 0;
 let recTimerId = null;
 let recAutoStopId = null;
+let _storagePersistRequested = false; // request durable storage once, after first save
 
 // Playback uses an HTMLAudioElement for native pitch-preserving rate changes and
 // free seeking. It is NOT routed through createMediaElementSource (iOS Safari won't
@@ -7514,11 +7502,23 @@ async function startRecording() {
                 mimeType: actualMime,
                 sampleRate: audioCtx ? audioCtx.sampleRate : null
             });
+            // First save: ask the browser to make storage durable so recordings
+            // aren't evicted under pressure. Best-effort, fire once, ignore result.
+            if (!_storagePersistRequested) {
+                _storagePersistRequested = true;
+                if (navigator.storage && navigator.storage.persist) {
+                    navigator.storage.persist().catch(() => {});
+                }
+            }
             await refreshRecordingsList();
             highlightNewestRecording();
         } catch (err) {
             console.error('Failed to save recording:', err);
-            alert('録音の保存に失敗しました: ' + err.message);
+            if (err && err.name === 'QuotaExceededError') {
+                alert('端末の保存容量がいっぱいで録音を保存できませんでした。古い録音を削除するか、エクスポートしてから空き容量を確保してください。');
+            } else {
+                alert('録音の保存に失敗しました: ' + (err && err.message || err));
+            }
         }
         recChunks = [];
         if (els.btnMicRecord) els.btnMicRecord.classList.remove('is-recording');
@@ -8470,7 +8470,10 @@ async function playRecording(id) {
                 computePlaybackPitchContour(audioBuf);
             }
         })
-        .catch(err => console.warn('Playback analysis prep failed:', err));
+        .catch(err => {
+            console.warn('Playback analysis prep failed:', err);
+            alert('再生解析の準備に失敗しました: ' + (err && err.message || err));
+        });
 }
 
 function stopPlayback() {
@@ -8593,7 +8596,7 @@ bindLoopHandle(els.pbHandleA, 'a');
 bindLoopHandle(els.pbHandleB, 'b');
 
 // ============================================================
-// Export utilities — WAV (built-in) and MP3 (lamejs CDN)
+// Export utilities — WAV (built-in) and MP3 (lamejs, self-hosted + lazy-loaded)
 // ============================================================
 function _writeStr(view, offset, str) {
     for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
@@ -8631,6 +8634,27 @@ function audioBufferToWav(buffer) {
         }
     }
     return new Blob([ab], { type: 'audio/wav' });
+}
+
+// lamejs (MP3 encoder) is self-hosted under vendor/ and lazy-loaded on first
+// MP3 export — the eager <script> tag is gone, so this works on PC and mobile
+// alike. Resolves immediately if already present; otherwise injects the script
+// once (subsequent callers share the same in-flight promise).
+let _lamejsPromise = null;
+function ensureLamejs() {
+    if (typeof lamejs !== 'undefined') return Promise.resolve();
+    if (_lamejsPromise) return _lamejsPromise;
+    _lamejsPromise = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'vendor/lame.min.js';
+        s.onload = () => resolve();
+        s.onerror = () => {
+            _lamejsPromise = null; // allow a retry on the next export attempt
+            reject(new Error('lamejs の読み込みに失敗しました'));
+        };
+        document.head.appendChild(s);
+    });
+    return _lamejsPromise;
 }
 
 function audioBufferToMp3(buffer, kbps = 128) {
@@ -8693,6 +8717,7 @@ async function exportRecording(id, format) {
     let outBlob, ext;
     try {
         if (format === 'mp3') {
+            await ensureLamejs(); // self-hosted, lazy-loaded — works on PC and mobile
             outBlob = audioBufferToMp3(buf, 128);
             ext = 'mp3';
         } else {
@@ -8819,6 +8844,43 @@ function renderRecordingsList() {
     // The transport is a fixed bar above the list (not moved into each item), so
     // just refresh which clip it names and the play/pause glyph.
     updatePlaybackBarUi();
+    updateRecordingsUsage();
+}
+
+function _fmtStorageBytes(n) {
+    if (typeof n !== 'number' || !(n >= 0)) return '?';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let i = 0;
+    while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+    return (i === 0 ? String(n) : n.toFixed(1)) + ' ' + units[i];
+}
+
+// Show StorageManager usage under the list as small muted text. The element is
+// created once (JS-only, so it works on both PC and mobile without editing the
+// HTML) and lives as a sibling of the <ul> so renderRecordingsList's innerHTML
+// reset doesn't wipe it. Silently hidden where estimate() is unavailable (Safari).
+function updateRecordingsUsage() {
+    if (!els.recordingsList) return;
+    let el = document.getElementById('recordings-usage');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'recordings-usage';
+        el.className = 'recordings-usage hint';
+        el.style.fontSize = '11px';
+        el.style.opacity = '0.6';
+        el.style.marginTop = '6px';
+        els.recordingsList.after(el);
+    }
+    const p = (window.RecordingsDB && RecordingsDB.estimate) ? RecordingsDB.estimate() : null;
+    if (!p || typeof p.then !== 'function') { el.style.display = 'none'; return; }
+    p.then(est => {
+        if (!est || typeof est.usage !== 'number' || typeof est.quota !== 'number') {
+            el.style.display = 'none';
+            return;
+        }
+        el.style.display = '';
+        el.textContent = `保存容量: ${_fmtStorageBytes(est.usage)} / ${_fmtStorageBytes(est.quota)}`;
+    }).catch(() => { el.style.display = 'none'; });
 }
 
 // Sync the always-visible transport bar (above the list) to the active clip.

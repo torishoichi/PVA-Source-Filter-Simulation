@@ -18,7 +18,7 @@ const SHELL = [
     './manifest.json',
     './icon-192.png',
     './icon-512.png',
-    'https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js'
+    './vendor/lame.min.js'
 ];
 
 self.addEventListener('install', (e) => {
