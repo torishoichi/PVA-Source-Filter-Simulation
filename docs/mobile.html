@@ -137,6 +137,32 @@
                 <button id="mic-record" class="rec-btn" type="button" style="display:none;" title="録音" aria-label="Record">● Rec<span id="mic-record-timer" style="margin-left:4px;"></span></button>
             </div>
         </div>
+        <!-- Roughness educational legend: shown only while the Rough overlay is ON.
+             Ranges (H1〜Hx per zone) + empty-note are populated by main.js
+             updateRoughnessReadout(). rl-f0 / harmonic-map are intentionally omitted
+             so the dormant Learn-tab inline script stays dormant (no duplicate writer). -->
+        <div id="roughness-legend" class="roughness-legend" style="display:none;">
+            <div class="rl-intro">倍音を ERB（臨界帯域）と 5 kHz ピッチ上限で分類。倍音間隔が狭いほど buzzy（ラフネス）。</div>
+            <div class="rl-zones">
+                <div class="rl-zone rl-pure">
+                    <div class="rl-zone-head"><span class="rl-dot"></span><span class="rl-name">Pure &amp; Resolved</span><span class="rl-range" data-zone="pure">—</span></div>
+                    <div class="rl-desc">隣接倍音が ERB の外 → 分離して澄んだピッチ感。</div>
+                </div>
+                <div class="rl-zone rl-rough-res">
+                    <div class="rl-zone-head"><span class="rl-dot"></span><span class="rl-name">Rough &amp; Resolved</span><span class="rl-range" data-zone="rough-res">—</span></div>
+                    <div class="rl-desc">ERB 内に倍音が入るが Hn≤8 → buzzy でもピッチに統合（音色の濃さ）。</div>
+                    <div class="rl-empty-note" data-zone="rough-res" style="display:none;"></div>
+                </div>
+                <div class="rl-zone rl-rough-unr">
+                    <div class="rl-zone-head"><span class="rl-dot"></span><span class="rl-name">Rough &amp; Unresolved</span><span class="rl-range" data-zone="rough-unr">—</span></div>
+                    <div class="rl-desc">ERB 重なり＋pitch dominance 外 → ピッチに統合されない。</div>
+                </div>
+                <div class="rl-zone rl-ceiling">
+                    <div class="rl-zone-head"><span class="rl-dot"></span><span class="rl-name">Ceiling (&gt;5 kHz)</span><span class="rl-range" data-zone="ceiling">—</span></div>
+                    <div class="rl-desc">pitch dominance region 外 → 音程判断に使われない。</div>
+                </div>
+            </div>
+        </div>
     </section>
 
     <!-- Tab Navigation -->
@@ -170,12 +196,17 @@
                     data-tooltip="合成音声に3度・5度・オクターブのハモリ声部を重ねます。各ボタンは OFF→上ハモ→下ハモ の順に切替（J-popの定番は3度下）。純正律ではうねり（ビート）が消えたロックした響きになります。">[?]</span>
                 <span class="slider-val"><span id="harm-level-val">70%</span></span>
             </label>
-            <div class="harmony-btns">
-                <button id="harm-3" class="harm-btn" type="button">3rd</button>
-                <button id="harm-5" class="harm-btn" type="button">5th</button>
-                <button id="harm-8" class="harm-btn" type="button">Oct</button>
-                <button id="harm-third-type" class="harm-btn harm-mod" type="button">長3</button>
-                <button id="harm-tuning" class="harm-btn harm-mod" type="button">平均律</button>
+            <div class="harmony-btns harmony-intervals">
+                <button id="harm-3" class="harm-btn" type="button" title="3度ハモリ (OFF→上→下)">3rd</button>
+                <button id="harm-5" class="harm-btn" type="button" title="5度ハモリ (OFF→上→下)">5th</button>
+                <button id="harm-8" class="harm-btn" type="button" title="オクターブハモリ (OFF→上→下)">Oct</button>
+                <button id="harm-2" class="harm-btn" type="button" title="長2度ハモリ (OFF→上→下)">2度</button>
+                <button id="harm-min2" class="harm-btn" type="button" title="半音(短2度)ハモリ (OFF→上→下)">半音</button>
+                <button id="harm-qtr" class="harm-btn" type="button" title="半半音(四分音)ハモリ (OFF→上→下)。狭い音程ほど強いうねり／ラフネス">半半</button>
+            </div>
+            <div class="harmony-btns harmony-modifiers">
+                <button id="harm-third-type" class="harm-btn harm-mod" type="button" title="3度の長短切替">長3</button>
+                <button id="harm-tuning" class="harm-btn harm-mod" type="button" title="平均律／純正律の切替（半半音は常に平均律）">平均律</button>
             </div>
             <div id="harm-freq" class="harmony-freq-readout" hidden></div>
             <div class="harm-level-row">
@@ -722,6 +753,7 @@
     <footer class="book-ref">
         <span>Based on: <a href="https://amzn.to/47i62o1" target="_blank" rel="noopener">Practical Vocal Acoustics</a> —
             K. Bozeman</span>
+        <span id="app-version" class="app-version-badge"></span>
     </footer>
 
     <!-- Tab Switching Logic -->

@@ -1684,6 +1684,20 @@ input[type="range"]::-moz-range-thumb {
     color: var(--accent-color);
 }
 
+/* App version badge — small, muted; populated by main.js APP_VERSION */
+.app-version-badge {
+    display: block;
+    margin-top: 6px;
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    opacity: 0.75;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+}
+.app-version-badge:empty {
+    display: none;
+}
+
 /* ===== Accessibility / large-text resilience ===== */
 @media (min-resolution: 2dppx) {
     input[type="range"]::-webkit-slider-thumb {
@@ -2564,6 +2578,18 @@ body.mode-learn .spectrum-section {
     margin: 4px 0 12px;
 }
 
+/* 6 interval buttons (3rd/5th/Oct/2度/半音/半半) → 2 clean rows of 3 on 390px */
+.harmony-btns.harmony-intervals {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    margin-bottom: 8px;
+}
+
+/* Modifier row (長3 / 平均律) — compact, left-aligned under the interval grid */
+.harmony-btns.harmony-modifiers {
+    margin-top: 0;
+}
+
 .harm-btn {
     flex: 1;
     padding: 10px 0;
@@ -2612,6 +2638,88 @@ body.mode-learn .spectrum-section {
     font-weight: 600;
     flex: 0 0 auto;
 }
+
+/* ===== Roughness legend (Spectrum overlay ON) — compact port of PC .roughness-legend ===== */
+.roughness-legend {
+    margin: 4px 0 2px;
+    padding: 10px 12px;
+    background: var(--bg-soft);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    font-size: 0.74rem;
+    color: var(--text-primary);
+}
+.rl-intro {
+    font-size: 0.72rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px dashed var(--glass-border);
+}
+.rl-zones {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 6px;
+}
+.rl-zone {
+    padding: 6px 8px;
+    border-radius: var(--radius-sm);
+    background: var(--bg-elev);
+    border-left: 3px solid transparent;
+    line-height: 1.45;
+}
+.rl-zone-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 2px;
+}
+.rl-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    display: inline-block;
+    flex: 0 0 auto;
+}
+.rl-name {
+    font-weight: 700;
+    font-size: 0.78rem;
+}
+.rl-range {
+    margin-left: auto;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.74rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+.rl-desc {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+}
+.rl-empty-note {
+    margin-top: 5px;
+    padding: 5px 7px;
+    background: rgba(217, 125, 31, 0.08);
+    border: 1px dashed rgba(217, 125, 31, 0.4);
+    border-radius: var(--radius-sm);
+    font-size: 0.68rem;
+    color: #8b5a1f;
+    line-height: 1.5;
+}
+.rl-pure       { border-left-color: rgba(33, 150, 243, 0.95); }
+.rl-pure       .rl-dot, .rl-pure .rl-name { color: #2196f3; }
+.rl-pure       .rl-dot { background: #2196f3; }
+.rl-rough-res  { border-left-color: rgba(217, 125, 31, 0.95); }
+.rl-rough-res  .rl-dot, .rl-rough-res .rl-name { color: #d97d1f; }
+.rl-rough-res  .rl-dot { background: #d97d1f; }
+.rl-rough-unr  { border-left-color: rgba(210, 69, 69, 0.95); }
+.rl-rough-unr  .rl-dot, .rl-rough-unr .rl-name { color: #d24545; }
+.rl-rough-unr  .rl-dot { background: #d24545; }
+.rl-ceiling    { border-left-color: rgba(120, 120, 120, 0.95); }
+.rl-ceiling    .rl-dot, .rl-ceiling .rl-name { color: #888; }
+.rl-ceiling    .rl-dot { background: #888; }
 
 /* ===== Spectrum collapse ===== */
 .spectrum-collapse-btn {
