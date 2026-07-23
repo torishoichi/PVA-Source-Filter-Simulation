@@ -3907,54 +3907,10 @@ function yinCandidates(buf0, sr) {
 // Viterbi over per-frame candidates: emission = -log(prob); transition penalises
 // pitch jumps (∝ |Δcents|, capped) so transient octave flips / spikes can't survive
 // (they'd pay the jump twice) while real legato leaps still pay a bounded cost.
-function viterbiPitchPath(frames) {
-    // CAP raised to 24 so an octave jump (1200¢ → 14.4) is NOT capped: a transient
-    // octave spike must pay ~14.4 in + ~14.4 out, beating almost any single-frame
-    // emission gain → the path stays put (or drops to unvoiced, then gets gap-filled).
-    const LAMBDA = 0.012, CAP = 24, SWITCH = 4, EPS = 1e-6;
-    const n = frames.length;
-    const backAll = new Array(n), f0All = new Array(n), clarAll = new Array(n);
-    let prevCost = null, prevCents = null;
-    for (let i = 0; i < n; i++) {
-        const fr = frames[i];
-        const ce = [], f0 = [], cl = [], emit = [];
-        if (fr.voiced) for (const cnd of fr.cands) {
-            ce.push(1200 * Math.log2(cnd.f0 / PITCH_TRACK_C0)); f0.push(cnd.f0); cl.push(cnd.clar);
-            emit.push(-Math.log(cnd.prob + EPS));
-        }
-        ce.push(null); f0.push(null); cl.push(0);               // unvoiced state
-        emit.push(-Math.log(fr.voiced ? Math.max(EPS, 1 - (fr.voicedProb || 0)) : 1));
-        const cost = new Float64Array(ce.length), back = new Int16Array(ce.length);
-        if (prevCost == null) {
-            for (let s = 0; s < ce.length; s++) { cost[s] = emit[s]; back[s] = -1; }
-        } else {
-            for (let s = 0; s < ce.length; s++) {
-                let best = Infinity, bi = 0;
-                for (let p = 0; p < prevCents.length; p++) {
-                    const a = prevCents[p], b = ce[s];
-                    let tr;
-                    if (a == null && b == null) tr = 0;
-                    else if (a == null || b == null) tr = SWITCH;
-                    else tr = Math.min(CAP, LAMBDA * Math.abs(a - b));
-                    const cc = prevCost[p] + tr;
-                    if (cc < best) { best = cc; bi = p; }
-                }
-                cost[s] = best + emit[s]; back[s] = bi;
-            }
-        }
-        backAll[i] = back; f0All[i] = f0; clarAll[i] = cl;
-        prevCost = cost; prevCents = ce;
-    }
-    const out = new Array(n);
-    let s = 0, bc = Infinity;
-    for (let k = 0; k < prevCost.length; k++) if (prevCost[k] < bc) { bc = prevCost[k]; s = k; }
-    for (let i = n - 1; i >= 0; i--) {
-        out[i] = { hz: f0All[i][s], clar: clarAll[i][s] };
-        const b = backAll[i][s];
-        s = b < 0 ? 0 : b;
-    }
-    return out;
-}
+// CAP=24 so an octave jump (1200¢ → 14.4) is NOT capped: a transient octave spike
+// must pay ~14.4 in + ~14.4 out, beating almost any single-frame emission gain →
+// the path stays put (or drops to unvoiced, then gets gap-filled).
+// Canonical impl in dsp-core.js (DSP.viterbiPitchPath); its C0 matches PITCH_TRACK_C0.
 
 // Octave-continuity safety + 3-tap median (Viterbi already removes most jumps).
 function postProcessPitchContour(raw) {
@@ -4094,7 +4050,7 @@ async function computePlaybackPitchContour(buffer) {
     }
     if (token !== playbackContourToken) return;
 
-    const path = viterbiPitchPath(frames);
+    const path = DSP.viterbiPitchPath(frames);
     const raw = new Array(frames.length);
     for (let i = 0; i < frames.length; i++) {
         const p = path[i];
@@ -5206,6 +5162,11 @@ function resizeCanvas() {
     els.canvas.height = els.canvas.clientHeight;
 }
 
+// Cached blue spectrum-fill gradient — rebuilt only when the canvas size changes
+// (the gradient is vertical, so it depends solely on height, but we key on both
+// dimensions). Reused across frames to avoid a per-frame createLinearGradient.
+let _specFillGradient = null, _specFillGradW = -1, _specFillGradH = -1;
+
 function drawVisualizer() {
     if (!isPlaying && !analysisActive()) return;
 
@@ -6053,9 +6014,13 @@ function drawVisualizer() {
 
     // 1. Draw Simulated Spectrum (Blue, filled)
     if (isPlaying && analyser) {
-        const gradient = canvasCtx.createLinearGradient(0, 0, 0, height);
-        gradient.addColorStop(0, 'rgba(33, 150, 243, 0.6)');
-        gradient.addColorStop(1, 'rgba(33, 150, 243, 0.0)');
+        if (!_specFillGradient || _specFillGradW !== width || _specFillGradH !== height) {
+            _specFillGradient = canvasCtx.createLinearGradient(0, 0, 0, height);
+            _specFillGradient.addColorStop(0, 'rgba(33, 150, 243, 0.6)');
+            _specFillGradient.addColorStop(1, 'rgba(33, 150, 243, 0.0)');
+            _specFillGradW = width; _specFillGradH = height;
+        }
+        const gradient = _specFillGradient;
 
         const bufferLength = analyser.frequencyBinCount;
         const dataArray = new Float32Array(bufferLength);
@@ -7994,35 +7959,8 @@ function lookupFormantTrack(timeSec) {
     return { f1: mk(f.f1), f2: mk(f.f2), f3: mk(f.f3), f4: mk(f.f4), f5: mk(f.f5) };
 }
 
-// ---- Minimal radix-2 FFT (in-place) for the playback spectrum window ----
-function fftRadix2(re, im) {
-    const n = re.length;
-    for (let i = 1, j = 0; i < n; i++) {
-        let bit = n >> 1;
-        for (; j & bit; bit >>= 1) j ^= bit;
-        j ^= bit;
-        if (i < j) {
-            const tr = re[i]; re[i] = re[j]; re[j] = tr;
-            const ti = im[i]; im[i] = im[j]; im[j] = ti;
-        }
-    }
-    for (let len = 2; len <= n; len <<= 1) {
-        const ang = -2 * Math.PI / len;
-        const wr = Math.cos(ang), wi = Math.sin(ang);
-        const half = len >> 1;
-        for (let i = 0; i < n; i += len) {
-            let cr = 1, ci = 0;
-            for (let k = 0; k < half; k++) {
-                const ar = re[i + k], ai = im[i + k];
-                const br = re[i + k + half], bi = im[i + k + half];
-                const vr = br * cr - bi * ci, vi = br * ci + bi * cr;
-                re[i + k] = ar + vr; im[i + k] = ai + vi;
-                re[i + k + half] = ar - vr; im[i + k + half] = ai - vi;
-                const ncr = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = ncr;
-            }
-        }
-    }
-}
+// Radix-2 in-place FFT for the playback spectrum window: canonical impl in
+// dsp-core.js (DSP.fftRadix2), loaded before main.js.
 
 // Compute a dB spectrum at playback time `timeSec` from the decoded buffer and
 // fill state.cachedMicData, so drawSpectrum renders it without an AnalyserNode.
@@ -8049,7 +7987,7 @@ function computePlaybackSpectrum(timeSec) {
         _pbSpecIm[i] = 0;
     }
     state.cachedMicLevel = Math.sqrt(rms / N); // expose level so Vowel Space admits samples
-    fftRadix2(_pbSpecRe, _pbSpecIm);
+    DSP.fftRadix2(_pbSpecRe, _pbSpecIm);
     if (!state.cachedMicData || state.cachedMicData.length !== bins) {
         state.cachedMicData = new Float32Array(bins);
     }
@@ -9018,7 +8956,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — bottom-right corner + faint header suffix (bump on each release)
-const APP_VERSION = 'v1.49.0';
+const APP_VERSION = 'v1.50.0';
 (() => {
     // The #app-version element is parsed AFTER this script tag, so on first run
     // getElementById returns null. Defer to DOMContentLoaded if the DOM isn't ready.
