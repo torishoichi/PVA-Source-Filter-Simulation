@@ -294,19 +294,22 @@ const state = {
     },
     vibratoAnalysis: {
         pitchBuf: [],     // [{t: ms, hz: number|null}], rolling 5s
-        rate: 0,          // Hz
-        extent: 0,        // cents (single-side amplitude, LS-fit)
+        rate: 0,          // Hz (timestamp LS refined)
+        rateSD: null,     // Hz, per-cycle SD (null when <2 cycles)
+        extent: 0,        // cents (single-side amplitude, per-cycle mean)
+        extentSD: null,   // cents, per-cycle SD (null when <3 cycles)
+        nCycles: 0,       // full modulation cycles observed in the window
         regularity: 0,    // 0–1
         confidence: 0,    // 0–1 (composite quality score)
         verdict: '—',
         f0Median: 0,      // Hz, median over analysis window
-        fitOmega: 0,      // rad/sample at sampleRate, for sine overlay
-        fitA: 0,          // cos coefficient
-        fitB: 0,          // sin coefficient
-        fitSampleRate: 0, // samples/sec for trace
-        fitT0: 0,         // anchor time (ms) for sine overlay
+        fitOmega: 0,      // rad/s, for sine overlay
+        fitA: 0,          // cos coefficient (cents)
+        fitB: 0,          // sin coefficient (cents)
+        fitDc: 0,         // DC offset of the LS fit (cents)
+        fitTRefMs: 0,     // phase reference (ms, trace timeline) for sine overlay
         lastAnalysisAt: 0,
-        trace: [],        // [{t, cents}] — null cents where unvoiced
+        trace: [],        // [{t: ms, cents}] — null cents where unvoiced
     }
 };
 
@@ -399,7 +402,10 @@ const els = {
     pitchDotSize: document.getElementById('pitch-dot-size'),
     pitchDotSizeVal: document.getElementById('pitch-dot-size-val'),
     vibRate: document.getElementById('vib-rate'),
+    vibRateSd: document.getElementById('vib-rate-sd'),
     vibExtent: document.getElementById('vib-extent'),
+    vibExtentSd: document.getElementById('vib-extent-sd'),
+    vibCycles: document.getElementById('vib-cycles'),
     vibRegularity: document.getElementById('vib-regularity'),
     vibConfidence: document.getElementById('vib-confidence'),
     vibVerdict: document.getElementById('vib-verdict'),
@@ -3408,12 +3414,16 @@ function pushPitchSample(hz, clarity = 0) {
 
 function resetVibratoUi() {
     const va = state.vibratoAnalysis;
-    va.rate = 0; va.extent = 0; va.regularity = 0; va.confidence = 0;
+    va.rate = 0; va.rateSD = null; va.extent = 0; va.extentSD = null; va.nCycles = 0;
+    va.regularity = 0; va.confidence = 0;
     va.verdict = '—'; va.f0Median = 0;
-    va.fitOmega = 0; va.fitA = 0; va.fitB = 0; va.fitSampleRate = 0; va.fitT0 = 0;
+    va.fitOmega = 0; va.fitA = 0; va.fitB = 0; va.fitDc = 0; va.fitTRefMs = 0;
     va.trace = [];
     if (els.vibRate) els.vibRate.textContent = '—';
+    if (els.vibRateSd) els.vibRateSd.textContent = '';
     if (els.vibExtent) els.vibExtent.textContent = '—';
+    if (els.vibExtentSd) els.vibExtentSd.textContent = '';
+    if (els.vibCycles) els.vibCycles.textContent = '—';
     if (els.vibRegularity) els.vibRegularity.textContent = '—';
     if (els.vibConfidence) els.vibConfidence.textContent = '—';
     if (els.vibVerdict) els.vibVerdict.textContent = '—';
@@ -3423,220 +3433,97 @@ function resetVibratoUi() {
     if (els.vibQualityFill) els.vibQualityFill.style.width = '0%';
 }
 
-// Vibrato analysis pipeline:
-//  (1) 3-tap median filter on raw f0 — kills single-sample spikes from autocorr glitches
-//  (2) Outlier rejection vs. median (drops residual octave errors)
-//  (3) Linear detrend (least-squares — robust to slow drift / portamento)
-//  (4) Hann window before Goertzel — cuts spectral leakage for accurate extent
-//  (5) Parabolic peak interpolation on Goertzel grid — sub-bin Rate accuracy
-//  (6) Least-squares cos/sin fit at peak freq on the unwindowed signal — best amplitude & phase
-//  (7) Composite confidence: regularity × validity ratio × peak prominence
-const VIBRATO_OUTLIER_CENTS = 700;
+// Vibrato analysis — thin wrapper around DSP.analyzeVibrato (dsp-core.js), which is
+// timestamp-based (rAF jitter / dropped frames never bias it), quadratic-detrended,
+// and reports per-cycle rate/extent statistics with f0-window de-smearing.
+// Accuracy is regression-gated in docs/dev/validate.mjs §10.
+//
+// Source selection:
+//   • Recording playback with a ready contour → analyze the contour's uniform
+//     5 ms grid directly (the precomputed pYIN+Viterbi track — most accurate).
+//   • Live mic → the rAF-timestamped pitch buffer, timestamps passed through.
 function analyzeVibrato() {
     const va = state.vibratoAnalysis;
     const now = performance.now();
     va.lastAnalysisAt = now;
 
-    const buf = va.pitchBuf;
-    if (buf.length < 24) { resetVibratoUi(); return; }
-
-    const cutoff = now - VIBRATO_ANALYSIS_MS;
-    let idx0 = 0;
-    for (let i = 0; i < buf.length; i++) { if (buf[i].t >= cutoff) { idx0 = i; break; } }
-    const slice = buf.slice(idx0);
-    if (slice.length < 20) { resetVibratoUi(); return; }
-
-    // (0) Clarity gate: drop pitch frames whose YIN periodicity confidence is low.
-    //     Weak/noisy frames are the main source of jitter and octave glitches.
-    const gz = (s) => (s && s.hz != null && (s.clarity == null || s.clarity >= VIBRATO_CLARITY_GATE)) ? s.hz : null;
-
-    // (1) 3-tap median filter (preserves edges, removes 1-sample spikes)
-    const filtHz = new Array(slice.length);
-    for (let i = 0; i < slice.length; i++) {
-        const a = i > 0 ? gz(slice[i - 1]) : null;
-        const b = gz(slice[i]);
-        const c = i < slice.length - 1 ? gz(slice[i + 1]) : null;
-        const v = [a, b, c].filter(x => x != null);
-        if (v.length === 0) { filtHz[i] = null; continue; }
-        v.sort((x, y) => x - y);
-        filtHz[i] = v[Math.floor(v.length / 2)];
-    }
-
-    const valid = filtHz.filter(h => h != null);
-    if (valid.length < slice.length * 0.33 || valid.length < 15) { resetVibratoUi(); return; }
-
-    // Median pitch
-    const sortedHz = valid.slice().sort((a, b) => a - b);
-    const median = sortedHz[Math.floor(sortedHz.length / 2)];
-    if (median <= 0) { resetVibratoUi(); return; }
-    va.f0Median = median;
-
-    // (2) Outlier rejection
-    let validCount = 0;
-    const hzClean = new Array(slice.length);
-    for (let i = 0; i < slice.length; i++) {
-        const h = filtHz[i];
-        if (h == null) { hzClean[i] = null; continue; }
-        const c = 1200 * Math.log2(h / median);
-        if (Math.abs(c) > VIBRATO_OUTLIER_CENTS) { hzClean[i] = null; continue; }
-        hzClean[i] = h;
-        validCount++;
-    }
-    if (validCount < 15) { resetVibratoUi(); return; }
-
-    // Build cents series, holding last value through gaps
-    const N = slice.length;
-    const cents = new Float64Array(N);
-    const centsRaw = new Float64Array(N); // pre-window, for LS fit and trace
-    let lastC = 0;
-    for (let i = 0; i < N; i++) {
-        if (hzClean[i] != null) lastC = 1200 * Math.log2(hzClean[i] / median);
-        cents[i] = lastC;
-    }
-
-    // (3) Linear detrend
-    let sx = 0, sy = 0, sxx = 0, sxy = 0;
-    for (let i = 0; i < N; i++) { sx += i; sy += cents[i]; sxx += i * i; sxy += i * cents[i]; }
-    const den = N * sxx - sx * sx;
-    const slope = den !== 0 ? (N * sxy - sx * sy) / den : 0;
-    const intercept = (sy - slope * sx) / N;
-    for (let i = 0; i < N; i++) {
-        const d = cents[i] - (slope * i + intercept);
-        cents[i] = d;
-        centsRaw[i] = d;
-    }
-
-    const durationSec = (slice[N - 1].t - slice[0].t) / 1000;
-    if (durationSec < 0.7) { resetVibratoUi(); return; }
-    const sampleRate = (N - 1) / durationSec;
-
-    // (4) Hann window in-place (only on `cents`, NOT on `centsRaw`)
-    for (let i = 0; i < N; i++) {
-        const w = 0.5 * (1 - Math.cos(2 * Math.PI * i / (N - 1)));
-        cents[i] *= w;
-    }
-
-    // Goertzel scan 2–12 Hz at 0.1 Hz
-    const F_LO = 2.0, F_HI = 12.0, F_STEP = 0.1;
-    const nBins = Math.round((F_HI - F_LO) / F_STEP) + 1;
-    const powers = new Float64Array(nBins);
-    let peakIdx = 0, peakPower = 0, totalPower = 0;
-    for (let k = 0; k < nBins; k++) {
-        const f = F_LO + k * F_STEP;
-        const omega = 2 * Math.PI * f / sampleRate;
-        const cosW = Math.cos(omega);
-        const sinW = Math.sin(omega);
-        const coeff = 2 * cosW;
-        let q1 = 0, q2 = 0;
-        for (let i = 0; i < N; i++) {
-            const q0 = coeff * q1 - q2 + cents[i];
-            q2 = q1; q1 = q0;
+    let samples = null, f0WindowSec = 0;
+    const pbOn = !!playbackAudio && !playbackAudio.paused && !!playbackPitchContour;
+    if (pbOn) {
+        const cur = playbackAudio.currentTime;
+        const lo = cur - VIBRATO_ANALYSIS_MS / 1000;
+        const arr = playbackPitchContour;
+        let a = 0, b = arr.length;
+        while (a < b) { const m = (a + b) >> 1; if (arr[m].t < lo) a = m + 1; else b = m; }
+        let e = a;
+        while (e < arr.length && arr[e].t <= cur) e++;
+        samples = arr.slice(a, e).map(s => ({ t: s.t, hz: s.hz, clarity: s.clarity }));
+        f0WindowSec = playbackContourWinSec;
+    } else {
+        const buf = va.pitchBuf;
+        if (buf.length >= 24) {
+            const cutoff = now - VIBRATO_ANALYSIS_MS;
+            let idx0 = 0;
+            for (let i = 0; i < buf.length; i++) { if (buf[i].t >= cutoff) { idx0 = i; break; } }
+            samples = buf.slice(idx0).map(s => ({ t: s.t / 1000, hz: s.hz, clarity: s.clarity }));
         }
-        const real = q1 - q2 * cosW;
-        const imag = q2 * sinW;
-        const power = real * real + imag * imag;
-        powers[k] = power;
-        totalPower += power;
-        if (power > peakPower) { peakPower = power; peakIdx = k; }
-    }
-
-    // (5) Parabolic peak interpolation
-    let peakFreq = F_LO + peakIdx * F_STEP;
-    if (peakIdx > 0 && peakIdx < nBins - 1) {
-        const yL = powers[peakIdx - 1], yC = powers[peakIdx], yR = powers[peakIdx + 1];
-        const denP = (yL - 2 * yC + yR);
-        if (Math.abs(denP) > 1e-12) {
-            const delta = 0.5 * (yL - yR) / denP;
-            peakFreq += delta * F_STEP;
+        if (audioCtx) {
+            const an = micAnalyserPitch || micAnalyser;
+            if (an) f0WindowSec = an.fftSize / audioCtx.sampleRate;
         }
     }
 
-    // (6) Least-squares cos/sin fit at peakFreq on the unwindowed detrended signal
-    //     y[i] ≈ A cos(ω i) + B sin(ω i), then Extent = sqrt(A²+B²)
-    const omegaPeak = 2 * Math.PI * peakFreq / sampleRate;
-    let sCC = 0, sSS = 0, sCS = 0, sYC = 0, sYS = 0;
-    for (let i = 0; i < N; i++) {
-        const c = Math.cos(omegaPeak * i);
-        const s = Math.sin(omegaPeak * i);
-        sCC += c * c; sSS += s * s; sCS += c * s;
-        sYC += centsRaw[i] * c; sYS += centsRaw[i] * s;
-    }
-    const detM = sCC * sSS - sCS * sCS;
-    let fitA = 0, fitB = 0;
-    if (Math.abs(detM) > 1e-10) {
-        fitA = (sSS * sYC - sCS * sYS) / detM;
-        fitB = (sCC * sYS - sCS * sYC) / detM;
-    }
-    const fitExtent = Math.sqrt(fitA * fitA + fitB * fitB);
-
-    // Residual SNR for regularity (compare fit energy to residual energy)
-    let resEnergy = 0, sigEnergy = 0;
-    for (let i = 0; i < N; i++) {
-        const fit = fitA * Math.cos(omegaPeak * i) + fitB * Math.sin(omegaPeak * i);
-        const resid = centsRaw[i] - fit;
-        resEnergy += resid * resid;
-        sigEnergy += centsRaw[i] * centsRaw[i];
-    }
-    const explainedVar = sigEnergy > 0 ? Math.max(0, 1 - resEnergy / sigEnergy) : 0; // R²-like
-
-    // Peak prominence (vs. average non-peak power)
-    let nonPeakSum = 0, nonPeakCount = 0;
-    for (let k = 0; k < nBins; k++) {
-        if (Math.abs(k - peakIdx) > 2) { nonPeakSum += powers[k]; nonPeakCount++; }
-    }
-    const meanNonPeak = nonPeakCount > 0 ? nonPeakSum / nonPeakCount : 1e-12;
-    const prominence = meanNonPeak > 0 ? Math.min(1, peakPower / (meanNonPeak * 15)) : 0;
-
-    // Regularity = explained variance of the dominant sine
-    const regularity = explainedVar;
-
-    // Composite confidence
-    const validityRatio = validCount / N;
-    const durationScore = Math.min(1, durationSec / 2);
-    const confidence = Math.max(0, Math.min(1,
-        0.45 * regularity + 0.20 * prominence + 0.20 * validityRatio + 0.15 * durationScore
-    ));
+    const r = (samples && samples.length >= 20 && typeof DSP !== 'undefined' && DSP.analyzeVibrato)
+        ? DSP.analyzeVibrato(samples, { clarityGate: VIBRATO_CLARITY_GATE, f0WindowSec })
+        : null;
+    if (!r) { resetVibratoUi(); return; }
 
     let verdict = '—', verdictClass = '';
-    if (fitExtent < 12) { verdict = 'Straight'; verdictClass = 'is-warn'; }
-    else if (peakFreq < 4.5) { verdict = fitExtent > 25 ? 'Wobble' : 'Slow'; verdictClass = 'is-warn'; }
-    else if (peakFreq > 7.5) { verdict = 'Tremor'; verdictClass = 'is-warn'; }
-    else if (regularity < 0.3) { verdict = 'Unsteady'; verdictClass = 'is-warn'; }
+    if (r.extent < 12) { verdict = 'Straight'; verdictClass = 'is-warn'; }
+    else if (r.rate < 4.5) { verdict = r.extent > 25 ? 'Wobble' : 'Slow'; verdictClass = 'is-warn'; }
+    else if (r.rate > 7.5) { verdict = 'Tremor'; verdictClass = 'is-warn'; }
+    else if (r.regularity < 0.3) { verdict = 'Unsteady'; verdictClass = 'is-warn'; }
     else { verdict = 'Good'; verdictClass = 'is-good'; }
 
-    va.rate = peakFreq;
-    va.extent = fitExtent;
-    va.regularity = regularity;
-    va.confidence = confidence;
+    va.rate = r.rate;
+    va.rateSD = r.rateSD;
+    va.extent = r.extent;
+    va.extentSD = r.extentSD;
+    va.nCycles = r.nCycles;
+    va.regularity = r.regularity;
+    va.confidence = r.confidence;
     va.verdict = verdict;
-    va.fitOmega = omegaPeak;
-    va.fitA = fitA;
-    va.fitB = fitB;
-    va.fitSampleRate = sampleRate;
-    va.fitT0 = slice[0].t;
-    va.trace = slice.map((s, i) => ({
-        t: s.t,
-        cents: hzClean[i] != null ? 1200 * Math.log2(hzClean[i] / median) - (slope * i + intercept) : null,
-    }));
+    va.f0Median = r.f0Median;
+    va.fitOmega = r.fit.omega;             // rad/s
+    va.fitA = r.fit.a;
+    va.fitB = r.fit.b;
+    va.fitDc = r.fit.dc;
+    va.fitTRefMs = r.fit.tRef * 1000;      // same timeline as trace (ms)
+    va.trace = r.trace.map(p => ({ t: p.t * 1000, cents: p.cents }));
 
     // Low-confidence guard: don't assert Rate/Extent/Type when the estimate is shaky.
     // f0 / Regularity / Confidence still show so the user can see *why* it's withheld.
-    const lowConf = confidence < VIBRATO_CONF_DISPLAY_GATE;
-    if (els.vibRate) els.vibRate.textContent = lowConf ? '—' : peakFreq.toFixed(1);
-    if (els.vibExtent) els.vibExtent.textContent = lowConf ? '—' : Math.round(fitExtent);
-    if (els.vibRegularity) els.vibRegularity.textContent = Math.round(regularity * 100);
-    if (els.vibConfidence) els.vibConfidence.textContent = Math.round(confidence * 100);
+    const lowConf = r.confidence < VIBRATO_CONF_DISPLAY_GATE;
+    if (els.vibRate) els.vibRate.textContent = lowConf ? '—' : r.rate.toFixed(2);
+    if (els.vibRateSd) els.vibRateSd.textContent =
+        (!lowConf && r.rateSD != null) ? `SD ±${r.rateSD.toFixed(2)}` : '';
+    if (els.vibExtent) els.vibExtent.textContent = lowConf ? '—' : r.extent.toFixed(1);
+    if (els.vibExtentSd) els.vibExtentSd.textContent =
+        (!lowConf && r.extentSD != null) ? `SD ±${r.extentSD.toFixed(1)}` : '';
+    if (els.vibCycles) els.vibCycles.textContent = lowConf ? '—' : String(r.nCycles);
+    if (els.vibRegularity) els.vibRegularity.textContent = Math.round(r.regularity * 100);
+    if (els.vibConfidence) els.vibConfidence.textContent = Math.round(r.confidence * 100);
     if (els.vibVerdict) els.vibVerdict.textContent = lowConf ? '測定中…' : verdict;
-    if (els.vibF0) els.vibF0.textContent = Math.round(median);
+    if (els.vibF0) els.vibF0.textContent = r.f0Median.toFixed(1);
     if (els.vibVerdictBox) {
         els.vibVerdictBox.classList.remove('is-good', 'is-warn');
         if (!lowConf && verdictClass) els.vibVerdictBox.classList.add(verdictClass);
     }
     if (els.vibAnalysisBody) els.vibAnalysisBody.classList.toggle('is-lowconf', lowConf);
     if (els.vibQualityFill) {
-        els.vibQualityFill.style.width = Math.round(confidence * 100) + '%';
+        els.vibQualityFill.style.width = Math.round(r.confidence * 100) + '%';
         els.vibQualityFill.style.backgroundColor =
-            confidence >= 0.7 ? '#4caf50' : confidence >= VIBRATO_CONF_DISPLAY_GATE ? '#fbc02d' : '#ef6c00';
+            r.confidence >= 0.7 ? '#4caf50' : r.confidence >= VIBRATO_CONF_DISPLAY_GATE ? '#fbc02d' : '#ef6c00';
     }
 }
 
@@ -3720,16 +3607,15 @@ function drawVibratoTrace() {
     }
 
     // Detected sine overlay (LS fit) — visual proof that detection is locked
-    if (va.fitSampleRate > 0 && va.confidence > 0.2 && (va.fitA !== 0 || va.fitB !== 0)) {
+    if (va.fitOmega > 0 && va.confidence > 0.2 && (va.fitA !== 0 || va.fitB !== 0)) {
         ctx.strokeStyle = 'rgba(76, 175, 80, 0.85)';
         ctx.lineWidth = 1.4;
         ctx.setLineDash([4, 3]);
         ctx.beginPath();
-        const samplesPerMs = va.fitSampleRate / 1000;
         for (let px = 0; px <= w; px += 2) {
             const tMs = t0 + (px / w) * tSpan;
-            const i = (tMs - va.fitT0) * samplesPerMs;
-            const yC = va.fitA * Math.cos(va.fitOmega * i) + va.fitB * Math.sin(va.fitOmega * i);
+            const ph = va.fitOmega * (tMs - va.fitTRefMs) / 1000;
+            const yC = va.fitDc + va.fitA * Math.cos(ph) + va.fitB * Math.sin(ph);
             const y = yForCents(Math.max(-Y_RANGE, Math.min(Y_RANGE, yC)));
             if (px === 0) ctx.moveTo(px, y);
             else ctx.lineTo(px, y);
@@ -3801,6 +3687,8 @@ function getPitchTrackCtx() {
 // moving playhead; playback itself then needs only a cheap lookup (no per-frame YIN).
 let playbackPitchContour = null;     // [{t: sec, hz: number|null, clarity}] | null
 let playbackContourHopSec = 0.01;    // uniform hop, set by the precompute
+let playbackContourWinSec = 512 / 11025; // YIN window length (sec), set by the precompute —
+                                         // feeds analyzeVibrato's extent de-smearing
 let playbackContourComputing = false;
 let playbackContourToken = 0;        // invalidates an in-flight compute on stop/replace
 const PB_CONTOUR_HOP_MS = 5;          // 200 fps temporal resolution
@@ -4030,6 +3918,7 @@ async function computePlaybackPitchContour(buffer) {
     const N = PB_CONTOUR_N;
     const hop = Math.max(1, Math.round(sr * PB_CONTOUR_HOP_MS / 1000));
     playbackContourHopSec = hop / sr;
+    playbackContourWinSec = N / sr;
     const win = new Float32Array(N);
 
     const frames = [], tArr = [];
@@ -8956,7 +8845,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — bottom-right corner + faint header suffix (bump on each release)
-const APP_VERSION = 'v1.50.0';
+const APP_VERSION = 'v1.51.0';
 (() => {
     // The #app-version element is parsed AFTER this script tag, so on first run
     // getElementById returns null. Defer to DOMContentLoaded if the DOM isn't ready.

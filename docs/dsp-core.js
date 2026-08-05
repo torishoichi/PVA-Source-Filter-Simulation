@@ -1128,6 +1128,317 @@
   }
 
   // ----------------------------------------------------------------------------
+  // Measurement-grade vibrato analysis.
+  //
+  // Input is a pitch-sample series that need NOT be uniformly spaced:
+  //   samples: [{ t: seconds, hz: Hz|null, clarity?: 0..1 }]
+  // The estimator is timestamp-based throughout — rAF jitter, dropped frames and
+  // clarity-gated holes never bias it (gaps are EXCLUDED, never zero-order-held).
+  //
+  // Pipeline:
+  //   1. clarity gate + octave-outlier rejection vs. median f0
+  //   2. cents conversion, quadratic detrend (portamento / messa-di-voce safe)
+  //   3. coarse rate: uniform-resampled Hann+Goertzel scan over rateLo..rateHi
+  //   4. rate refine: timestamp LS sinusoid fit (cos/sin/DC basis), two-stage
+  //      frequency grid → ~0.002 Hz resolution
+  //   5. per-cycle stats (Prame-style): alternating extrema with hysteresis →
+  //      cycle rates and half-extents → mean ± SD
+  //   6. f0-window de-smearing: the f0 detector averages the modulation over its
+  //      analysis window, attenuating extent by ≈ sinc(rate·kEff·winSec). With
+  //      opts.f0WindowSec set, extents are corrected back. kEff is calibrated
+  //      against the end-to-end harness (validate.mjs).
+  //
+  // Returns null when there is not enough voiced data, else
+  //   { rate, rateSD, extent, extentSD, extentFit, nCycles, f0Median,
+  //     regularity, prominence, confidence, validityRatio, windowGain,
+  //     fit: { a, b, dc, omega, tRef },  // cents(t) ≈ dc + a·cos(ω(t−tRef)) + b·sin(…)
+  //     trace: [{ t, cents|null }] }     // detrended cents per input sample
+  // ----------------------------------------------------------------------------
+  const VIB_SINC_K_EFF = 0.84; // effective fraction of the f0 window that smears the
+                               // modulation; calibrated end-to-end (synthVowel →
+                               // pitchContour → analyzeVibrato) by validate.mjs §10e.
+
+  function _sinc(x) { if (x === 0) return 1; const p = Math.PI * x; return Math.sin(p) / p; }
+
+  // 3×3 linear solve (Gauss-Jordan with partial pivoting). A row-major, len 9.
+  function _solve3(A, b) {
+    const M = [
+      [A[0], A[1], A[2], b[0]],
+      [A[3], A[4], A[5], b[1]],
+      [A[6], A[7], A[8], b[2]],
+    ];
+    for (let col = 0; col < 3; col++) {
+      let piv = col;
+      for (let r = col + 1; r < 3; r++) if (Math.abs(M[r][col]) > Math.abs(M[piv][col])) piv = r;
+      if (Math.abs(M[piv][col]) < 1e-12) return null;
+      if (piv !== col) { const tmp = M[col]; M[col] = M[piv]; M[piv] = tmp; }
+      for (let r = 0; r < 3; r++) {
+        if (r === col) continue;
+        const f = M[r][col] / M[col][col];
+        for (let k = col; k < 4; k++) M[r][k] -= f * M[col][k];
+      }
+    }
+    return [M[0][3] / M[0][0], M[1][3] / M[1][1], M[2][3] / M[2][2]];
+  }
+
+  function analyzeVibrato(samples, opts) {
+    opts = opts || {};
+    const clarityGate = opts.clarityGate != null ? opts.clarityGate : 0;
+    const rateLo = opts.rateLo != null ? opts.rateLo : 2.0;
+    const rateHi = opts.rateHi != null ? opts.rateHi : 12.0;
+    const outlierCents = opts.outlierCents != null ? opts.outlierCents : 700;
+    const winSec = opts.f0WindowSec != null ? opts.f0WindowSec : 0;
+    const kEff = opts.sincKEff != null ? opts.sincKEff : VIB_SINC_K_EFF;
+
+    const n = samples ? samples.length : 0;
+    if (n < 15) return null;
+
+    // (1) validity gate
+    const idx = [];
+    for (let i = 0; i < n; i++) {
+      const s = samples[i];
+      if (s && s.hz != null && s.hz > 0 && !(s.clarity != null && s.clarity < clarityGate)) idx.push(i);
+    }
+    if (idx.length < 15) return null;
+
+    const hzSorted = idx.map(i => samples[i].hz).sort((a, b) => a - b);
+    const f0Median = hzSorted[hzSorted.length >> 1];
+    if (!(f0Median > 0)) return null;
+
+    // (2) cents + octave-outlier rejection
+    const vt = [], vc = [];
+    const centsIn = new Array(n).fill(null);
+    for (const i of idx) {
+      const c = 1200 * Math.log2(samples[i].hz / f0Median);
+      if (Math.abs(c) > outlierCents) continue;
+      centsIn[i] = c;
+      vt.push(samples[i].t); vc.push(c);
+    }
+    const V = vt.length;
+    if (V < 15) return null;
+    const t0 = vt[0], tEnd = vt[V - 1], span = tEnd - t0;
+    if (span < 0.6) return null;
+    const validityRatio = V / n;
+    const tRef = (t0 + tEnd) / 2;
+
+    // Quadratic detrend — LS fit p0 + p1·x + p2·x², x = t − tRef. A quadratic over
+    // ≥4 modulation cycles is near-orthogonal to the vibrato itself, but absorbs
+    // portamento and messa-di-voce curvature that a straight line leaks into 2–4 Hz.
+    let sx = 0, sx2 = 0, sx3 = 0, sx4 = 0, sy = 0, sxy = 0, sx2y = 0;
+    for (let i = 0; i < V; i++) {
+      const x = vt[i] - tRef, y = vc[i], x2 = x * x;
+      sx += x; sx2 += x2; sx3 += x2 * x; sx4 += x2 * x2;
+      sy += y; sxy += x * y; sx2y += x2 * y;
+    }
+    const pTrend = _solve3([V, sx, sx2, sx, sx2, sx3, sx2, sx3, sx4], [sy, sxy, sx2y]);
+    const trendAt = pTrend
+      ? (t) => { const x = t - tRef; return pTrend[0] + pTrend[1] * x + pTrend[2] * x * x; }
+      : () => 0;
+    const d = new Float64Array(V);
+    for (let i = 0; i < V; i++) d[i] = vc[i] - trendAt(vt[i]);
+
+    // (3) coarse rate — uniform resample (linear interp; holes >0.35 s contribute 0)
+    let dtMed;
+    {
+      const diffs = [];
+      for (let i = 1; i < V; i++) diffs.push(vt[i] - vt[i - 1]);
+      diffs.sort((a, b) => a - b);
+      dtMed = diffs[diffs.length >> 1] || 0.01;
+    }
+    const gridDt = Math.min(1 / 30, Math.max(1 / 400, dtMed));
+    const G = Math.max(16, Math.floor(span / gridDt) + 1);
+    const grid = new Float64Array(G);
+    {
+      let j = 0;
+      for (let g = 0; g < G; g++) {
+        const t = t0 + g * gridDt;
+        while (j < V - 2 && vt[j + 1] < t) j++;
+        const jn = j + 1;
+        if (t <= vt[0]) { grid[g] = d[0]; continue; }
+        if (t >= vt[V - 1]) { grid[g] = d[V - 1]; continue; }
+        const gap = vt[jn] - vt[j];
+        if (gap > 0.35) { grid[g] = 0; continue; }
+        const f = gap > 0 ? (t - vt[j]) / gap : 0;
+        grid[g] = d[j] + (d[jn] - d[j]) * f;
+      }
+    }
+    const gridSr = 1 / gridDt;
+    const winG = new Float64Array(G);
+    for (let g = 0; g < G; g++) winG[g] = grid[g] * 0.5 * (1 - Math.cos(2 * Math.PI * g / (G - 1)));
+    const F_STEP = 0.05;
+    const nBins = Math.round((rateHi - rateLo) / F_STEP) + 1;
+    const powers = new Float64Array(nBins);
+    let peakIdx = 0, peakPower = 0;
+    for (let k = 0; k < nBins; k++) {
+      const f = rateLo + k * F_STEP;
+      const omega = 2 * Math.PI * f / gridSr;
+      const cw = Math.cos(omega), sw = Math.sin(omega), coeff = 2 * cw;
+      let q1 = 0, q2 = 0;
+      for (let g = 0; g < G; g++) { const q0 = coeff * q1 - q2 + winG[g]; q2 = q1; q1 = q0; }
+      const re = q1 - q2 * cw, im = q2 * sw;
+      const pw = re * re + im * im;
+      powers[k] = pw;
+      if (pw > peakPower) { peakPower = pw; peakIdx = k; }
+    }
+    let nonPeakSum = 0, nonPeakCount = 0;
+    for (let k = 0; k < nBins; k++) {
+      if (Math.abs(k - peakIdx) > 6) { nonPeakSum += powers[k]; nonPeakCount++; }
+    }
+    const meanNonPeak = nonPeakCount ? nonPeakSum / nonPeakCount : 0;
+    const prominence = meanNonPeak > 0 ? Math.min(1, peakPower / (meanNonPeak * 15)) : (peakPower > 0 ? 1 : 0);
+    const coarse = rateLo + peakIdx * F_STEP;
+
+    // (4) refine — timestamp LS fit y ≈ a·cos(ωx) + b·sin(ωx) + dc on the raw
+    // detrended points (no resampling, no ZOH), scanning ω on a shrinking grid.
+    let syy = 0, syd = 0;
+    for (let i = 0; i < V; i++) { syy += d[i] * d[i]; syd += d[i]; }
+    const sst = Math.max(1e-9, syy - syd * syd / V);
+    const fitAt = (f) => {
+      const w = 2 * Math.PI * f;
+      let scc = 0, sss = 0, scs = 0, sc = 0, ss = 0, syc = 0, sys = 0;
+      for (let i = 0; i < V; i++) {
+        const th = w * (vt[i] - tRef);
+        const cth = Math.cos(th), sth = Math.sin(th), y = d[i];
+        scc += cth * cth; sss += sth * sth; scs += cth * sth; sc += cth; ss += sth;
+        syc += y * cth; sys += y * sth;
+      }
+      const sol = _solve3([scc, scs, sc, scs, sss, ss, sc, ss, V], [syc, sys, syd]);
+      if (!sol) return null;
+      const sse = Math.max(0, syy - (sol[0] * syc + sol[1] * sys + sol[2] * syd));
+      return { f, a: sol[0], b: sol[1], dc: sol[2], sse };
+    };
+    let best = fitAt(coarse);
+    for (const [halfSpan, step] of [[0.30, 0.02], [0.03, 0.002]]) {
+      const center = best ? best.f : coarse;
+      for (let f = center - halfSpan; f <= center + halfSpan + 1e-9; f += step) {
+        if (f < Math.max(0.5, rateLo - 0.5) || f > rateHi + 0.5) continue;
+        const r = fitAt(f);
+        if (r && (!best || r.sse < best.sse)) best = r;
+      }
+    }
+    if (!best) return null;
+    const rate = best.f;
+    const extentFitRaw = Math.hypot(best.a, best.b);
+    const regularity = Math.max(0, Math.min(1, 1 - best.sse / sst));
+
+    // (5) per-cycle stats — smooth the resampled series with a short boxcar
+    // (kills f0-jitter, transfer sinc(f·Tb) — undone below), then walk
+    // alternating extrema with hysteresis. Edge extrema are truncated cycles
+    // and are discarded.
+    const smHalf = Math.max(1, Math.round(0.010 / gridDt));
+    const sm = new Float64Array(G);
+    for (let g = 0; g < G; g++) {
+      let s = 0, c = 0;
+      for (let k = Math.max(0, g - smHalf); k <= Math.min(G - 1, g + smHalf); k++) { s += grid[k]; c++; }
+      sm[g] = s / c;
+    }
+    const extrema = [];
+    if (extentFitRaw >= 2) {
+      const hyst = Math.max(2.5, 0.3 * extentFitRaw);
+      const pushExt = (g, kind) => {
+        if (g <= smHalf || g >= G - 1 - smHalf) return; // window edge → truncated, unreliable
+        let gf = g, vv = sm[g];
+        const y0 = sm[g - 1], y1 = sm[g], y2 = sm[g + 1];
+        const den = y0 - 2 * y1 + y2;
+        if (Math.abs(den) > 1e-12) {
+          const dlt = 0.5 * (y0 - y2) / den;
+          if (dlt > -1 && dlt < 1) { gf = g + dlt; vv = y1 - 0.25 * (y0 - y2) * dlt; }
+        }
+        extrema.push({ t: t0 + gf * gridDt, v: vv, kind });
+      };
+      let hiV = sm[0], hiG = 0, loV = sm[0], loG = 0, dir = 0;
+      for (let g = 1; g < G; g++) {
+        const v = sm[g];
+        if (dir >= 0 && v > hiV) { hiV = v; hiG = g; }
+        if (dir <= 0 && v < loV) { loV = v; loG = g; }
+        if (dir >= 0 && hiV - v > hyst) { pushExt(hiG, +1); dir = -1; loV = v; loG = g; }
+        else if (dir <= 0 && v - loV > hyst) { pushExt(loG, -1); dir = +1; hiV = v; hiG = g; }
+      }
+    }
+    const cycRates = [];
+    const Tmin = 1 / (rateHi * 1.5), Tmax = 1 / Math.max(0.5, rateLo / 1.5);
+    let nCycles = 0; // physical cycles observed (peak- and trough-periods overlap, so max not sum)
+    for (const kind of [+1, -1]) {
+      const list = extrema.filter(e => e.kind === kind);
+      let kept = 0;
+      for (let i = 1; i < list.length; i++) {
+        const T = list[i].t - list[i - 1].t;
+        if (T >= Tmin && T <= Tmax) { cycRates.push(1 / T); kept++; }
+      }
+      nCycles = Math.max(nCycles, kept);
+    }
+    // Per-cycle amplitudes — a fixed-ω LS fit (cos/sin/DC basis) on the RAW
+    // detrended points of each full cycle. Cycle spans come from consecutive
+    // same-kind extrema (their timing is from the smoothed grid, which is fine
+    // for timing); the amplitudes come from the raw timestamps. LS is exact for
+    // any sample placement, so jitter, dropouts and non-uniform spacing add
+    // variance but no bias (unlike plain demodulation, whose 2ω leakage only
+    // cancels for uniform full-period sampling).
+    const peaksL = extrema.filter(e => e.kind > 0), troughsL = extrema.filter(e => e.kind < 0);
+    const cycList = peaksL.length >= troughsL.length ? peaksL : troughsL;
+    const cycAmps = [];
+    const wR = 2 * Math.PI * rate;
+    const cycAmpLS = (ta, tb) => {
+      let scc = 0, sss = 0, scs = 0, sc = 0, ss = 0, syc = 0, sys = 0, sy0 = 0, cnt = 0;
+      for (let k = 0; k < V; k++) {
+        const t = vt[k];
+        if (t < ta || t >= tb) continue;
+        const th = wR * (t - tRef);
+        const cth = Math.cos(th), sth = Math.sin(th), y = d[k];
+        scc += cth * cth; sss += sth * sth; scs += cth * sth; sc += cth; ss += sth;
+        syc += y * cth; sys += y * sth; sy0 += y; cnt++;
+      }
+      if (cnt < 6) return null;
+      const sol = _solve3([scc, scs, sc, scs, sss, ss, sc, ss, cnt], [syc, sys, sy0]);
+      return sol ? Math.hypot(sol[0], sol[1]) : null;
+    };
+    for (let i = 1; i < cycList.length; i++) {
+      const ta = cycList[i - 1].t, tb = cycList[i].t;
+      const T = tb - ta;
+      if (T < Tmin || T > Tmax) continue;
+      const amp = cycAmpLS(ta, tb);
+      if (amp != null) cycAmps.push(amp);
+    }
+    const meanOf = (arr) => arr.reduce((s, x) => s + x, 0) / arr.length;
+    const sdOf = (arr, m) => Math.sqrt(arr.reduce((s, x) => s + (x - m) * (x - m), 0) / (arr.length - 1));
+    let rateSD = null;
+    if (nCycles >= 2) rateSD = sdOf(cycRates, meanOf(cycRates));
+
+    // (6) f0-window de-smearing (the LS fit and the demodulation both ran on the
+    // raw samples, so the f0 window is the only remaining low-pass to undo).
+    const attWin = (winSec > 0 && rate > 0) ? Math.max(0.55, Math.abs(_sinc(rate * winSec * kEff))) : 1;
+    const extentFit = extentFitRaw / attWin;
+    let extent = extentFit, extentSD = null;
+    if (cycAmps.length >= 3) {
+      const m = meanOf(cycAmps);
+      extent = m / attWin;
+      extentSD = sdOf(cycAmps, m) / attWin;
+    }
+
+    const durationScore = Math.min(1, span / 2);
+    const cycScore = Math.min(1, nCycles / 5);
+    const confidence = Math.max(0, Math.min(1,
+      0.40 * regularity + 0.15 * prominence + 0.15 * validityRatio + 0.15 * durationScore + 0.15 * cycScore
+    ));
+
+    const trace = new Array(n);
+    for (let i = 0; i < n; i++) {
+      trace[i] = {
+        t: samples[i].t,
+        cents: centsIn[i] != null ? centsIn[i] - trendAt(samples[i].t) : null,
+      };
+    }
+
+    return {
+      rate, rateSD, extent, extentSD, extentFit, nCycles,
+      f0Median, regularity, prominence, confidence, validityRatio,
+      windowGain: 1 / attWin,
+      fit: { a: best.a, b: best.b, dc: best.dc, omega: 2 * Math.PI * rate, tRef },
+      trace,
+    };
+  }
+
+  // ----------------------------------------------------------------------------
   // Test-signal synthesis (used by the validation harness; harmless in browser).
   // Source-filter vowel: glottal pulse train (Rosenberg) → cascade formant
   // resonators → optional aspiration noise. Returns Float32Array at sr.
@@ -1206,6 +1517,7 @@
     offlineFormants, trackAndSmooth, vibratoProbeFormants, lpcOrderForF0,
     timeStretchWsola, pitchShift,
     envelopeBeat,
+    analyzeVibrato,
     synthVowel,
   };
 

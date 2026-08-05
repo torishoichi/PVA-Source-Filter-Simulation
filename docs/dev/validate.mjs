@@ -329,6 +329,92 @@ console.log('\n\x1b[1m9. envelopeBeat — pitch-free unison-beat (うねり) fro
 }
 
 // ---------------------------------------------------------------------------
+console.log('\n\x1b[1m10. Vibrato analysis — rate (Hz) & extent (¢) measurement accuracy\x1b[0m');
+{
+  // Deterministic LCG so every run tests the identical signal.
+  const makeRand = (seed) => {
+    let s = seed >>> 0;
+    return () => { s = (1664525 * s + 1013904223) >>> 0; return s / 4294967296; };
+  };
+
+  // Synthesize a pitch-sample series the way the app sees one: nominal frame
+  // clock + timestamp jitter + dropouts, f0 = median · 2^(cents/1200) with
+  // vibrato + drift. This tests the ESTIMATOR in isolation (no audio, no YIN).
+  const makeSamples = (o) => {
+    const rand = makeRand(o.seed != null ? o.seed : 777);
+    const fps = o.fps || 60, dur = o.dur || 2.2, f0 = o.f0 || 220;
+    const jit = o.jitterMs != null ? o.jitterMs : 6;
+    const drop = o.dropout != null ? o.dropout : 0.12;
+    const noise = o.noiseCents || 0;
+    const drift = o.drift || ((t) => 0);
+    const phi = o.phase || 0.7;
+    const out = [];
+    for (let k = 0; k * (1 / fps) <= dur; k++) {
+      const t = k / fps + (rand() * 2 - 1) * jit / 1000;
+      if (rand() < drop) { out.push({ t, hz: null, clarity: 0 }); continue; }
+      const c = drift(t) + o.extent * Math.sin(2 * Math.PI * o.rate * t + phi)
+        + (noise ? (rand() * 2 - 1) * noise : 0);
+      out.push({ t, hz: f0 * Math.pow(2, c / 1200), clarity: 0.9 });
+    }
+    return out;
+  };
+
+  const checkVib = (label, r, trueRate, trueExtent, rateTol, extTol) => {
+    if (!r) { fail(`${label}: analyzeVibrato returned null`); return; }
+    const eR = Math.abs(r.rate - trueRate);
+    const eE = Math.abs(r.extent - trueExtent);
+    const line = `${label}: rate ${r.rate.toFixed(3)}Hz (err ${(eR * 1000).toFixed(0)}mHz), ` +
+      `extent ${r.extent.toFixed(2)}¢ (err ${eE.toFixed(2)}¢, ${r.nCycles} cyc)`;
+    (eR <= rateTol && eE <= extTol) ? pass(line) : fail(line);
+  };
+
+  // (a) clean estimator sweep — rAF-like clock (60fps, ±6ms jitter, 12% dropouts)
+  //     + portamento/messa-di-voce drift. Gates: rate ±0.01 Hz, extent ±0.5¢ or 1%.
+  const drift1 = (t) => 40 * t + 15 * t * t;
+  let seed = 101;
+  for (const R of [4.5, 5.5, 6.5, 7.5]) {
+    for (const E of [20, 50, 100]) {
+      const r = DSP.analyzeVibrato(makeSamples({ rate: R, extent: E, drift: drift1, seed: seed++ }));
+      checkVib(`60fps jitter R=${R} E=${E}`, r, R, E, 0.01, Math.max(0.5, 0.01 * E));
+    }
+  }
+
+  // (b) playback-grade input — uniform 200 fps, no dropouts (the contour path)
+  for (const [R, E] of [[5.0, 30], [6.0, 80]]) {
+    const r = DSP.analyzeVibrato(makeSamples({ rate: R, extent: E, fps: 200, jitterMs: 0, dropout: 0, drift: drift1, seed: seed++ }));
+    checkVib(`200fps uniform R=${R} E=${E}`, r, R, E, 0.01, Math.max(0.6, 0.01 * E));
+  }
+
+  // (c) measurement noise ±3¢ on every sample — looser gates
+  {
+    const r = DSP.analyzeVibrato(makeSamples({ rate: 5.5, extent: 50, noiseCents: 3, drift: drift1, seed: 55 }));
+    checkVib('noisy ±3¢ R=5.5 E=50', r, 5.5, 50, 0.05, 2.5);
+  }
+
+  // (d) straight tone must NOT read as vibrato
+  {
+    const r = DSP.analyzeVibrato(makeSamples({ rate: 5.5, extent: 0, noiseCents: 1.5, seed: 66 }));
+    const ext = r ? r.extent : 0;
+    const line = `straight tone: extent ${ext.toFixed(2)}¢ (gate <3¢)`;
+    ext < 3 ? pass(line) : fail(line);
+  }
+
+  // (e) END-TO-END: synthVowel → pitchContour (46 ms YIN windows) → analyzeVibrato.
+  //     The f0 window low-passes the modulation; f0WindowSec must undo it (this is
+  //     also the calibration anchor for VIB_SINC_K_EFF in dsp-core).
+  //     Gates: rate ±0.02 Hz, extent within max(1¢, 1.5%).
+  const sr = 44100;
+  const F0_WIN_SEC = 512 / 11025; // pitchContour: N=512 on the ~11.025 kHz decimated signal
+  for (const [R, E] of [[5.0, 30], [5.5, 80], [6.5, 100]]) {
+    const sig = DSP.synthVowel({ sr, dur: 3.0, f0: 220, formants: [700, 1220, 2600, 3400, 4500], vibratoExtent: E, vibratoRate: R });
+    const contour = DSP.pitchContour(Float32Array.from(sig), sr);
+    const samples = contour.filter(s => s.t >= 0.15 && s.t <= 2.85);
+    const r = DSP.analyzeVibrato(samples, { f0WindowSec: F0_WIN_SEC });
+    checkVib(`e2e synth R=${R} E=${E}`, r, R, E, 0.02, Math.max(1.0, 0.015 * E));
+  }
+}
+
+// ---------------------------------------------------------------------------
 console.log('');
 if (failures === 0) { console.log('\x1b[32m\x1b[1mALL GATES PASSED\x1b[0m\n'); process.exit(0); }
 else { console.log(`\x1b[31m\x1b[1m${failures} GATE(S) FAILED\x1b[0m\n`); process.exit(1); }

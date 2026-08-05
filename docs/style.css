@@ -1049,6 +1049,14 @@ input[type=range]::-moz-range-track {
     margin-left: -2px;
 }
 
+/* Per-cycle SD readout next to Rate/Extent — empty string collapses it */
+.vstat-sub {
+    font-size: 0.62rem;
+    color: var(--text-secondary, #999);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
 /* Primary live metrics (CPP, H1*–H2*, vibrato rate…) — sized to stay legible
    from singing distance (arm's length or more), not just desk-reading distance. */
 .vstat-primary .vstat-val {
