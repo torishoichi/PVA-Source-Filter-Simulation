@@ -6370,6 +6370,56 @@ function drawVisualizer() {
         drawMicFormantMarker(estFormants.f3, 'F3', '#9C3CD9'); // Purple
         drawMicFormantMarker(estFormants.f4, 'F4', '#E68B30'); // Orange
         drawMicFormantMarker(estFormants.f5, 'F5', '#D946EF'); // Pink
+
+        // Fixed F1/F2 HUD readout (top-left, below the marker row): large digits at a
+        // stable screen position so the eye reads them without chasing moving markers.
+        // Placed BELOW the pills so a low-F1 pill (e.g. /u/ ~350Hz) is never covered.
+        {
+            const compact = width < 400;
+            const hudX = 8;
+            const hudY = state.roughnessVisible ? 126 : 56;
+            const numFont = compact ? 'bold 15px monospace' : 'bold 20px monospace';
+            const labelFont = compact ? 'bold 9px monospace' : 'bold 11px monospace';
+            const unitFont = compact ? '8px monospace' : '10px monospace';
+            const rowH = compact ? 19 : 26;
+            const padX = compact ? 6 : 9;
+            const padY = compact ? 5 : 7;
+            const rows = [
+                { label: 'F1', color: '#D24545', f: estFormants.f1 },
+                { label: 'F2', color: '#2196F3', f: estFormants.f2 },
+            ];
+            canvasCtx.save();
+            // Fixed-width slots ("8888" template) so digits don't shift as values change
+            canvasCtx.font = numFont;
+            const numW = canvasCtx.measureText('8888').width;
+            canvasCtx.font = labelFont;
+            const labW = canvasCtx.measureText('F2').width;
+            canvasCtx.font = unitFont;
+            const unitW = canvasCtx.measureText('Hz').width;
+            const hudW = padX * 2 + labW + 6 + numW + 4 + unitW;
+            const hudH = padY * 2 + rowH * rows.length;
+            canvasCtx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+            canvasCtx.fillRect(hudX, hudY, hudW, hudH);
+            canvasCtx.strokeStyle = 'rgba(0, 0, 0, 0.10)';
+            canvasCtx.lineWidth = 1;
+            canvasCtx.strokeRect(hudX + 0.5, hudY + 0.5, hudW - 1, hudH - 1);
+            rows.forEach((row, i) => {
+                const baseY = hudY + padY + rowH * i + (compact ? 14 : 19);
+                canvasCtx.textAlign = 'left';
+                canvasCtx.font = labelFont;
+                canvasCtx.fillStyle = row.color;
+                canvasCtx.fillText(row.label, hudX + padX, baseY);
+                canvasCtx.font = numFont;
+                canvasCtx.textAlign = 'right';
+                canvasCtx.fillStyle = row.f ? '#333' : '#bbb';
+                canvasCtx.fillText(row.f ? String(Math.round(row.f.freq)) : '—', hudX + padX + labW + 6 + numW, baseY);
+                canvasCtx.font = unitFont;
+                canvasCtx.textAlign = 'left';
+                canvasCtx.fillStyle = '#888';
+                canvasCtx.fillText('Hz', hudX + padX + labW + 6 + numW + 4, baseY);
+            });
+            canvasCtx.restore();
+        }
     }
 
     // 3. Draw Formant Overlay Envelopes (Only when simulating)
@@ -8845,7 +8895,7 @@ if (window.RecordingsDB) {
 }
 
 // App version — bottom-right corner + faint header suffix (bump on each release)
-const APP_VERSION = 'v1.51.0';
+const APP_VERSION = 'v1.52.0';
 (() => {
     // The #app-version element is parsed AFTER this script tag, so on first run
     // getElementById returns null. Defer to DOMContentLoaded if the DOM isn't ready.
