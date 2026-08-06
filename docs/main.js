@@ -8894,8 +8894,162 @@ if (window.RecordingsDB) {
     refreshRecordingsList().catch(err => console.error('Initial recordings load failed:', err));
 }
 
+// === Camera mirror — floating self-view while singing (PC/mobile shared) ===
+// Independent of the mic pipeline: video-only getUserMedia stream, mirrored via
+// CSS scaleX(-1). Draggable / corner-resizable; geometry persisted per device.
+(function initCameraMirror() {
+    const btn = document.getElementById('camera-toggle');
+    if (!btn) return;
+
+    const GEOM_KEY = 'cameraMirrorGeom';
+    const MIN_W = 100;
+    // Keep at least this much of the window visible when dragging off-screen
+    const EDGE_MARGIN = 40;
+
+    let camStream = null;
+    let camStarting = false;
+    let box = null;
+    let videoEl = null;
+
+    function maxW() { return Math.min(480, window.innerWidth - 16); }
+
+    function loadGeom() {
+        try {
+            const g = JSON.parse(localStorage.getItem(GEOM_KEY));
+            if (g && isFinite(g.x) && isFinite(g.y) && isFinite(g.w)) return g;
+        } catch (_) {}
+        return null;
+    }
+    function saveGeom() {
+        if (!box) return;
+        const g = { x: box.offsetLeft, y: box.offsetTop, w: box.offsetWidth };
+        try { localStorage.setItem(GEOM_KEY, JSON.stringify(g)); } catch (_) {}
+    }
+    function clampToViewport() {
+        if (!box) return;
+        const w = Math.max(MIN_W, Math.min(box.offsetWidth, maxW()));
+        box.style.width = w + 'px';
+        const x = Math.max(EDGE_MARGIN - w, Math.min(box.offsetLeft, window.innerWidth - EDGE_MARGIN));
+        const y = Math.max(0, Math.min(box.offsetTop, window.innerHeight - EDGE_MARGIN));
+        box.style.left = x + 'px';
+        box.style.top = y + 'px';
+    }
+
+    function buildBox() {
+        box = document.createElement('div');
+        box.id = 'camera-mirror';
+        videoEl = document.createElement('video');
+        videoEl.autoplay = true;
+        videoEl.muted = true;
+        videoEl.playsInline = true;
+        videoEl.setAttribute('playsinline', ''); // iOS Safari
+        const close = document.createElement('button');
+        close.className = 'cam-close';
+        close.type = 'button';
+        close.textContent = '✕';
+        close.title = 'カメラを閉じる';
+        close.setAttribute('aria-label', 'Close camera mirror');
+        const grip = document.createElement('div');
+        grip.className = 'cam-resize';
+        box.append(videoEl, close, grip);
+        document.body.appendChild(box);
+        close.addEventListener('click', stopCamera);
+
+        // Restore saved geometry, else default to top-right
+        const g = loadGeom();
+        const w = g ? g.w : Math.min(200, Math.floor(window.innerWidth * 0.4));
+        box.style.width = w + 'px';
+        box.style.left = (g ? g.x : window.innerWidth - w - 12) + 'px';
+        box.style.top = (g ? g.y : 64) + 'px';
+        clampToViewport();
+
+        // Drag — pointer events on the box itself (close/grip excluded)
+        let drag = null;
+        box.addEventListener('pointerdown', (e) => {
+            if (e.target === close || e.target === grip) return;
+            if (e.pointerType === 'mouse' && e.button !== 0) return;
+            drag = { px: e.clientX, py: e.clientY, x: box.offsetLeft, y: box.offsetTop };
+            box.classList.add('dragging');
+            try { box.setPointerCapture(e.pointerId); } catch (_) {}
+        });
+        box.addEventListener('pointermove', (e) => {
+            if (!drag) return;
+            box.style.left = (drag.x + e.clientX - drag.px) + 'px';
+            box.style.top = (drag.y + e.clientY - drag.py) + 'px';
+        });
+        const endDrag = () => {
+            if (!drag) return;
+            drag = null;
+            box.classList.remove('dragging');
+            clampToViewport();
+            saveGeom();
+        };
+        box.addEventListener('pointerup', endDrag);
+        box.addEventListener('pointercancel', endDrag);
+
+        // Resize — corner grip adjusts width; height follows the video aspect
+        let rs = null;
+        grip.addEventListener('pointerdown', (e) => {
+            rs = { px: e.clientX, w: box.offsetWidth };
+            try { grip.setPointerCapture(e.pointerId); } catch (_) {}
+            e.stopPropagation();
+        });
+        grip.addEventListener('pointermove', (e) => {
+            if (!rs) return;
+            box.style.width = Math.max(MIN_W, Math.min(rs.w + e.clientX - rs.px, maxW())) + 'px';
+        });
+        const endResize = () => {
+            if (!rs) return;
+            rs = null;
+            clampToViewport();
+            saveGeom();
+        };
+        grip.addEventListener('pointerup', endResize);
+        grip.addEventListener('pointercancel', endResize);
+
+        window.addEventListener('resize', () => { if (box && box.style.display !== 'none') clampToViewport(); });
+    }
+
+    async function startCamera() {
+        camStarting = true;
+        try {
+            camStream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }
+            });
+            if (!box) buildBox();
+            box.style.display = 'block';
+            videoEl.srcObject = camStream;
+            try { await videoEl.play(); } catch (_) { /* autoplay covers it */ }
+            // Device unplugged / permission revoked mid-use
+            camStream.getVideoTracks().forEach(t => t.addEventListener('ended', stopCamera));
+            btn.classList.add('mic-active');
+        } catch (err) {
+            console.error('Camera access denied or error:', err);
+            camStream = null;
+            alert('カメラにアクセスできませんでした。ブラウザのカメラ許可を確認してください。');
+        } finally {
+            camStarting = false;
+        }
+    }
+
+    function stopCamera() {
+        if (camStream) {
+            camStream.getTracks().forEach(t => t.stop());
+            camStream = null;
+        }
+        if (videoEl) videoEl.srcObject = null;
+        if (box) box.style.display = 'none';
+        btn.classList.remove('mic-active');
+    }
+
+    btn.addEventListener('click', () => {
+        if (camStarting) return;
+        if (camStream) stopCamera(); else startCamera();
+    });
+})();
+
 // App version — bottom-right corner + faint header suffix (bump on each release)
-const APP_VERSION = 'v1.52.0';
+const APP_VERSION = 'v1.53.0';
 (() => {
     // The #app-version element is parsed AFTER this script tag, so on first run
     // getElementById returns null. Defer to DOMContentLoaded if the DOM isn't ready.
