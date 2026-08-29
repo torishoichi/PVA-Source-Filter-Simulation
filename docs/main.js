@@ -3100,20 +3100,31 @@ function applyViewMode(mode) {
 // the 0.5 Hz target. Sources by priority: playback buffer slice (offline,
 // iOS-safe) > live mic analyser > synth master analyser. The summary badge
 // updates even while the panel is collapsed; the open panel draws a large Hz
-// readout, nearest-note cents deviation, a ±50¢ fine gauge and a ~4 s trace.
+// readout, nearest-note cents deviation, a ±50¢ fine gauge and the live F1/F2
+// readout (v1.54: replaced the cents-history trace, which nobody read).
 const H1M_INTERVAL_MS = 90;    // measurement cadence
 const H1M_WIN_PB = 8192;       // playback: offline analysis window (~171–186 ms)
-const H1M_TRACE_MS = 4000;     // history strip length
 let _h1mLastAt = 0;
 let _h1mWin = null;
 const _h1mMedBuf = [];
 let h1mHz = -1;                // smoothed display value, -1 = no signal
-const h1mTrace = [];           // [{t, hz|null}]
 let h1mCtx = null;
 
-// Equal-tempered nearest-note frequency (A4 = 440), gauge/trace center
+// Equal-tempered nearest-note frequency (A4 = 440), gauge center
 function nearestNoteHz(freq) {
     return 440 * Math.pow(2, Math.round(12 * Math.log2(freq / 440)) / 12);
+}
+
+// Latest tracked F1/F2 for the meter readout. Mirrors the spectrum markers:
+// same per-formant cache with an 800 ms hold, so panel and markers never
+// disagree (both show a value, or both show '—').
+const H1M_FORMANT_HOLD_MS = 800;
+function trackedF1F2() {
+    const cf = state.cachedMicFormants, ct = state.cachedMicFormantsTime;
+    if (!analysisActive() || !cf || !ct) return { f1: null, f2: null };
+    const now = performance.now();
+    const pick = k => (cf[k] && now - (ct[k] || 0) < H1M_FORMANT_HOLD_MS) ? cf[k] : null;
+    return { f1: pick('f1'), f2: pick('f2') };
 }
 
 function h1MeterMeasure() {
@@ -3155,8 +3166,6 @@ function updateH1Meter(nowT) {
             _h1mMedBuf.length = 0;
             h1mHz = -1;
         }
-        h1mTrace.push({ t: nowT, hz: h1mHz > 0 ? h1mHz : null });
-        while (h1mTrace.length && h1mTrace[0].t < nowT - H1M_TRACE_MS) h1mTrace.shift();
         if (els.h1Badge) els.h1Badge.textContent = h1mHz > 0 ? h1mHz.toFixed(1) + ' Hz' : '—';
         if (els.h1MeterPanel && els.h1MeterPanel.open) drawH1Meter();
     }
@@ -3251,44 +3260,43 @@ function drawH1Meter() {
     }
     ctx.textAlign = 'left';
 
-    // History trace — cents deviation from the CURRENT nearest note, auto-zoomed
-    // y-range (min ±12¢) so sub-Hz wobble and vibrato are both readable
-    const ty0 = readoutH + gaugeH, ty1 = H - 4;
-    const tmid = (ty0 + ty1) / 2;
+    // F1 / F2 readout — large digits at a fixed screen position, so the eye reads
+    // the formants without chasing the moving markers on the spectrum. Replaced
+    // the cents-history trace in v1.54.
+    const fy0 = readoutH + gaugeH, fy1 = H;
     ctx.strokeStyle = 'rgba(0,0,0,0.12)';
-    ctx.strokeRect(0.5, ty0 + 0.5, W - 1, ty1 - ty0 - 1);
-    ctx.strokeStyle = 'rgba(0,0,0,0.18)';
-    ctx.beginPath(); ctx.moveTo(1, tmid); ctx.lineTo(W - 1, tmid); ctx.stroke();
-    if (h1mTrace.length > 1 && target > 0) {
-        let maxDev = 0;
-        const devs = h1mTrace.map(p => {
-            if (p.hz == null) return null;
-            const d = 1200 * Math.log2(p.hz / target);
-            if (Math.abs(d) > maxDev) maxDev = Math.abs(d);
-            return d;
-        });
-        const range = Math.min(120, Math.max(12, maxDev * 1.15));
-        const tNow = h1mTrace[h1mTrace.length - 1].t;
-        ctx.strokeStyle = '#1565c0';
-        ctx.lineWidth = 1.4;
-        ctx.beginPath();
-        let pen = false;
-        for (let i = 0; i < h1mTrace.length; i++) {
-            if (devs[i] == null) { pen = false; continue; }
-            const x = W - ((tNow - h1mTrace[i].t) / H1M_TRACE_MS) * W;
-            const y = tmid - (devs[i] / range) * (ty1 - ty0) / 2;
-            if (!pen) { ctx.moveTo(x, y); pen = true; } else ctx.lineTo(x, y);
-        }
-        ctx.stroke();
-        ctx.lineWidth = 1;
-        ctx.fillStyle = 'rgba(0,0,0,0.4)';
-        ctx.font = labelFont;
-        ctx.fillText('+' + range.toFixed(0) + '¢', 4, ty0 + 10 * s);
-        ctx.fillText('−' + range.toFixed(0) + '¢', 4, ty1 - 3);
-        ctx.textAlign = 'right';
-        ctx.fillText('4s', W - 4, ty1 - 3);
+    ctx.beginPath(); ctx.moveTo(0, fy0 + 0.5); ctx.lineTo(W, fy0 + 0.5); ctx.stroke();
+
+    const ff = trackedF1F2();
+    const fRows = [
+        { label: 'F1', color: '#D24545', f: ff.f1 },
+        { label: 'F2', color: '#2196F3', f: ff.f2 },
+    ];
+    const rowH = (fy1 - fy0) / fRows.length;
+    const fNumFont = `700 ${Math.round(Math.min(24, rowH * 0.72))}px sans-serif`;
+    const fLabFont = `700 ${Math.round(11 * s)}px sans-serif`;
+    const fUnitFont = `${Math.round(10 * s)}px sans-serif`;
+    ctx.font = fUnitFont;
+    const fUnitW = ctx.measureText('Hz').width;
+    const numRightX = W - 4 - fUnitW - 4;
+    fRows.forEach((row, i) => {
+        const cy = fy0 + rowH * (i + 0.5);
+        ctx.font = fLabFont;
         ctx.textAlign = 'left';
-    }
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = row.color;
+        ctx.fillText(row.label, 4, cy);
+        ctx.font = fNumFont;
+        ctx.textAlign = 'right';
+        ctx.fillStyle = row.f ? '#2C2C2C' : '#bbb';
+        ctx.fillText(row.f ? String(Math.round(row.f.freq)) : '—', numRightX, cy);
+        ctx.font = fUnitFont;
+        ctx.textAlign = 'left';
+        ctx.fillStyle = 'rgba(0,0,0,0.45)';
+        ctx.fillText('Hz', numRightX + 4, cy);
+    });
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
 }
 
 // ---------- Voice quality: CPP & H1–H2 (dsp-core.js) ----------
@@ -6374,7 +6382,9 @@ function drawVisualizer() {
         // Fixed F1/F2 HUD readout (top-left, below the marker row): large digits at a
         // stable screen position so the eye reads them without chasing moving markers.
         // Placed BELOW the pills so a low-F1 pill (e.g. /u/ ~350Hz) is never covered.
-        {
+        // PC hosts the same readout inside the H1 Meter panel (v1.54), so the canvas
+        // overlay is drawn only where that panel doesn't exist (mobile.html).
+        if (!els.h1MeterCanvas) {
             const compact = width < 400;
             const hudX = 8;
             const hudY = state.roughnessVisible ? 126 : 56;
@@ -9049,7 +9059,7 @@ if (window.RecordingsDB) {
 })();
 
 // App version — bottom-right corner + faint header suffix (bump on each release)
-const APP_VERSION = 'v1.53.0';
+const APP_VERSION = 'v1.54.0';
 (() => {
     // The #app-version element is parsed AFTER this script tag, so on first run
     // getElementById returns null. Defer to DOMContentLoaded if the DOM isn't ready.
