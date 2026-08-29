@@ -613,25 +613,19 @@
                         aria-label="表示範囲をリピート" title="いま表示している範囲をループ再生">
                         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
                     </button>
-                    <!-- Top-right overlay dock — Harmonic EQ + H1 Meter stacked vertically.
+                    <!-- Top-right overlay dock — Level Meter + H1 Meter stacked vertically.
                          Fixed placement (drag/resize was dropped as fidgety): both panels
                          share the same width, and opening one pushes the other down
                          instead of overlapping. Collapsed = compact pill. -->
                     <div class="overlay-dock">
-                        <details id="panel-harmonic-eq" class="harmonic-eq-panel he-overlay collapsible">
+                        <details id="panel-level-meter" class="h1-meter-panel h1-overlay collapsible" open>
                             <summary class="collapsible-summary">
-                                <h3 class="tracker-title">Harmonic EQ <span class="tooltip"
-                                        data-tooltip="各倍音（H1〜H10）の強度を個別に増減するイコライザーです。声帯波形が生み出す自然なスペクトル傾斜の上に補正をかけ、特定の倍音を強調・抑制した時に音色とパワースペクトルがどう変わるかを学べます。H1-H2 バランスや Singer's Formant 帯の倍音強調などの実験に。">[?]</span></h3>
-                                <span class="status-badge he-summary-badge" id="he-badge">Flat</span>
+                                <h3 class="tracker-title">Level Meter <span class="tooltip"
+                                        data-tooltip="現在の音量（RMS レベル、dBFS）を表示するメーターです。大きな数値表示・−60〜0 dB のバー・約2秒のピークホールドつき。−12 dB までは緑、−6 dB までは黄、それ以上は赤（クリッピング注意）で表示します。シンセ音・マイク入力・録音再生のすべてで動作します。">[?]</span></h3>
+                                <span class="status-badge h1-summary-badge" id="lvl-badge">—</span>
                             </summary>
-                            <div class="collapsible-body">
-                                <div class="he-presets" id="he-presets">
-                                    <button type="button" class="he-preset-btn" data-eq-preset="flat">Flat</button>
-                                    <button type="button" class="he-preset-btn" data-eq-preset="bright">明るい</button>
-                                    <button type="button" class="he-preset-btn" data-eq-preset="dark">暗い</button>
-                                </div>
-                                <div class="he-faders" id="he-faders"></div>
-                                <div class="hint">各倍音バーをドラッグで増減。Flat で全体リセット（バーをダブルクリックで個別リセット）</div>
+                            <div class="h1-meter-body">
+                                <canvas id="level-meter-canvas" class="h1-meter-canvas lvl-canvas"></canvas>
                             </div>
                         </details>
                         <details id="panel-h1-meter" class="h1-meter-panel h1-overlay collapsible" open>

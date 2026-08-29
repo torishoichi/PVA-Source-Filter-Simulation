@@ -524,7 +524,7 @@ input[type=range]::-moz-range-track {
 /* Waveform trace legend chips — top-left isolate toggles (PC only). Each chip
    carries its trace's color as a leading dot; clicking isolates that trace
    (others dim on-canvas), and the active chip fills. Mirrors the status-chip
-   look. Top-left avoids the top-right overlay dock (Harmonic EQ / H1 Meter). */
+   look. Top-left avoids the top-right overlay dock (Level Meter / H1 Meter). */
 .wave-legend {
     position: absolute;
     top: 8px;
@@ -1678,45 +1678,30 @@ input[type=range]::-webkit-slider-thumb:hover {
 }
 
 /* Header tooltips sit near the top of the viewport (spectrum canvas-header
-   strategy strip + Harmonic EQ overlay), so the default upward bubble gets
-   clipped off the top edge. Flip these to drop downward instead. */
+   strategy strip + overlay-dock meter panels), so the default upward bubble
+   gets clipped off the top edge. Flip these to drop downward instead. */
 .strategy-strip .tooltip::after,
-.harmonic-eq-panel .tooltip::after,
 .h1-meter-panel .tooltip::after {
     bottom: auto;
     top: 150%;
 }
 
-.strategy-strip .tooltip:hover::after,
-.harmonic-eq-panel .tooltip:hover::after {
+.strategy-strip .tooltip:hover::after {
     transform: translateX(-50%) translateY(2px);
 }
 
 .strategy-strip .tooltip::before,
-.harmonic-eq-panel .tooltip::before,
 .h1-meter-panel .tooltip::before {
     bottom: auto;
     top: 100%;
     border-color: transparent transparent #2C2C2C transparent;
 }
 
-/* Harmonic EQ lives at the spectrum's top-right corner, so a centered bubble
-   would overflow the right edge — anchor it to the icon's right instead. */
-.harmonic-eq-panel .tooltip::after {
+/* The meter panels live at the spectrum's top-right corner, so a centered
+   bubble would overflow the right edge — anchor it to the icon's right. */
+.h1-meter-panel .tooltip::after {
     left: auto;
     right: 0;
-    transform: none;
-}
-
-.harmonic-eq-panel .tooltip:hover::after {
-    transform: translateY(2px);
-}
-
-/* H1 Meter sits at the top-LEFT corner — anchor the bubble to the icon's left
-   so it can't overflow the left edge. */
-.h1-meter-panel .tooltip::after {
-    left: 0;
-    right: auto;
     transform: none;
 }
 
@@ -4302,13 +4287,11 @@ body.learn-drawer-open { overflow: hidden; }
 }
 .learn-lesson-title { flex: 1 1 auto; font-size: 0.82rem; }
 
-/* ===== Harmonic EQ (per-harmonic graphic equalizer) ===== */
-/* Harmonic EQ as a floating overlay docked top-right inside the spectrum canvas.
-   Light translucent panel so the faders/text stay readable over the white spectrum.
-   Absolutely positioned → expanding it never changes layout height (no sticky-drop). */
-/* Top-right overlay dock — Harmonic EQ + H1 Meter stacked vertically with a
+/* ===== Overlay dock (Level Meter + H1 Meter) ===== */
+/* Top-right overlay dock — Level Meter + H1 Meter stacked vertically with a
    shared width. Fixed placement (no drag/resize): opening one panel pushes the
-   other down instead of overlapping it. */
+   other down instead of overlapping it. Absolutely positioned → expanding a
+   panel never changes layout height (no sticky-drop). */
 .overlay-dock {
     position: absolute;
     top: 8px;
@@ -4318,46 +4301,13 @@ body.learn-drawer-open { overflow: hidden; }
     display: flex;
     flex-direction: column;
     align-items: flex-end;
-    gap: 8px;
+    gap: 6px;
     pointer-events: none;      /* clicks between the panels reach the canvas */
 }
 .overlay-dock > * { pointer-events: auto; }
 
-.he-overlay {
-    width: max-content;
-    max-width: 100%;
-    background: rgba(255, 254, 249, 0.93); /* --canvas-bg, slightly see-through */
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-md);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.10);
-    -webkit-backdrop-filter: blur(3px);
-    backdrop-filter: blur(3px);
-}
-/* Collapsed = compact pill (just the summary) */
-.he-overlay:not([open]) {
-    background: var(--bg-elev);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-}
-.he-overlay > .collapsible-summary {
-    padding: 6px 12px;
-    gap: 8px;
-}
-.he-overlay > .collapsible-summary .tracker-title { font-size: 0.78rem; }
-.he-overlay[open] { width: 320px; }
-/* Tighten the open panel so it sits neatly in the corner */
-.he-overlay .collapsible-body { padding: 10px 12px; }
-.he-overlay .he-presets { margin-bottom: 8px; }
-.he-overlay .he-faders { gap: 2px; padding: 4px 0 0; }
-.he-overlay .he-fader { min-width: 20px; }
-.he-overlay .he-fader .he-slider { height: 78px; }
-.he-overlay .hint { font-size: 0.62rem; margin-top: 6px; line-height: 1.35; }
-
-.he-summary-badge {
-    margin-left: auto;
-}
-
-/* H1 Meter — precision f0 readout, docked below Harmonic EQ in .overlay-dock.
-   Same width as the open Harmonic EQ panel. */
+/* Meter panels in the .overlay-dock — shared translucent card style.
+   Collapsed = compact pill (just the summary). */
 .h1-overlay {
     width: 320px;
     max-width: 100%;
@@ -4374,7 +4324,7 @@ body.learn-drawer-open { overflow: hidden; }
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 .h1-overlay > .collapsible-summary {
-    padding: 6px 12px;
+    padding: 4px 12px;
     gap: 8px;
 }
 .h1-overlay > .collapsible-summary .tracker-title { font-size: 0.78rem; }
@@ -4386,128 +4336,21 @@ body.learn-drawer-open { overflow: hidden; }
 
 .h1-meter-body {
     position: relative;
-    padding: 0 12px 12px;
+    padding: 0 12px 8px;
 }
 
+/* Panel heights are budgeted so BOTH dock panels fit the 300px canvas
+   container (overflow:hidden) when open: 8 top + level(~88) + 6 gap +
+   h1(~178) ≈ 280px. Mind the budget when resizing either canvas. */
 .h1-meter-canvas {
     display: block;
     width: 100%;
-    height: 148px;        /* JS overwrites on resize */
+    height: 128px;        /* JS overwrites on resize */
 }
 
-.he-presets {
-    display: flex;
-    gap: 6px;
-    margin-bottom: 12px;
-}
-
-.he-preset-btn {
-    flex: 1 1 auto;
-    padding: 5px 8px;
-    font-size: 0.72rem;
-    font-weight: 600;
-    color: var(--text-secondary);
-    background: var(--bg-soft);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    transition: all 0.12s ease;
-}
-
-.he-preset-btn:hover {
-    color: var(--accent-color);
-    border-color: var(--accent-color);
-    background: var(--accent-soft);
-}
-
-.he-preset-btn:active {
-    transform: translateY(1px);
-}
-
-.he-faders {
-    display: flex;
-    justify-content: space-between;
-    gap: 4px;
-    padding: 6px 2px 2px;
-    overflow-x: auto;
-}
-
-.he-fader {
-    flex: 1 1 0;
-    min-width: 24px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-}
-
-.he-val {
-    font-size: 0.62rem;
-    font-family: ui-monospace, monospace;
-    color: var(--text-muted);
-    min-height: 0.8em;
-    line-height: 1;
-}
-
-.he-fader .he-slider {
-    /* Vertical orientation: modern (writing-mode) + WebKit fallback */
-    -webkit-appearance: slider-vertical;
-    writing-mode: vertical-lr;
-    direction: rtl;
-    width: 8px;
-    height: 96px;
-    margin: 0;
-    padding: 0;
-    background: transparent;
-    touch-action: none; /* iOS: prevent scroll-hijack during drag */
-    cursor: ns-resize;
-}
-
-/* Vertical track (overrides the global horizontal range track) */
-.he-fader .he-slider::-webkit-slider-runnable-track {
-    width: 6px;
-    height: 100%;
-    background: linear-gradient(to top,
-        rgba(59, 130, 246, 0.25) 0%,
-        var(--bg-soft) 50%,
-        rgba(210, 69, 69, 0.22) 100%);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-xs);
-}
-
-.he-fader .he-slider::-moz-range-track {
-    width: 6px;
-    height: 100%;
-    background: var(--bg-soft);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius-xs);
-}
-
-.he-fader .he-slider::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 18px;
-    height: 12px;
-    border-radius: var(--radius-xs);
-    background: var(--accent-color);
-    border: 1px solid var(--accent-hover);
-    cursor: ns-resize;
-}
-
-.he-fader .he-slider::-moz-range-thumb {
-    width: 18px;
-    height: 12px;
-    border-radius: var(--radius-xs);
-    background: var(--accent-color);
-    border: 1px solid var(--accent-hover);
-    cursor: ns-resize;
-}
-
-.he-label {
-    font-size: 0.66rem;
-    font-weight: 600;
-    color: var(--text-secondary);
-    line-height: 1;
+/* Level meter is a compact single row: bar + scale left, readout right */
+.lvl-canvas {
+    height: 40px;
 }
 
 /* ===== Playback EQ (recording-playback graphic equalizer, desktop only) ===== */

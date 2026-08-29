@@ -189,9 +189,6 @@ const REC_EQ_POINT_COLORS = ['#2EA39B', '#E68B30', '#8B5CF6', '#3B82F6', '#D2454
 let nextEqPointId = 1;
 const HARMONIC_LABEL = (h) => `H${h}`;
 const MAX_HARMONICS_ON_SPECTRUM = IS_MOBILE ? 10 : Infinity;
-// Harmonic EQ: per-harmonic gain offset (dB) for H1..H_EQ_HARMONIC_COUNT
-const EQ_HARMONIC_COUNT = 10;
-const EQ_GAIN_RANGE = 18; // slider span: ±18 dB
 
 // --- State Variables ---
 const state = {
@@ -232,11 +229,6 @@ const state = {
     selectionActive: false,
     selectionMinFreq: 0,
     selectionMaxFreq: 0,
-    harmonicEq: {
-        // Per-harmonic user gain offset in dB (index 0 = H1). Added on top of the
-        // natural spectral slope from calcHarmonicGainDb(). 0 = flat (no change).
-        gains: new Array(EQ_HARMONIC_COUNT).fill(0),
-    },
     recordingEq: {
         // Parametric EQ on recording PLAYBACK (desktop only). Each point is a peaking
         // filter dragged directly on the spectrum: { id, freq, gain(dB), q }.
@@ -394,6 +386,9 @@ const els = {
     h1MeterBody: document.getElementById('h1-meter-body'),
     h1MeterCanvas: document.getElementById('h1-meter-canvas'),
     h1Badge: document.getElementById('h1-badge'),
+    levelMeterPanel: document.getElementById('panel-level-meter'),
+    levelMeterCanvas: document.getElementById('level-meter-canvas'),
+    lvlBadge: document.getElementById('lvl-badge'),
     vibratoPanel: document.getElementById('vibrato-panel'),
     vibratoCanvas: document.getElementById('vibrato-canvas'),
     pitchTrackPanel: document.getElementById('pitch-track-panel'),
@@ -747,14 +742,6 @@ function dbToLinear(db) {
     return Math.pow(10, db / 20);
 }
 
-// User-controlled harmonic EQ offset (dB) for harmonic h (1-based).
-// Returns 0 for harmonics outside the EQ band (H > EQ_HARMONIC_COUNT).
-function harmonicEqDb(h) {
-    const idx = h - 1;
-    if (idx < 0 || idx >= EQ_HARMONIC_COUNT) return 0;
-    return state.harmonicEq.gains[idx] || 0;
-}
-
 // --- Roughness / pitch-resolution helpers ---
 // Framework (Bozeman / PVA tradition):
 //   1. Is adjacent harmonic interval inside the auditory critical band (ERB)?
@@ -1102,7 +1089,7 @@ function createSource() {
 
         // Calculate amplitude based on spectral slope (M1 vs M2) and Phonation Mode
         const dbGain = calcHarmonicGainDb(i, state.mechanism, state.phonationMode, state.airflow);
-        let linearGain = dbToLinear(dbGain + harmonicEqDb(i)) * (1 / Math.sqrt(maxHarmonics));
+        let linearGain = dbToLinear(dbGain) * (1 / Math.sqrt(maxHarmonics));
         // Lab harmonic limit — gate at `gain` (feeds BOTH audio and vis) so a
         // limited harmonic disappears from the spectrum and the sound together.
         linearGain *= harmonicLimitMask(i);
@@ -1248,7 +1235,7 @@ function createHarmonyVoices() {
             const dbGain = calcHarmonicGainDb(i, state.mechanism, state.phonationMode, state.airflow);
             // Fold the harmonic-limit mask into baseGain so every place that reuses
             // baseGain (the Level slider handler, updateSourceParams) inherits it.
-            const baseGain = dbToLinear(dbGain + harmonicEqDb(i)) * (1 / Math.sqrt(maxH)) * harmonicLimitMask(i);
+            const baseGain = dbToLinear(dbGain) * (1 / Math.sqrt(maxH)) * harmonicLimitMask(i);
             gain.gain.value = baseGain * state.harmony.level;
             audioMute.gain.value = harmonySelectionMute(freq);
 
@@ -1378,7 +1365,7 @@ function updateSourceParams() {
 
             // Calculate new amplitude based on current state
             const dbGain = calcHarmonicGainDb(h.harmonic, state.mechanism, state.phonationMode, state.airflow);
-            let linearGain = dbToLinear(dbGain + harmonicEqDb(h.harmonic)) * (1 / Math.sqrt(maxHarmonics));
+            let linearGain = dbToLinear(dbGain) * (1 / Math.sqrt(maxHarmonics));
             linearGain *= harmonicLimitMask(h.harmonic); // Lab harmonic limit
 
             // Apply Frequency Selection Mute
@@ -1403,7 +1390,7 @@ function updateSourceParams() {
                 if (freq > audioCtx.sampleRate / 2) return;
                 h.osc.frequency.setTargetAtTime(freq, time, 0.05);
                 const dbGain = calcHarmonicGainDb(h.harmonic, state.mechanism, state.phonationMode, state.airflow);
-                h.baseGain = dbToLinear(dbGain + harmonicEqDb(h.harmonic)) * (1 / Math.sqrt(h.maxH)) * harmonicLimitMask(h.harmonic);
+                h.baseGain = dbToLinear(dbGain) * (1 / Math.sqrt(h.maxH)) * harmonicLimitMask(h.harmonic);
                 h.gain.gain.setTargetAtTime(h.baseGain * state.harmony.level, time, 0.05);
                 h.audioMute.gain.setTargetAtTime(harmonySelectionMute(freq), time, 0.05);
             });
@@ -3037,7 +3024,7 @@ function drawOverviewView() {
     } else {
         // Live mic: green LIVE while just monitoring (rolling window), red REC
         // while recording, gray preview label after a recording stops.
-        // Top-LEFT — the top-right corner is where the Harmonic EQ pill and the
+        // Top-LEFT — the top-right corner is where the overlay-dock meter pills and the
         // H1 meter window dock, which would cover the label.
         ctx.font = '600 11px sans-serif';
         ctx.textAlign = 'left';
@@ -3297,6 +3284,152 @@ function drawH1Meter() {
     });
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
+}
+
+// ---------- Level Meter — RMS loudness (dBFS) readout ----------
+// Same source priority as the H1 meter: playback buffer slice (offline,
+// iOS-safe) > live mic analyser > synth master analyser. Fast-attack /
+// slow-release EMA keeps the bar steady; a ~2 s peak hold marks maxima.
+// The summary badge updates even while the panel is collapsed.
+const LVL_INTERVAL_MS = 60;
+const LVL_MIN_DB = -60, LVL_MAX_DB = 0;   // bar range (dBFS)
+const LVL_WIN_PB = 2048;                  // playback: offline RMS window (~43–46 ms)
+const LVL_PEAK_HOLD_MS = 2000;
+let _lvlLastAt = 0;
+let _lvlWin = null;
+let lvlDb = -Infinity;                    // smoothed display value, -Infinity = no signal
+let lvlPeakDb = -Infinity;
+let _lvlPeakAt = 0;
+let lvlCtx = null;
+
+function levelMeasureDb() {
+    let buf = null, n = 0;
+    if (playbackAudio && !playbackAudio.paused && playbackBuffer) {
+        const ch = playbackBuffer.getChannelData(0);
+        const N = Math.min(LVL_WIN_PB, ch.length);
+        let start = Math.round((playbackAudio.currentTime || 0) * playbackBuffer.sampleRate) - (N >> 1);
+        start = Math.max(0, Math.min(ch.length - N, start));
+        if (!_lvlWin || _lvlWin.length !== N) _lvlWin = new Float32Array(N);
+        for (let i = 0; i < N; i++) _lvlWin[i] = ch[start + i];
+        buf = _lvlWin; n = N;
+    } else {
+        const an = (state.isMicActive && micAnalyser) ? micAnalyser
+            : (isPlaying && analyser) ? analyser : null;
+        if (!an) return -Infinity;
+        const N = an.fftSize;
+        if (!_lvlWin || _lvlWin.length !== N) _lvlWin = new Float32Array(N);
+        an.getFloatTimeDomainData(_lvlWin);
+        buf = _lvlWin; n = N;
+    }
+    let sum = 0;
+    for (let i = 0; i < n; i++) sum += buf[i] * buf[i];
+    const rms = Math.sqrt(sum / n);
+    return rms > 0 ? 20 * Math.log10(rms) : -Infinity;
+}
+
+function resetLevelMeter() {
+    lvlDb = -Infinity;
+    lvlPeakDb = -Infinity;
+    if (els.lvlBadge) els.lvlBadge.textContent = '—';
+    if (els.levelMeterPanel && els.levelMeterPanel.open) drawLevelMeter();
+}
+
+function updateLevelMeter(nowT) {
+    if (!els.levelMeterCanvas) return;
+    if (micFrozen()) return; // freeze last reading
+    if (nowT - _lvlLastAt < LVL_INTERVAL_MS) return;
+    _lvlLastAt = nowT;
+    const db = levelMeasureDb();
+    if (db <= LVL_MIN_DB) {
+        lvlDb = -Infinity;
+        lvlPeakDb = -Infinity;
+    } else {
+        // Faster attack than release so peaks register but the bar settles smoothly
+        lvlDb = (lvlDb > LVL_MIN_DB)
+            ? (db > lvlDb ? 0.5 * lvlDb + 0.5 * db : 0.75 * lvlDb + 0.25 * db)
+            : db;
+        if (db >= lvlPeakDb || nowT - _lvlPeakAt > LVL_PEAK_HOLD_MS) {
+            lvlPeakDb = db;
+            _lvlPeakAt = nowT;
+        }
+    }
+    if (els.lvlBadge) els.lvlBadge.textContent = lvlDb > LVL_MIN_DB ? lvlDb.toFixed(1) + ' dB' : '—';
+    if (els.levelMeterPanel && els.levelMeterPanel.open) drawLevelMeter();
+}
+
+// Traffic-light zones (dBFS): green = comfortable, amber = hot, red = near clip
+function lvlZoneColor(db) {
+    if (db >= -6) return '#e53935';
+    if (db >= -12) return '#fbc02d';
+    return '#43a047';
+}
+
+function drawLevelMeter() {
+    const cv = els.levelMeterCanvas;
+    if (!cv) return;
+    if (!lvlCtx) lvlCtx = cv.getContext('2d');
+    const ctx = lvlCtx;
+    const dpr = window.devicePixelRatio || 1;
+    const W = cv.clientWidth || 288, H = cv.clientHeight || 40;
+    if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) {
+        cv.width = Math.round(W * dpr);
+        cv.height = Math.round(H * dpr);
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    const active = lvlDb > LVL_MIN_DB;
+
+    // Compact single-row layout so both dock panels fit the 300px canvas
+    // container when open: bar + scale on the left, current/peak on the right.
+    ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#2C2C2C';
+    ctx.font = '700 16px sans-serif';
+    ctx.fillText(active ? lvlDb.toFixed(1) + ' dB' : '—', W - 2, 16);
+    ctx.font = '600 10px sans-serif';
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillText(lvlPeakDb > LVL_MIN_DB ? 'Peak ' + lvlPeakDb.toFixed(1) : 'Peak —', W - 2, 33);
+    ctx.textAlign = 'left';
+
+    // Bar — −60..0 dBFS with zone boundary ticks (−12 / −6) and a peak-hold line
+    const bx0 = 4, bx1 = W - 100;
+    const by = 6, bh = 14;
+    const dbToX = db => bx0 + (Math.max(LVL_MIN_DB, Math.min(LVL_MAX_DB, db)) - LVL_MIN_DB)
+        / (LVL_MAX_DB - LVL_MIN_DB) * (bx1 - bx0);
+    ctx.fillStyle = 'rgba(0,0,0,0.06)';
+    ctx.fillRect(bx0, by, bx1 - bx0, bh);
+    if (active) {
+        ctx.fillStyle = lvlZoneColor(lvlDb);
+        ctx.fillRect(bx0, by, dbToX(lvlDb) - bx0, bh);
+    }
+    ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(bx0 + 0.5, by + 0.5, bx1 - bx0 - 1, bh - 1);
+    [-12, -6].forEach(db => {
+        const x = Math.round(dbToX(db)) + 0.5;
+        ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+        ctx.beginPath(); ctx.moveTo(x, by); ctx.lineTo(x, by + bh); ctx.stroke();
+    });
+    if (lvlPeakDb > LVL_MIN_DB) {
+        const px = Math.round(dbToX(lvlPeakDb)) + 0.5;
+        ctx.strokeStyle = 'rgba(0,0,0,0.65)';
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(px, by - 2); ctx.lineTo(px, by + bh + 2); ctx.stroke();
+        ctx.lineWidth = 1;
+    }
+
+    // Scale labels every 10 dB
+    ctx.font = '9px sans-serif';
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    for (let db = LVL_MIN_DB; db <= LVL_MAX_DB; db += 10) {
+        const x = dbToX(db);
+        ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+        ctx.beginPath(); ctx.moveTo(x + 0.5, by + bh); ctx.lineTo(x + 0.5, by + bh + 3); ctx.stroke();
+        ctx.textAlign = db === LVL_MIN_DB ? 'left' : db === LVL_MAX_DB ? 'right' : 'center';
+        ctx.fillText(String(db), db === LVL_MIN_DB ? bx0 : db === LVL_MAX_DB ? bx1 : x, by + bh + 13);
+    }
+    ctx.textAlign = 'left';
 }
 
 // ---------- Voice quality: CPP & H1–H2 (dsp-core.js) ----------
@@ -5116,6 +5249,9 @@ function drawVisualizer() {
 
     // H1 precision meter — throttled internally; all sources (synth / mic / playback)
     updateH1Meter(nowT);
+
+    // Level meter — throttled internally; same sources as the H1 meter
+    updateLevelMeter(nowT);
 
     // Pitch Track: redraw every frame while panel open + source active (smooth scroll)
     if (analysisActive() && els.pitchTrackPanel && els.pitchTrackPanel.open) {
@@ -6951,6 +7087,7 @@ els.btnMic.addEventListener('click', async () => {
         els.btnMic.classList.remove('mic-active');
         updateVibratoPanelVisibility();
         resetLoudnessMeter();
+        resetLevelMeter();
         resetVoiceQuality();
         // Stop any in-progress recording when mic is turned off
         if (mediaRecorder && mediaRecorder.state === 'recording') stopRecording();
@@ -8192,7 +8329,7 @@ if (els.h1MeterPanel) {
     els.h1MeterPanel.addEventListener('toggle', () => {
         if (els.h1MeterPanel.open) drawH1Meter();
     });
-    // v1.38: the panel is a fixed dock (top-right, under Harmonic EQ). The
+    // v1.38: the panel is a fixed dock (top-right, under the Level Meter). The
     // drag/resize floating window was dropped as fidgety — clear any geometry
     // a previous version saved so nothing looks half-applied.
     try { localStorage.removeItem('h1MeterGeom'); } catch (_) {}
@@ -8200,6 +8337,16 @@ if (els.h1MeterPanel) {
     // starts, so the default-open panel would otherwise show a blank canvas.
     requestAnimationFrame(() => {
         if (els.h1MeterPanel.open) drawH1Meter();
+    });
+}
+
+// Level Meter: same treatment — paint on open and once at startup
+if (els.levelMeterPanel) {
+    els.levelMeterPanel.addEventListener('toggle', () => {
+        if (els.levelMeterPanel.open) drawLevelMeter();
+    });
+    requestAnimationFrame(() => {
+        if (els.levelMeterPanel.open) drawLevelMeter();
     });
 }
 
@@ -9059,7 +9206,7 @@ if (window.RecordingsDB) {
 })();
 
 // App version — bottom-right corner + faint header suffix (bump on each release)
-const APP_VERSION = 'v1.54.0';
+const APP_VERSION = 'v1.55.0';
 (() => {
     // The #app-version element is parsed AFTER this script tag, so on first run
     // getElementById returns null. Defer to DOMContentLoaded if the DOM isn't ready.
@@ -9301,111 +9448,6 @@ els.spectrumSlopeSlider.addEventListener('input', (e) => {
     if (els.slopeVal) els.slopeVal.textContent = state.spectrumSlope + 'dB';
     updateSpectralTilt();
 });
-
-// --- Harmonic EQ (per-harmonic graphic equalizer, H1..H_EQ_HARMONIC_COUNT) ---
-// Offsets are added on top of the natural spectral slope and applied to the
-// shared `gain` node, so they affect BOTH the audio output and the power
-// spectrum visualizer (which reads the synthesized signal's FFT).
-const EQ_PRESETS = {
-    flat: () => new Array(EQ_HARMONIC_COUNT).fill(0),
-    // Gentle high-harmonic boost → brighter / more ring
-    bright: () => [0, 0, 1, 2, 3, 4, 5, 6, 6, 6].slice(0, EQ_HARMONIC_COUNT),
-    // Gentle high-harmonic cut → darker / warmer
-    dark: () => [0, 0, -1, -2, -3, -4, -5, -6, -6, -6].slice(0, EQ_HARMONIC_COUNT),
-};
-
-function fmtEqGain(g) {
-    return (g > 0 ? '+' : '') + g;
-}
-
-function updateEqBadge() {
-    const badge = document.getElementById('he-badge');
-    if (!badge) return;
-    const custom = state.harmonicEq.gains.some(g => g !== 0);
-    badge.textContent = custom ? 'Custom' : 'Flat';
-    badge.classList.toggle('flow', !custom); // accent tint when flat
-}
-
-function syncEqFadersUI() {
-    for (let h = 1; h <= EQ_HARMONIC_COUNT; h++) {
-        const slider = document.getElementById(`he-slider-${h}`);
-        const val = document.getElementById(`he-val-${h}`);
-        const g = state.harmonicEq.gains[h - 1] || 0;
-        if (slider) slider.value = String(g);
-        if (val) val.textContent = fmtEqGain(g);
-    }
-}
-
-function applyEqPreset(name) {
-    const fn = EQ_PRESETS[name];
-    if (!fn) return;
-    state.harmonicEq.gains = fn();
-    syncEqFadersUI();
-    updateEqBadge();
-    updateSourceParams();
-}
-
-function buildHarmonicEqUI() {
-    const container = document.getElementById('he-faders');
-    if (!container) return; // PC-only panel; absent on mobile.html
-    container.innerHTML = '';
-    for (let h = 1; h <= EQ_HARMONIC_COUNT; h++) {
-        const fader = document.createElement('div');
-        fader.className = 'he-fader';
-
-        const val = document.createElement('span');
-        val.className = 'he-val';
-        val.id = `he-val-${h}`;
-        val.textContent = fmtEqGain(state.harmonicEq.gains[h - 1] || 0);
-
-        const slider = document.createElement('input');
-        slider.type = 'range';
-        slider.className = 'he-slider';
-        slider.id = `he-slider-${h}`;
-        slider.min = String(-EQ_GAIN_RANGE);
-        slider.max = String(EQ_GAIN_RANGE);
-        slider.step = '1';
-        slider.value = String(state.harmonicEq.gains[h - 1] || 0);
-        slider.setAttribute('orient', 'vertical');
-        slider.setAttribute('aria-label', `H${h} gain (dB)`);
-
-        const label = document.createElement('span');
-        label.className = 'he-label';
-        label.textContent = `H${h}`;
-
-        slider.addEventListener('input', (e) => {
-            const g = parseFloat(e.target.value);
-            state.harmonicEq.gains[h - 1] = g;
-            val.textContent = fmtEqGain(g);
-            updateEqBadge();
-            updateSourceParams();
-        });
-        // Double-click resets a single harmonic to 0 dB (desktop convenience)
-        slider.addEventListener('dblclick', () => {
-            state.harmonicEq.gains[h - 1] = 0;
-            slider.value = '0';
-            val.textContent = '0';
-            updateEqBadge();
-            updateSourceParams();
-        });
-
-        fader.appendChild(val);
-        fader.appendChild(slider);
-        fader.appendChild(label);
-        container.appendChild(fader);
-    }
-}
-
-const eqPresetsEl = document.getElementById('he-presets');
-if (eqPresetsEl) {
-    eqPresetsEl.addEventListener('click', (e) => {
-        const btn = e.target.closest('[data-eq-preset]');
-        if (btn) applyEqPreset(btn.dataset.eqPreset);
-    });
-}
-
-buildHarmonicEqUI();
-updateEqBadge();
 
 // --- Playback EQ wiring (parametric, desktop only) ---
 function updateRecEqInfo() {
