@@ -535,6 +535,57 @@ let animationId = null;
 // Detect mobile page for UI text differences
 const isMobilePage = !!document.querySelector('.tab-nav');
 
+// --- Layout-thrash avoidance helpers ---------------------------------------
+// Reading clientWidth/clientHeight inside the rAF loop forces a synchronous
+// layout whenever anything wrote a style or textContent earlier in the same
+// frame. One shared ResizeObserver caches every canvas's CSS box instead, so the
+// draw path never touches layout. An element the observer has not reported yet
+// is a cache MISS and falls back to a direct read; a cached 0x0 box (collapsed
+// <details> panel) is a valid value and is returned as-is.
+const _cssSizeCache = new WeakMap();
+let _cssSizeObserver = null;
+
+function canvasCssSize(el) {
+    if (!el) return { w: 0, h: 0 };
+    const cached = _cssSizeCache.get(el);
+    if (cached) return cached;
+    if (typeof ResizeObserver !== 'undefined') {
+        if (!_cssSizeObserver) {
+            _cssSizeObserver = new ResizeObserver((entries) => {
+                for (const e of entries) {
+                    const r = e.contentRect;
+                    _cssSizeCache.set(e.target, { w: Math.round(r.width), h: Math.round(r.height) });
+                }
+            });
+        }
+        _cssSizeObserver.observe(el); // first report lands before the next frame
+    }
+    return { w: el.clientWidth, h: el.clientHeight };
+}
+
+// Force the next canvasCssSize() to read the live box. ResizeObserver callbacks
+// run AFTER the frame's rAF callbacks, so a canvas that was just shown/hidden
+// would otherwise draw one frame at its previous (often 0x0) size.
+function invalidateCssSize(el) {
+    if (el) _cssSizeCache.delete(el);
+}
+
+// Every textContent / inline-style write invalidates layout, so the per-frame
+// readouts only write when the rendered value actually changed.
+function setTextIfChanged(el, str) {
+    if (!el || el._lastText === str) return;
+    el._lastText = str;
+    el.textContent = str;
+}
+
+function setStyleIfChanged(el, prop, value) {
+    if (!el) return;
+    const cache = el._lastStyle || (el._lastStyle = {});
+    if (cache[prop] === value) return;
+    cache[prop] = value;
+    el.style[prop] = value;
+}
+
 // --- Helper Functions ---
 function freqToNote(freq) {
     const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
@@ -804,7 +855,17 @@ function createNoiseBuffer(ctx) {
 function initAudio() {
     if (audioCtx) return;
 
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    // Ask for 48 kHz explicitly. Without it, starting the mic before Play on a
+    // Bluetooth headset (AirPods in HFP mode) hands the page a 16 kHz context:
+    // every fftSize window then lasts 3x longer (laggy readouts) and the LPC
+    // decimation drops the analysis Nyquist to 2 kHz, which hides F2 upward.
+    // Not every engine accepts the option, so fall back to the plain constructor.
+    try {
+        audioCtx = new AudioContext({ sampleRate: 48000 });
+    } catch (e) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    console.info('[audio] AudioContext sampleRate =', audioCtx.sampleRate, 'Hz');
 
     // Master Gain
     masterGain = audioCtx.createGain();
@@ -2049,6 +2110,7 @@ function drawDerivativeCanvas(canvas, derivative, params) {
 
 let _yinDp = null;        // CMNDF values
 let _yinTime = null;      // raw time-domain input
+let _yinDec = null;       // 2:1 pair-averaged copy of _yinTime (>=32 kHz contexts)
 let _yinFiltered = null;  // after pre-emphasis HP
 let _yinClarity = 0;      // periodicity confidence of the last detection: 1 - d'(τ), 0 when unvoiced
 const YIN_THRESHOLD = 0.10;       // tighter → fewer sub-octave false positives
@@ -2155,11 +2217,28 @@ function detectPitchFromMic() {
     const bufLen = an.fftSize;
     if (!_yinTime || _yinTime.length !== bufLen) _yinTime = new Float32Array(bufLen);
     an.getFloatTimeDomainData(_yinTime);
-    // Raw RMS amplitude (loudness) — used to size the Vowel Space dot
+    // Raw RMS amplitude (loudness) — used to size the Vowel Space dot.
+    // Always measured on the untouched frame.
     let rms = 0;
     for (let i = 0; i < bufLen; i++) rms += _yinTime[i] * _yinTime[i];
     state.cachedMicLevel = Math.sqrt(rms / bufLen);
-    const raw = detectPitchYIN(_yinTime, audioCtx.sampleRate);
+    // YIN's difference function costs O(N * sr/60), so it scales with the SQUARE
+    // of the sample rate for a fixed window duration. A <=1000 Hz pitch ceiling
+    // needs nothing above ~12 kHz of bandwidth, so at 32 kHz and up the frame is
+    // pair-averaged 2:1 and analysed at sr/2 — a ~4x cheaper detection.
+    // The window DURATION is deliberately unchanged (same fftSize, half the rate,
+    // half the samples): analyzeVibrato's sinc de-modulation is calibrated on
+    // f0WindowSec = fftSize / sr, so changing fftSize would invalidate it.
+    const sr = audioCtx.sampleRate;
+    let raw;
+    if (sr >= 32000) {
+        const half = bufLen >> 1;
+        if (!_yinDec || _yinDec.length !== half) _yinDec = new Float32Array(half);
+        for (let i = 0, j = 0; i < half; i++, j += 2) _yinDec[i] = 0.5 * (_yinTime[j] + _yinTime[j + 1]);
+        raw = detectPitchYIN(_yinDec, sr / 2);
+    } else {
+        raw = detectPitchYIN(_yinTime, sr);
+    }
     if (raw <= 0) { _micF0Hist.length = 0; return raw; } // reset history on unvoiced
     return octaveContinuityCorrect(raw);
 }
@@ -2450,10 +2529,9 @@ function drawWaveformView() {
     const ctx = getWaveformCtx();
     if (!ctx || !els.waveformCanvas) return;
     const cv = els.waveformCanvas;
-    if (cv.width !== cv.clientWidth || cv.height !== cv.clientHeight) {
-        cv.width = cv.clientWidth;
-        cv.height = cv.clientHeight;
-    }
+    const css = canvasCssSize(cv);
+    if (cv.width !== css.w) cv.width = css.w;
+    if (cv.height !== css.h) cv.height = css.h;
     const w = cv.width, h = cv.height;
     if (!w || !h) return;
     if (micFrozen()) return; // freeze last frame while paused
@@ -2896,10 +2974,9 @@ function drawOverviewView() {
     const ctx = getOverviewCtx();
     if (!ctx || !els.overviewCanvas) return;
     const cv = els.overviewCanvas;
-    if (cv.width !== cv.clientWidth || cv.height !== cv.clientHeight) {
-        cv.width = cv.clientWidth;
-        cv.height = cv.clientHeight;
-    }
+    const css = canvasCssSize(cv);
+    if (cv.width !== css.w) cv.width = css.w;
+    if (cv.height !== css.h) cv.height = css.h;
     const w = cv.width, h = cv.height;
     if (!w || !h) return;
     ctx.fillStyle = '#FFFEF9';
@@ -3047,6 +3124,12 @@ function applyViewMode(mode) {
     if (els.spectrogramCanvas) els.spectrogramCanvas.style.display = state.viewMode === 'spectrogram' ? 'block' : 'none';
     if (els.waveformCanvas) els.waveformCanvas.style.display = state.viewMode === 'waveform' ? 'block' : 'none';
     if (els.overviewCanvas) els.overviewCanvas.style.display = state.viewMode === 'overview' ? 'block' : 'none';
+    // These four just changed visibility — drop their cached CSS size so the very
+    // next draw measures the real box instead of waiting a frame for the observer.
+    invalidateCssSize(els.canvas);
+    invalidateCssSize(els.spectrogramCanvas);
+    invalidateCssSize(els.waveformCanvas);
+    invalidateCssSize(els.overviewCanvas);
     // Spectrum's x-axis (freq labels) is meaningless in spectrogram (freq on Y) and waveform/overview (X is time)
     const xAxis = document.querySelector('.canvas-container .axis-labels.x-axis');
     if (xAxis) xAxis.style.display = state.viewMode !== 'spectrum' ? 'none' : ((state.logScale || isSpecZoomed()) ? 'none' : '');
@@ -3073,6 +3156,14 @@ function applyViewMode(mode) {
             btn.setAttribute('aria-selected', active ? 'true' : 'false');
         });
     }
+    // The rolling monitor tap is a main-thread ScriptProcessor with a 30 s ring
+    // buffer, and only Overview/Waveform ever read it — so attach it on first
+    // entry into one of those views instead of at every mic-on. It is NOT torn
+    // down on leaving (the history would be lost); mic-off still stops it.
+    if ((state.viewMode === 'overview' || state.viewMode === 'waveform')
+        && state.isMicActive && micSource && !ovMonActive) {
+        startOvMonTap();
+    }
     if (state.viewMode === 'spectrogram') {
         initSpectrogramBuffer();
         renderSpectrogram();
@@ -3095,6 +3186,12 @@ let _h1mLastAt = 0;
 let _h1mWin = null;
 const _h1mMedBuf = [];
 let h1mHz = -1;                // smoothed display value, -1 = no signal
+// Last f0 the tracker was confident about, used to seed the period refinement.
+// Held briefly so a single unvoiced frame (consonant, breath, vibrato trough)
+// doesn't blank the readout — the old full-range YIN was naturally robust to
+// that because it ran on a window twice as long as the pitch tracker's.
+let _h1mSeed = -1, _h1mSeedAt = 0;
+const H1M_SEED_HOLD_MS = 400;
 let h1mCtx = null;
 
 // Equal-tempered nearest-note frequency (A4 = 440), gauge center
@@ -3114,9 +3211,25 @@ function trackedF1F2() {
     return { f1: pick('f1'), f2: pick('f2') };
 }
 
+// Latch/hold for the refinement seed (see _h1mSeed). Returns -1 once the hold
+// has expired, which is what makes the readout fall back to '—' on real silence.
+function h1mHoldSeed(hz) {
+    const now = performance.now();
+    if (hz > 0) { _h1mSeed = hz; _h1mSeedAt = now; return hz; }
+    return (_h1mSeed > 0 && now - _h1mSeedAt < H1M_SEED_HOLD_MS) ? _h1mSeed : -1;
+}
+
+// f0 is already known everywhere this runs — the frame-rate pitch tracker for
+// mic/playback, state.pitch for the synth — so refine the period around that
+// seed (DSP.refinePeriod) instead of paying for a second full-range YIN every
+// 90 ms. Same 4096/8192 windows, so the ~0.1-0.3 Hz read precision is unchanged;
+// the narrow lag band also makes an octave slip impossible here.
+// No usable seed -> no reading (-1).
 function h1MeterMeasure() {
-    if (typeof DSP === 'undefined' || !DSP.yin) return -1;
+    if (typeof DSP === 'undefined' || !DSP.refinePeriod) return -1;
     if (playbackAudio && !playbackAudio.paused && playbackBuffer) {
+        const seed = h1mHoldSeed(state.cachedMicPitch);   // playback contour / stopgap YIN
+        if (!(seed > 0)) return -1;
         const sr = playbackBuffer.sampleRate;
         const ch = playbackBuffer.getChannelData(0);
         const N = Math.min(H1M_WIN_PB, ch.length);
@@ -3124,17 +3237,23 @@ function h1MeterMeasure() {
         start = Math.max(0, Math.min(ch.length - N, start));
         if (!_h1mWin || _h1mWin.length !== N) _h1mWin = new Float32Array(N);
         for (let i = 0; i < N; i++) _h1mWin[i] = ch[start + i];
-        const r = DSP.yin(_h1mWin, sr, { fMax: 1200 });
-        return (r.hz > 0 && r.clarity > 0.5) ? r.hz : -1;
+        const r = DSP.refinePeriod(_h1mWin, sr, seed);
+        return r ? r.hz : -1;
     }
-    const an = (state.isMicActive && micAnalyser) ? micAnalyser
-        : (isPlaying && analyser) ? analyser : null;
+    const liveMic = !!(state.isMicActive && micAnalyser);
+    const an = liveMic ? micAnalyser : (isPlaying && analyser) ? analyser : null;
     if (!an || !audioCtx) return -1;
+    // Live mic: only trust the tracker when the last YIN frame was clearly voiced.
+    // Synth: the oscillator pitch is exact by construction.
+    const seed = liveMic
+        ? h1mHoldSeed((_yinClarity > 0.5) ? state.cachedMicPitch : -1)
+        : state.pitch;
+    if (!(seed > 0)) return -1;
     const N = an.fftSize;
     if (!_h1mWin || _h1mWin.length !== N) _h1mWin = new Float32Array(N);
     an.getFloatTimeDomainData(_h1mWin);
-    const r = DSP.yin(_h1mWin, audioCtx.sampleRate, { fMax: 1200 });
-    return (r.hz > 0 && r.clarity > 0.5) ? r.hz : -1;
+    const r = DSP.refinePeriod(_h1mWin, audioCtx.sampleRate, seed);
+    return r ? r.hz : -1;
 }
 
 function updateH1Meter(nowT) {
@@ -3153,7 +3272,7 @@ function updateH1Meter(nowT) {
             _h1mMedBuf.length = 0;
             h1mHz = -1;
         }
-        if (els.h1Badge) els.h1Badge.textContent = h1mHz > 0 ? h1mHz.toFixed(1) + ' Hz' : '—';
+        setTextIfChanged(els.h1Badge, h1mHz > 0 ? h1mHz.toFixed(1) + ' Hz' : '—');
         if (els.h1MeterPanel && els.h1MeterPanel.open) drawH1Meter();
     }
 }
@@ -3164,7 +3283,8 @@ function drawH1Meter() {
     if (!h1mCtx) h1mCtx = cv.getContext('2d');
     const ctx = h1mCtx;
     const dpr = window.devicePixelRatio || 1;
-    const W = cv.clientWidth || 288, H = cv.clientHeight || 158;
+    const css = canvasCssSize(cv);
+    const W = css.w || 288, H = css.h || 158;
     if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) {
         cv.width = Math.round(W * dpr);
         cv.height = Math.round(H * dpr);
@@ -3330,7 +3450,7 @@ function levelMeasureDb() {
 function resetLevelMeter() {
     lvlDb = -Infinity;
     lvlPeakDb = -Infinity;
-    if (els.lvlBadge) els.lvlBadge.textContent = '—';
+    setTextIfChanged(els.lvlBadge, '—');
     if (els.levelMeterPanel && els.levelMeterPanel.open) drawLevelMeter();
 }
 
@@ -3353,7 +3473,7 @@ function updateLevelMeter(nowT) {
             _lvlPeakAt = nowT;
         }
     }
-    if (els.lvlBadge) els.lvlBadge.textContent = lvlDb > LVL_MIN_DB ? lvlDb.toFixed(1) + ' dB' : '—';
+    setTextIfChanged(els.lvlBadge, lvlDb > LVL_MIN_DB ? lvlDb.toFixed(1) + ' dB' : '—');
     if (els.levelMeterPanel && els.levelMeterPanel.open) drawLevelMeter();
 }
 
@@ -3370,7 +3490,8 @@ function drawLevelMeter() {
     if (!lvlCtx) lvlCtx = cv.getContext('2d');
     const ctx = lvlCtx;
     const dpr = window.devicePixelRatio || 1;
-    const W = cv.clientWidth || 288, H = cv.clientHeight || 40;
+    const css = canvasCssSize(cv);
+    const W = css.w || 288, H = css.h || 40;
     if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) {
         cv.width = Math.round(W * dpr);
         cv.height = Math.round(H * dpr);
@@ -3515,18 +3636,19 @@ function phonationLabel(cpp, h1h2c) {
 
 function updateVoiceQualityReadout() {
     const cpp = state.cachedCPP, h = state.cachedH1H2;
-    if (els.vqCpp) els.vqCpp.textContent = (cpp == null) ? '—' : cpp.toFixed(1);
-    if (els.vqH1h2) els.vqH1h2.textContent = (h == null) ? '—' : (h >= 0 ? '+' : '') + h.toFixed(1);
+    setTextIfChanged(els.vqCpp, (cpp == null) ? '—' : cpp.toFixed(1));
+    setTextIfChanged(els.vqH1h2, (h == null) ? '—' : (h >= 0 ? '+' : '') + h.toFixed(1));
     if (els.vqVerdict) {
         const v = phonationLabel(cpp, h);
-        els.vqVerdict.textContent = v.txt;
-        els.vqVerdict.className = 'vstat-val ' + v.cls;
+        setTextIfChanged(els.vqVerdict, v.txt);
+        const cls = 'vstat-val ' + v.cls;
+        if (els.vqVerdict.className !== cls) els.vqVerdict.className = cls;
     }
     // Measured glottal source (IAIF)
-    if (els.glottalMeasured) els.glottalMeasured.style.display = analysisActive() ? 'block' : 'none';
-    if (els.measRd) els.measRd.textContent = (state.cachedRdMeas == null) ? '—' : state.cachedRdMeas.toFixed(2);
-    if (els.measNaq) els.measNaq.textContent = (state.cachedNAQ == null) ? '—' : state.cachedNAQ.toFixed(3);
-    if (els.measOq) els.measOq.textContent = (state.cachedOQMeas == null) ? '—' : (state.cachedOQMeas * 100).toFixed(0) + '%';
+    setStyleIfChanged(els.glottalMeasured, 'display', analysisActive() ? 'block' : 'none');
+    setTextIfChanged(els.measRd, (state.cachedRdMeas == null) ? '—' : state.cachedRdMeas.toFixed(2));
+    setTextIfChanged(els.measNaq, (state.cachedNAQ == null) ? '—' : state.cachedNAQ.toFixed(3));
+    setTextIfChanged(els.measOq, (state.cachedOQMeas == null) ? '—' : (state.cachedOQMeas * 100).toFixed(0) + '%');
 }
 
 function resetVoiceQuality() {
@@ -3680,8 +3802,9 @@ function drawVibratoTrace() {
     const c = els.vibratoCanvas;
     const ctx = getVibratoCanvasCtx();
     if (!c || !ctx) return;
-    const w = c.clientWidth || 600;
-    const h = c.clientHeight || 110;
+    const css = canvasCssSize(c);
+    const w = css.w || 600;
+    const h = css.h || 110;
     if (c.width !== w) c.width = w;
     if (c.height !== h) c.height = h;
 
@@ -4130,8 +4253,9 @@ function drawPitchTrack() {
     const c = els.pitchTrackCanvas;
     const ctx = getPitchTrackCtx();
     if (!c || !ctx) return;
-    const w = c.clientWidth || 600;
-    const h = c.clientHeight || 300;
+    const css = canvasCssSize(c);
+    const w = css.w || 600;
+    const h = css.h || 300;
     if (c.width !== w) c.width = w;
     if (c.height !== h) c.height = h;
 
@@ -4515,21 +4639,32 @@ function loudDbToPct(db) {
 
 function resetLoudnessMeter() {
     state.loudnessDb = LOUD_METER_MIN_DB;
-    if (els.loudFill) { els.loudFill.style.width = '0%'; els.loudFill.style.backgroundColor = '#cfd8dc'; }
-    if (els.loudVal) els.loudVal.textContent = '— dB';
+    setStyleIfChanged(els.loudFill, 'width', '0%');
+    setStyleIfChanged(els.loudFill, 'backgroundColor', '#cfd8dc');
+    setTextIfChanged(els.loudVal, '— dB');
 }
 
 // Called every animation frame while the mic is active (and not paused).
+// The meter is a 4-property DOM write, and every write invalidates layout for
+// the rest of the frame — so it is throttled to ~30 Hz (well above the eye's
+// need for a level bar) and each property is written only when it changed.
+const LOUD_UPDATE_MS = 33;
+let _loudLastAt = 0;
 function updateLoudnessMeter() {
+    const nowT = performance.now();
+    if (nowT - _loudLastAt < LOUD_UPDATE_MS) return;
+    _loudLastAt = nowT;
+
     const ceiling = state.loudnessCeilingDb;
-    if (els.loudMarker) els.loudMarker.style.left = loudDbToPct(ceiling) + '%';
+    setStyleIfChanged(els.loudMarker, 'left', loudDbToPct(ceiling) + '%');
 
     const level = state.cachedMicLevel;
     const db = level > 0 ? 20 * Math.log10(level) : -120;
     if (db <= LOUD_METER_MIN_DB) { // effectively silent
         state.loudnessDb = LOUD_METER_MIN_DB;
-        if (els.loudFill) { els.loudFill.style.width = '0%'; els.loudFill.style.backgroundColor = '#cfd8dc'; }
-        if (els.loudVal) els.loudVal.textContent = '— dB';
+        setStyleIfChanged(els.loudFill, 'width', '0%');
+        setStyleIfChanged(els.loudFill, 'backgroundColor', '#cfd8dc');
+        setTextIfChanged(els.loudVal, '— dB');
         return;
     }
     // EMA — faster attack than release so peaks register but the bar settles smoothly.
@@ -4541,8 +4676,9 @@ function updateLoudnessMeter() {
     if (sdb >= ceiling) color = '#e53935';                         // over ceiling → red
     else if (sdb >= ceiling - LOUD_GREEN_MARGIN) color = '#fbc02d'; // approaching → amber
     else color = '#43a047';                                        // safe → green
-    if (els.loudFill) { els.loudFill.style.width = loudDbToPct(sdb) + '%'; els.loudFill.style.backgroundColor = color; }
-    if (els.loudVal) els.loudVal.textContent = Math.round(sdb) + ' dB';
+    setStyleIfChanged(els.loudFill, 'width', loudDbToPct(sdb) + '%');
+    setStyleIfChanged(els.loudFill, 'backgroundColor', color);
+    setTextIfChanged(els.loudVal, Math.round(sdb) + ' dB');
 }
 
 function startCalibration() {
@@ -4837,8 +4973,9 @@ function drawVowelSpace() {
     const c = els.vowelSpaceCanvas;
     const ctx = getVowelSpaceCtx();
     if (!c || !ctx) return;
-    const w = c.clientWidth || 600;
-    const h = c.clientHeight || 320;
+    const css = canvasCssSize(c);
+    const w = css.w || 600;
+    const h = css.h || 320;
     if (c.width !== w) c.width = w;
     if (c.height !== h) c.height = h;
 
@@ -5188,14 +5325,32 @@ function updateVibratoPanelVisibility() {
 // --- Visualizer ---
 
 function resizeCanvas() {
-    els.canvas.width = els.canvas.clientWidth;
-    els.canvas.height = els.canvas.clientHeight;
+    // Called every frame: take the CSS box from the ResizeObserver cache and only
+    // touch canvas.width/height when it actually changed (each assignment
+    // reallocates the backing store and clears the canvas).
+    const { w, h } = canvasCssSize(els.canvas);
+    if (els.canvas.width !== w) els.canvas.width = w;
+    if (els.canvas.height !== h) els.canvas.height = h;
 }
 
 // Cached blue spectrum-fill gradient — rebuilt only when the canvas size changes
 // (the gradient is vertical, so it depends solely on height, but we key on both
 // dimensions). Reused across frames to avoid a per-frame createLinearGradient.
 let _specFillGradient = null, _specFillGradW = -1, _specFillGradH = -1;
+
+// Scratch buffers for the spectrum draw path. drawVisualizer runs at ~60 Hz, so
+// allocating these fresh each frame churned megabytes/second through the GC.
+// Each is kept separate where two live at once (the main analyser array is still
+// read after drawSpectrum has reused its own), and re-allocated only on a length
+// change.
+let _dvSpecBuf = null;       // drawSpectrum(): magnitudes for the node being drawn
+let _dvMainSpecBuf = null;   // main synth analyser magnitudes (outlives drawSpectrum)
+let _dvSmoothBuf = null;     // estimatePeakFormants(): smoothed magnitudes
+let _dvEnvDbBuf = null, _dvEnvFreqBuf = null;  // LPC envelope overlay
+let _dvSlopeBuf = null;      // slope-approximation line
+function scratchF32(cur, n) {
+    return (cur && cur.length === n) ? cur : new Float32Array(n);
+}
 
 function drawVisualizer() {
     if (!isPlaying && !analysisActive()) return;
@@ -5397,7 +5552,7 @@ function drawVisualizer() {
         if (dataArrayOverride) {
             dataArray = dataArrayOverride;
         } else {
-            dataArray = new Float32Array(bufferLength);
+            dataArray = _dvSpecBuf = scratchF32(_dvSpecBuf, bufferLength);
             analyzerNode.getFloatFrequencyData(dataArray);
         }
 
@@ -5443,7 +5598,7 @@ function drawVisualizer() {
     // Estimate formants using Peak Picking with pitch-aware smoothing and pre-emphasis
     const estimatePeakFormants = (dataArray, minDb, dbRange, nyq, pitch) => {
         const bufferLength = dataArray.length;
-        const smoothed = new Float32Array(bufferLength);
+        const smoothed = _dvSmoothBuf = scratchF32(_dvSmoothBuf, bufferLength);
 
         let windowSize = Math.max(2, Math.floor(bufferLength * 0.01));
         if (pitch > 50 && pitch < 1200) {
@@ -5724,16 +5879,23 @@ function drawVisualizer() {
         rms = Math.sqrt(rms / N);
         if (rms < 0.004) return { voiced: false };
 
-        // Decimate by 4 with a windowed-sinc anti-alias LPF (sharper transition than
-        // the old box-average, which leaked aliasing into F3+). Kernel is cached
-        // (fixed factor/cutoff), so the per-frame cost is just the convolution.
-        const decimFactor = 4;
+        // Decimate to a ~12 kHz analysis rate with a windowed-sinc anti-alias LPF
+        // (sharper transition than the old box-average, which leaked aliasing into
+        // F3+). The factor MUST follow the context rate: a hardcoded 4 gave a
+        // 2 kHz analysis Nyquist on a 16 kHz (Bluetooth HFP) context, which erases
+        // F2 and above. 48k/44.1k -> 4, 24k -> 2, 16k -> 1 (no decimation).
+        // Kernel is cached and keyed on the factor.
+        const decimFactor = Math.max(1, Math.round(sr / 12000));
         const decN = Math.floor(N / decimFactor);
         const decSr = sr / decimFactor;
         if (!lpcCoreState.decimated || lpcCoreState.decimated.length !== decN) {
             lpcCoreState.decimated = new Float32Array(decN);
         }
-        if (!lpcCoreState.decimKernel) {
+        if (lpcCoreState.decimKernelFactor !== decimFactor) {
+            lpcCoreState.decimKernel = null;
+            lpcCoreState.decimKernelFactor = decimFactor;
+        }
+        if (decimFactor > 1 && !lpcCoreState.decimKernel) {
             const fc = 0.45 / decimFactor;        // cutoff at 0.9× new Nyquist
             const M = 8 * decimFactor + 1, c = (M - 1) / 2;
             const sinc = (x) => (x === 0 ? 1 : Math.sin(Math.PI * x) / (Math.PI * x));
@@ -5749,15 +5911,20 @@ function drawVisualizer() {
             lpcCoreState.decimHalf = (M - 1) >> 1;
         }
         const dec = lpcCoreState.decimated;
-        const ker = lpcCoreState.decimKernel, kHalf = lpcCoreState.decimHalf, kLen = ker.length;
-        for (let i = 0; i < decN; i++) {
-            const center = i * decimFactor;
-            let acc = 0;
-            for (let n = 0; n < kLen; n++) {
-                const idx = center + n - kHalf;
-                if (idx >= 0 && idx < N) acc += ker[n] * buf[idx];
+        if (decimFactor === 1) {
+            // Already at (or below) the target analysis rate — nothing to filter.
+            dec.set(buf.subarray(0, decN));
+        } else {
+            const ker = lpcCoreState.decimKernel, kHalf = lpcCoreState.decimHalf, kLen = ker.length;
+            for (let i = 0; i < decN; i++) {
+                const center = i * decimFactor;
+                let acc = 0;
+                for (let n = 0; n < kLen; n++) {
+                    const idx = center + n - kHalf;
+                    if (idx >= 0 && idx < N) acc += ker[n] * buf[idx];
+                }
+                dec[i] = acc;
             }
-            dec[i] = acc;
         }
 
         // Voicing strength via autocorrelation peak ratio
@@ -5780,7 +5947,14 @@ function drawVisualizer() {
         // individual harmonics instead of the envelope. The autocorrelation lag
         // above doubles as a free f0 estimate. Only commit a switch after 6
         // consecutive frames so vibrato around a threshold doesn't thrash.
-        const pTarget = DSP.lpcOrderForF0(decSr / bestLag, 12);
+        // The pole budget has to scale with the analysis rate: 12 poles covers the
+        // 12 kHz target rate, but on a context that cannot be decimated that far
+        // (16 kHz Bluetooth HFP -> factor 1) the same 12 poles merge F1 and F2 into
+        // one 2 kHz-wide resonance and F2 disappears. Praat's rule of thumb
+        // (sr/1000 + 2) is applied only above the 12 kHz target, so every normal
+        // 48/44.1/24 kHz context keeps the tuned value of 12 unchanged.
+        const pBase = decSr > 12500 ? Math.min(20, Math.round(decSr / 1000) + 2) : 12;
+        const pTarget = DSP.lpcOrderForF0(decSr / bestLag, pBase);
         if (pTarget !== lpcCoreState.pCur) {
             lpcCoreState.pPendCount = (pTarget === lpcCoreState.pPend) ? lpcCoreState.pPendCount + 1 : 1;
             lpcCoreState.pPend = pTarget;
@@ -6056,7 +6230,7 @@ function drawVisualizer() {
         const gradient = _specFillGradient;
 
         const bufferLength = analyser.frequencyBinCount;
-        const dataArray = new Float32Array(bufferLength);
+        const dataArray = _dvMainSpecBuf = scratchF32(_dvMainSpecBuf, bufferLength);
         analyser.getFloatFrequencyData(dataArray);
 
         if (state.selectionActive) {
@@ -6425,8 +6599,8 @@ function drawVisualizer() {
             const decSr = lpcCoreState.lastDecSr;
             const maxFreq = Math.min(MAX_FREQ_DISPLAY, decSr / 2);
             const samples = 256;
-            const dbs = new Float32Array(samples);
-            const freqs = new Float32Array(samples);
+            const dbs = _dvEnvDbBuf = scratchF32(_dvEnvDbBuf, samples);
+            const freqs = _dvEnvFreqBuf = scratchF32(_dvEnvFreqBuf, samples);
             let envMin = Infinity, envMax = -Infinity;
             for (let s = 0; s < samples; s++) {
                 const freq = (s / (samples - 1)) * maxFreq;
@@ -6620,7 +6794,7 @@ function drawVisualizer() {
     // 4. Draw Slope Approximation Line (dashed yellow)
     if (state.showSlopeLine && isPlaying && analyser) {
         const slopeBufferLength = analyser.frequencyBinCount;
-        const slopeDataArray = new Float32Array(slopeBufferLength);
+        const slopeDataArray = _dvSlopeBuf = scratchF32(_dvSlopeBuf, slopeBufferLength);
         analyser.getFloatFrequencyData(slopeDataArray);
 
         const slopeMaxDb = analyser.maxDecibels;
@@ -7180,8 +7354,10 @@ els.btnMic.addEventListener('click', async () => {
                 els.btnMicRecord.style.display = 'inline-flex';
             }
 
-            // Overview view: keep a live rolling waveform while the mic is on
-            startOvMonTap();
+            // Overview/Waveform keep a live rolling waveform while the mic is on.
+            // Any other view never reads the buffer, so don't pay for the tap —
+            // applyViewMode starts it lazily when one of those views is entered.
+            if (state.viewMode === 'overview' || state.viewMode === 'waveform') startOvMonTap();
 
             // Kick off visualizer if it wasn't already running
             if (!isPlaying) {
@@ -9206,7 +9382,7 @@ if (window.RecordingsDB) {
 })();
 
 // App version — bottom-right corner + faint header suffix (bump on each release)
-const APP_VERSION = 'v1.55.0';
+const APP_VERSION = 'v1.56.0';
 (() => {
     // The #app-version element is parsed AFTER this script tag, so on first run
     // getElementById returns null. Defer to DOMContentLoaded if the DOM isn't ready.
@@ -9438,7 +9614,7 @@ if (els.loudCeilSlider) {
     els.loudCeilSlider.addEventListener('input', (e) => {
         state.loudnessCeilingDb = parseFloat(e.target.value);
         if (els.loudCeilVal) els.loudCeilVal.textContent = state.loudnessCeilingDb + ' dB';
-        if (els.loudMarker) els.loudMarker.style.left = loudDbToPct(state.loudnessCeilingDb) + '%';
+        setStyleIfChanged(els.loudMarker, 'left', loudDbToPct(state.loudnessCeilingDb) + '%');
         saveLoudnessCeiling(state.loudnessCeilingDb);
     });
 }
@@ -9642,7 +9818,7 @@ state.vowelSpace.calibration.saved = loadCalibrationFromStorage();
     if (savedCeil != null) state.loudnessCeilingDb = savedCeil;
     if (els.loudCeilSlider) els.loudCeilSlider.value = state.loudnessCeilingDb;
     if (els.loudCeilVal) els.loudCeilVal.textContent = state.loudnessCeilingDb + ' dB';
-    if (els.loudMarker) els.loudMarker.style.left = loudDbToPct(state.loudnessCeilingDb) + '%';
+    setStyleIfChanged(els.loudMarker, 'left', loudDbToPct(state.loudnessCeilingDb) + '%');
 }
 applyVowelSpaceMode('basic');
 applyVowelSpaceLanguage('jp');
