@@ -50,6 +50,37 @@ console.log('\n\x1b[1m1. YIN pitch accuracy (steady tones, 44.1 kHz)\x1b[0m');
 }
 
 // ---------------------------------------------------------------------------
+console.log('\n\x1b[1m1b. refinePeriod — seeded narrow-band period refinement (H1 meter path)\x1b[0m');
+{
+  // The H1 meter reads f0 to ~0.1-0.3 Hz. refinePeriod replaces the full-range
+  // YIN there, seeded by the pitch tracker, so it must hit the same precision on
+  // both a 48 kHz context and the 16 kHz one AirPods/HFP can force.
+  let worst = 0;
+  for (const sr of [48000, 16000]) {
+    const N = 4096;
+    for (const f0 of [110, 220, 330, 440, 660, 880]) {
+      const sig = DSP.synthVowel({ sr, dur: 0.5, f0, formants: [700, 1220, 2600, 3400, 4500] });
+      const frame = frameAt(sig, sr, 0.25, N);
+      // seed is deliberately off by +3% — the live tracker is never exact
+      const r = DSP.refinePeriod(frame, sr, f0 * 1.03);
+      const err = r ? Math.abs(r.hz - f0) : 9999;
+      worst = Math.max(worst, err);
+      const line = `${sr / 1000}kHz f0=${f0}Hz → ${r ? hz(r.hz) : 'null'}  (${err.toFixed(3)} Hz)`;
+      err < 0.3 ? pass(line) : fail(line);
+    }
+  }
+  console.log(`  worst-case error: ${worst.toFixed(3)} Hz (gate: <0.3 Hz)`);
+  // Degenerate inputs must return null rather than throw / lie.
+  const silent = new Float64Array(4096);
+  const guards = [
+    ['silent frame', DSP.refinePeriod(silent, 48000, 220)],
+    ['no seed', DSP.refinePeriod(silent, 48000, 0)],
+    ['seed below window resolution', DSP.refinePeriod(new Float64Array(64), 48000, 50)],
+  ];
+  for (const [label, r] of guards) (r === null) ? pass(`${label} → null`) : fail(`${label} → ${JSON.stringify(r)}`);
+}
+
+// ---------------------------------------------------------------------------
 console.log('\n\x1b[1m2. Offline pitch contour (Viterbi) — octave-error robustness\x1b[0m');
 {
   const sr = 44100;

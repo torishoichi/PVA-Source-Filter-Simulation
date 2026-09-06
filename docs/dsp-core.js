@@ -257,6 +257,65 @@
   }
 
   // ----------------------------------------------------------------------------
+  // refinePeriod — narrow-band period refinement around an already-known f0.
+  //
+  // The expensive part of YIN is the difference function, whose cost is
+  // O(N * tauRange). When a seed f0 is available (live pitch tracker, synth
+  // pitch, previous frame) only lags within +/-`spread` of the seed matter, so
+  // the range collapses from ~sr/60 lags to a few dozen — 10-30x cheaper than a
+  // full-range yin() at the same window length, i.e. the same 0.1-0.3 Hz read
+  // precision for a fraction of the CPU.
+  //
+  // d(tau) is divided by its overlap length (N - tau) so the shrinking summation
+  // window does not tilt the parabola, then the minimum is refined by parabolic
+  // interpolation. Because the search band cannot reach 2*T or T/2, this is also
+  // immune to the octave slips a full-range search can make.
+  //
+  // Reentrant: all buffers are local. Returns { hz, tau }, or null when the lag
+  // range is empty / degenerate or the frame is below the silence floor.
+  // ----------------------------------------------------------------------------
+  function refinePeriod(buf, sr, f0Seed, opts) {
+    opts = opts || {};
+    const spread = opts.spread != null ? opts.spread : 0.15;
+    const rmsGate = opts.rmsGate != null ? opts.rmsGate : 0.004;
+    const N = buf.length;
+    if (!(f0Seed > 0) || !(sr > 0) || !(N >= 8)) return null;
+    const tauLo = Math.max(2, Math.floor(sr / (f0Seed * (1 + spread))));
+    const tauHi = Math.min(N >> 1, Math.ceil(sr / (f0Seed / (1 + spread))));
+    if (tauHi - tauLo < 2) return null; // need both parabola neighbours
+
+    // DC removal (matches yin()'s default preemph=0 path) + silence gate
+    const x = new Float64Array(N);
+    let mean = 0;
+    for (let i = 0; i < N; i++) mean += buf[i];
+    mean /= N;
+    let rms = 0;
+    for (let i = 0; i < N; i++) { const v = buf[i] - mean; x[i] = v; rms += v * v; }
+    if (Math.sqrt(rms / N) < rmsGate) return null;
+
+    const M = tauHi - tauLo + 1;
+    const d = new Float64Array(M);
+    for (let tau = tauLo; tau <= tauHi; tau++) {
+      let s = 0; const W = N - tau;
+      for (let j = 0; j < W; j++) { const dd = x[j] - x[j + tau]; s += dd * dd; }
+      d[tau - tauLo] = s / W;
+    }
+    let bi = 0;
+    for (let i = 1; i < M; i++) if (d[i] < d[bi]) bi = i;
+    let tau = tauLo + bi;
+    if (bi > 0 && bi < M - 1) {
+      const y0 = d[bi - 1], y1 = d[bi], y2 = d[bi + 1];
+      const den = y0 - 2 * y1 + y2;
+      if (Math.abs(den) > 1e-18) {
+        const dl = 0.5 * (y0 - y2) / den;
+        if (dl > -1 && dl < 1) tau = tauLo + bi + dl;
+      }
+    }
+    if (!(tau > 0)) return null;
+    return { hz: sr / tau, tau };
+  }
+
+  // ----------------------------------------------------------------------------
   // CPPS — Cepstral Peak Prominence (Smoothed). Robust, validated correlate of
   // dysphonia / breathiness / phonation efficiency. Higher = clearer/periodic.
   //
@@ -1512,7 +1571,7 @@
   const api = {
     fftRadix2, nextPow2, hann,
     burgLPC, durandKerner, lpcFormants, decimate,
-    yin, cpps, h1h2, formantBoostDb, iaifGlottal, autocorrF0, estimateOpenQuotient,
+    yin, refinePeriod, cpps, h1h2, formantBoostDb, iaifGlottal, autocorrF0, estimateOpenQuotient,
     yinCandidates, viterbiPitchPath, pitchContour, octaveSnap,
     offlineFormants, trackAndSmooth, vibratoProbeFormants, lpcOrderForF0,
     timeStretchWsola, pitchShift,
