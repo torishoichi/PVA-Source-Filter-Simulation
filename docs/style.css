@@ -197,6 +197,7 @@ header p {
    top and buries the Source/Filter controls below, making them hard to scroll to and see.
    Triggers: Roughness legend open, or the Recordings / Mic Analysis panels expanded. */
 .visualizer-panel:not(.is-fullscreen):has(#roughness-toggle.roughness-active),
+.visualizer-panel:not(.is-fullscreen):has(#astc-toggle.astc-active),
 .visualizer-panel:not(.is-fullscreen):has(#recordings-panel[open]),
 .visualizer-panel:not(.is-fullscreen):has(#mic-analysis-group[open]) {
     position: relative;
@@ -4598,4 +4599,120 @@ body.learn-drawer-open { overflow: hidden; }
     touch-action: none;
     background: linear-gradient(135deg, transparent 55%, rgba(255, 255, 255, 0.55) 55%);
     border-bottom-right-radius: 10px;
+}
+
+/* ============================================================================
+   ASTC overlay (Absolute Spectral Tone Color — Howell 2016)
+   Toggle pill + legend below the spectrum. Derived from the Roughness
+   (.roughness-legend / .roughness-active) styles, in the band palette.
+   ============================================================================ */
+.inline-toggle-btn.astc-active {
+    background-color: #7b4bd8;
+    color: #fff;
+    border-color: #7b4bd8;
+}
+
+/* ASTC: standalone pill, same metrics as the Roughness pill */
+#astc-toggle {
+    padding: 8px 22px;
+    font-size: 0.78rem;
+    line-height: 1.4;
+    min-width: 62px;
+    text-align: center;
+}
+
+.canvas-control-group:has(#astc-toggle) {
+    background: transparent;
+    border-color: transparent;
+    padding: 0;
+}
+
+.astc-legend {
+    margin-top: 12px;
+    padding: 12px 14px;
+    background: var(--bg-soft);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    font-size: 0.78rem;
+    color: var(--text-primary);
+}
+.al-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px 12px;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px dashed var(--glass-border);
+}
+.al-title {
+    font-weight: 700;
+    font-size: 0.82rem;
+}
+.al-src {
+    font-size: 0.68rem;
+    color: var(--text-secondary);
+    margin-left: auto;
+}
+.al-bands {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    margin-bottom: 8px;
+}
+.al-band {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.74rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+.al-band em {
+    font-style: normal;
+    font-weight: 400;
+    font-size: 0.68rem;
+    color: var(--text-secondary);
+}
+.al-chip {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    display: inline-block;
+    flex: 0 0 auto;
+    background: #888;
+}
+.al-band[data-astc="u"]        .al-chip { background: rgb(156, 60, 217); }
+.al-band[data-astc="o"]        .al-chip { background: rgb(33, 150, 243); }
+.al-band[data-astc="open-o"]   .al-chip { background: rgb(0, 172, 193); }
+.al-band[data-astc="script-a"] .al-chip { background: rgb(46, 156, 100); }
+.al-band[data-astc="a"]        .al-chip { background: rgb(139, 195, 74); }
+.al-band[data-astc="ae"]       .al-chip { background: rgb(222, 178, 32); }
+.al-band[data-astc="i"]        .al-chip { background: rgb(230, 139, 48); }
+.al-band[data-astc="iB"]       .al-chip { background: rgb(210, 69, 69); }
+.al-readout-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+.al-readout-label {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+.al-readout {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-weight: 700;
+    font-size: 0.86rem;
+    color: #7b4bd8;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.al-note {
+    font-size: 0.7rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
 }

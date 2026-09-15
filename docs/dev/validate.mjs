@@ -446,6 +446,128 @@ console.log('\n\x1b[1m10. Vibrato analysis — rate (Hz) & extent (¢) measureme
 }
 
 // ---------------------------------------------------------------------------
+console.log('\n\x1b[1m11. ASTC (Howell 2016) — absolute tone-color scale & spectral bundles\x1b[0m');
+{
+  const fmtB = (b) => `${b.label}${b.weakBridge ? '(wb)' : ''} ×${b.complexity} c=${b.centroid.toFixed(1)}Hz`;
+  const fmtAll = (bs) => bs.map(fmtB).join(' · ');
+
+  // (a) Figure 15 scale — note names → Hz, band edges = geometric mean of neighbours
+  {
+    const scale = [[440, 'u'], [659.3, 'o'], [880, 'ɔ'], [830.6, 'ɔ'], [1319, 'ɑ'],
+                   [1760, 'a'], [2637, 'æ'], [4186, 'i'], [8000, 'iB']];
+    const wrong = scale.filter(([f, k]) => (DSP.astcOf(f) || {}).key !== k)
+                       .map(([f, k]) => `${f}→${(DSP.astcOf(f) || {}).key}≠${k}`);
+    const line = `scale: ${scale.map(([f, k]) => `${f}→${k}`).join(', ')}`;
+    wrong.length === 0 ? pass(line) : fail(`${line}  [${wrong.join(' ')}]`);
+
+    const edgeOk = DSP.astcOf(538.6).key === 'o' && DSP.astcOf(538.5).key === 'u' &&
+                   DSP.astcIndex(440) === 0 && DSP.astcIndex(8000) === 7;
+    const guardOk = DSP.astcOf(0) === null && DSP.astcOf(-5) === null &&
+                    DSP.astcOf(NaN) === null && DSP.astcIndex(0) === -1;
+    (edgeOk && guardOk) ? pass('band edges inclusive-low, and 0 / negative / NaN → null')
+                        : fail(`edges ${edgeOk} guards ${guardOk}`);
+  }
+
+  // (b) Figure 17 — one bundle of H2,H3,H4 over f0=220; the percept follows the
+  //     amplitude-weighted centroid as the balance inside the bundle shifts.
+  {
+    const tri = (d2, d3, d4) => DSP.spectralBundles(
+      [{ n: 2, freq: 440, db: d2 }, { n: 3, freq: 660, db: d3 }, { n: 4, freq: 880, db: d4 }],
+      { f0: 220 });
+
+    let bs = tri(0, 0, 0);
+    let ok = bs.length === 1 && bs[0].label === '<o' && bs[0].complexity === 3 &&
+             !bs[0].weakBridge && Math.abs(bs[0].centroid - 660) < 0.5;
+    ok ? pass(`equal H2/H3/H4 → ${fmtAll(bs)} (expect <o, centroid 660)`)
+       : fail(`equal H2/H3/H4 → ${fmtAll(bs)} (expect <o, centroid 660)`);
+
+    // H2 louder → the colour darkens toward ~u. NOTE: with the specified linear
+    // amplitude weighting (a = 10^(dB/20)) a +12 dB boost lands at 550.3 Hz — a
+    // 110 Hz move toward ~u but still 12 Hz inside ~o (the ~u/~o edge is 538.6
+    // Hz; crossing it needs ≥ +13.4 dB). Both steps are gated.
+    bs = tri(12, 0, 0);
+    ok = bs.length === 1 && bs[0].complexity === 3 && !bs[0].weakBridge &&
+         bs[0].centroid < 600 && Math.abs(bs[0].centroid - 550.3) < 1;
+    ok ? pass(`H2 +12 dB → ${fmtAll(bs)} (centroid falls 660→550 toward ~u)`)
+       : fail(`H2 +12 dB → ${fmtAll(bs)} (expect centroid ≈550 Hz)`);
+
+    bs = tri(18, 0, 0);
+    ok = bs.length === 1 && bs[0].label === '<u' && bs[0].complexity === 3 && !bs[0].weakBridge;
+    ok ? pass(`H2 +18 dB → ${fmtAll(bs)} (expect <u)`) : fail(`H2 +18 dB → ${fmtAll(bs)} (expect <u)`);
+
+    bs = tri(0, 0, 12);
+    ok = bs.length === 1 && bs[0].label === '<ɔ' && bs[0].complexity === 3 && !bs[0].weakBridge;
+    ok ? pass(`H4 +12 dB → ${fmtAll(bs)} (expect <ɔ)`) : fail(`H4 +12 dB → ${fmtAll(bs)} (expect <ɔ)`);
+  }
+
+  // (c) Weak tone-color bridging — the centroid's band holds no actual harmonic
+  {
+    let bs = DSP.spectralBundles([{ n: 1, freq: 440, db: 0 }, { n: 2, freq: 880, db: 0 }], { f0: 440 });
+    let ok = bs.length === 1 && bs[0].label === '<o' && bs[0].weakBridge === true &&
+             Math.abs(bs[0].centroid - 660) < 0.5;
+    ok ? pass(`A4: H1+H2 equal → ${fmtAll(bs)} (expect <o weak-bridged)`)
+       : fail(`A4: H1+H2 equal → ${fmtAll(bs)} (expect <o(wb))`);
+
+    // A♭5: H2 is 30 dB down — a lone non-H1 harmonic never forms its own bundle,
+    // so it merges back and the pair reads as the ASTC of H1.
+    bs = DSP.spectralBundles([{ n: 1, freq: 830.6, db: 0 }, { n: 2, freq: 1661.2, db: -30 }], { f0: 830.6 });
+    ok = bs.length === 1 && bs[0].label === '<ɔ' && bs[0].weakBridge === false && bs[0].complexity === 2;
+    ok ? pass(`A♭5: H1 0dB + H2 −30dB → ${fmtAll(bs)} (expect <ɔ, not weak-bridged)`)
+       : fail(`A♭5: H1 0dB + H2 −30dB → ${fmtAll(bs)} (expect <ɔ)`);
+  }
+
+  // (d) Trough splitting — two peaks over f0=110 separated by a −20 dB valley at H9
+  {
+    const prof = { 1: -18, 2: -14, 3: -10, 4: -6, 5: 0, 6: 2, 7: 0, 8: -10, 9: -20,
+                   10: -6, 11: -2, 12: -6, 13: -16, 14: -24 };
+    const hs = Object.keys(prof).map((n) => ({ n: +n, freq: 110 * +n, db: prof[n] }));
+    const bs = DSP.spectralBundles(hs, { f0: 110 });
+    const k1 = bs[0] && bs[0].astc ? bs[0].astc.key : '?';
+    const k2 = bs[1] && bs[1].astc ? bs[1].astc.key : '?';
+    const ok = bs.length >= 2 && (k1 === 'o' || k1 === 'ɔ') && (k2 === 'ɑ' || k2 === 'a');
+    const line = `f0=110 two-hump (H5–H7 / H10–H12, H9 −20 dB): ${bs.length} bundles → ${fmtAll(bs)}`;
+    ok ? pass(line) : fail(line + '  (expect ≥2, first o|ɔ, second ɑ|a)');
+  }
+
+  // (e) End-to-end: synthesized vowel → FFT → harmonic dB → bundles
+  {
+    const sr = 44100, f0 = 110, N = 8192;
+    const sig = DSP.synthVowel({ sr, dur: 0.5, f0, formants: [700, 1220, 2600, 3400, 4500] });
+    const w = DSP.hann(N);
+    const re = new Float64Array(N), im = new Float64Array(N);
+    const start = Math.round(0.25 * sr) - (N >> 1);
+    for (let i = 0; i < N; i++) {
+      const idx = start + i;
+      re[i] = (idx >= 0 && idx < sig.length ? sig[idx] : 0) * w[i];
+    }
+    DSP.fftRadix2(re, im);
+    const bins = N >> 1, binHz = sr / N;
+    const harmonics = [];
+    for (let n = 1; n * f0 <= 6000; n++) {
+      const lo = Math.max(0, Math.ceil((n * f0 * 0.9) / binHz));
+      const hi = Math.min(bins - 1, Math.floor((n * f0 * 1.1) / binHz));
+      let best = -Infinity, bf = n * f0;
+      for (let i = lo; i <= hi; i++) {
+        const db = 20 * Math.log10(Math.hypot(re[i], im[i]) + 1e-12);
+        if (db > best) { best = db; bf = i * binHz; }
+      }
+      if (isFinite(best)) harmonics.push({ n, freq: bf, db: best });
+    }
+    const bs = DSP.spectralBundles(harmonics, { f0 });
+    // The loudest bundle is the F1 peak (F1 = 700 Hz → H6/H7 region). NOTE: the
+    // literal FIRST bundle here is H1–H3 (~200 Hz, <u) — the true-fundamental
+    // bundle, which the 3 dB trough rule correctly separates from the F1 hump.
+    let loud = bs[0];
+    for (const b of bs) if (b.peakDb > loud.peakDb) loud = b;
+    const ok = bs.length >= 2 && loud.centroid > 500 && loud.centroid < 1000 &&
+               (loud.label === '<o' || loud.label === '<ɔ') &&
+               bs[0].isFundamental === true;
+    const line = `synthVowel f0=110 F1=700 → ${bs.length} bundles: ${fmtAll(bs)} | F1 bundle ${loud.label} c=${loud.centroid.toFixed(0)}Hz`;
+    ok ? pass(line) : fail(line + '  (expect ≥2 bundles, F1 bundle <o|<ɔ in 500–1000 Hz)');
+  }
+}
+
+// ---------------------------------------------------------------------------
 console.log('');
 if (failures === 0) { console.log('\x1b[32m\x1b[1mALL GATES PASSED\x1b[0m\n'); process.exit(0); }
 else { console.log(`\x1b[31m\x1b[1m${failures} GATE(S) FAILED\x1b[0m\n`); process.exit(1); }

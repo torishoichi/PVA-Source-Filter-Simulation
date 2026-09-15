@@ -121,6 +121,10 @@
                 <button id="roughness-toggle" class="inline-toggle-btn" type="button"
                     title="倍音のラフネス・ゾーンをスペクトルに重ねる">Rough</button>
             </div>
+            <div class="toolbar-item toolbar-item-fit">
+                <button id="astc-toggle" class="inline-toggle-btn" type="button"
+                    title="Howell の Absolute Spectral Tone Color 帯と、倍音の束ごとの母音（&lt;o など）を表示">ASTC</button>
+            </div>
         </div>
         <div class="spectrum-toolbar spectrum-slope-row" id="slope-row">
             <div class="toolbar-item">
@@ -169,6 +173,30 @@
                     <div class="rl-desc">pitch dominance region 外 → 音程判断に使われない。</div>
                 </div>
             </div>
+        </div>
+        <!-- ASTC legend: shown only while the ASTC overlay is ON.
+             #astc-bundle-readout is written by main.js updateAstcReadout(). -->
+        <div id="astc-legend" class="astc-legend" style="display:none;">
+            <div class="al-header">
+                <span class="al-title">ASTC — Absolute Spectral Tone Color</span>
+                <span class="al-src">Howell (2016) Fig.15 / 局所スペクトル・コヒーレンス</span>
+            </div>
+            <div class="al-bands">
+                <span class="al-band" data-astc="u"><i class="al-chip"></i>~u <em>≤C5 (&lt;539Hz)</em></span>
+                <span class="al-band" data-astc="o"><i class="al-chip"></i>~o <em>539–762Hz</em></span>
+                <span class="al-band" data-astc="open-o"><i class="al-chip"></i>~ɔ <em>762–1141Hz</em></span>
+                <span class="al-band" data-astc="script-a"><i class="al-chip"></i>~ɑ <em>1141–1523Hz</em></span>
+                <span class="al-band" data-astc="a"><i class="al-chip"></i>~a <em>1523–2282Hz</em></span>
+                <span class="al-band" data-astc="ae"><i class="al-chip"></i>~æ/ɛ/e <em>2282–2876Hz</em></span>
+                <span class="al-band" data-astc="i"><i class="al-chip"></i>~i <em>2876–6093Hz</em></span>
+                <span class="al-band" data-astc="iB"><i class="al-chip"></i>~bright i <em>≥6093Hz</em></span>
+            </div>
+            <div class="al-readout-row">
+                <span class="al-readout-label">束の母音</span>
+                <span class="al-readout" id="astc-bundle-readout">—</span>
+            </div>
+            <div class="al-note">単純音の周波数だけで決まる母音らしさ（ASTC）。倍音の束＝スペクトルピークは、その振幅重心の ASTC の母音（&lt;o など）として聞こえる。</div>
+            <div class="al-note">(wb)＝束の重心の帯に倍音が無い＝弱く架橋された色。×N は束の倍音本数。</div>
         </div>
     </section>
 
