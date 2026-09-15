@@ -226,6 +226,8 @@ const state = {
     rdManual: null, // null = auto from P/R/mechanism, number = manual Rd override
     logScale: false, // Toggle for logarithmic frequency axis
     roughnessVisible: false, // Toggle for roughness zone overlay (ERB + 5kHz ceiling)
+    astcVisible: false, // Toggle for the ASTC overlay (Howell tone-color bands + bundle vowels)
+    astcBundles: null,  // Last DSP.spectralBundles() result (recomputed at most every 100 ms)
     selectionActive: false,
     selectionMinFreq: 0,
     selectionMaxFreq: 0,
@@ -360,6 +362,8 @@ const els = {
     btnLogScale: document.getElementById('log-scale-toggle'),
     btnRoughness: document.getElementById('roughness-toggle'),
     roughnessLegend: document.getElementById('roughness-legend'),
+    btnAstc: document.getElementById('astc-toggle'),           // PC + mobile
+    astcLegend: document.getElementById('astc-legend'),        // PC + mobile
     pitchMirror: document.getElementById('rl-pitch-mirror'),
     btnFullscreen: document.getElementById('spectrum-fullscreen-btn'),
     micMethodSelect: document.getElementById('mic-formant-method'),
@@ -838,6 +842,229 @@ const ROUGH_ZONE_NAME = {
     'rough-unr':  'Rough & Unresolved',
     'ceiling':    'Ceiling (>5kHz)'
 };
+
+// --- ASTC (Absolute Spectral Tone Color) overlay ---
+// Howell (2016), Figure 15: a simple tone carries a vowel quality fixed by its
+// frequency alone. A spectral peak — a "bundle" of adjacent harmonics bounded by
+// lower-amplitude neighbours — is heard as the ASTC of its amplitude-weighted
+// centroid ("<o", "<ɑ" …). The DSP lives in dsp-core.js (DSP.ASTC_BANDS /
+// DSP.spectralBundles); everything below is presentation only.
+const ASTC_BUNDLE_INTERVAL_MS = 100; // bundles are recomputed at most 10x/s, never per frame
+const ASTC_HOLD_MS = 300;            // keep the last bundles this long after the source goes unvoiced
+const ASTC_MAX_HARMONICS = 40;
+
+// Band hues, low → high (purple → red)
+const ASTC_BAND_RGB = {
+    'u':  [156, 60, 217],
+    'o':  [33, 150, 243],
+    'ɔ':  [0, 172, 193],
+    'ɑ':  [46, 156, 100],
+    'a':  [139, 195, 74],
+    'æ':  [222, 178, 32],
+    'i':  [230, 139, 48],
+    'iB': [210, 69, 69],
+};
+function astcRgba(key, alpha) {
+    const c = ASTC_BAND_RGB[key] || [120, 120, 120];
+    return `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${alpha})`;
+}
+function astcBandList() {
+    return (typeof DSP !== 'undefined' && DSP.ASTC_BANDS) ? DSP.ASTC_BANDS : null;
+}
+
+let _lastPitchClarity = 0; // clarity of the newest pitch sample (mic YIN or playback contour)
+let _astcCalcAt = 0;    // last bundle recomputation (ms)
+let _astcVoicedAt = 0;  // last recomputation that had a usable source (ms)
+let _astcScale = null;  // { minDb, dbRange, boost } of the spectrum the bundles came from
+
+// Harmonic amplitudes straight off a dB FFT frame: for each n, the loudest bin
+// within ±10% of n·f0 (same rule as the Hn labels on the spectrum). The bin
+// range is computed from the bin width — no scan over the whole spectrum.
+function sampleHarmonicsDb(dataArrayDb, nyquist, f0, maxFreq, maxN) {
+    const out = [];
+    if (!dataArrayDb || !(f0 > 0) || !(nyquist > 0)) return out;
+    const bins = dataArrayDb.length;
+    if (!bins) return out;
+    const binHz = nyquist / bins;
+    const searchRangeHz = f0 * 0.1;
+    const cap = Math.min(maxN != null ? maxN : ASTC_MAX_HARMONICS, Math.floor(maxFreq / f0));
+    for (let n = 1; n <= cap; n++) {
+        const expected = n * f0;
+        if (expected > maxFreq) break;
+        const lo = Math.max(0, Math.ceil((expected - searchRangeHz) / binHz));
+        const hi = Math.min(bins - 1, Math.floor((expected + searchRangeHz) / binHz));
+        let peakVal = -Infinity, peakFreq = expected;
+        for (let i = lo; i <= hi; i++) {
+            const v = dataArrayDb[i];
+            if (v > peakVal) { peakVal = v; peakFreq = i * binHz; }
+        }
+        if (!isFinite(peakVal)) continue;
+        out.push({ n, freq: peakFreq, db: peakVal });
+    }
+    return out;
+}
+
+// Recompute the bundles from one spectrum frame (throttled to 10 Hz).
+function updateAstcBundles(dataArrayDb, nyquist, f0, minDb, dbRange, boost, nowT) {
+    if (!state.astcVisible) return;
+    if (nowT - _astcCalcAt < ASTC_BUNDLE_INTERVAL_MS) return;
+    _astcCalcAt = nowT;
+    if (typeof DSP === 'undefined' || !DSP.spectralBundles) return;
+    const harmonics = sampleHarmonicsDb(dataArrayDb, nyquist, f0, MAX_FREQ_DISPLAY, ASTC_MAX_HARMONICS);
+    // Silence guard: with nothing above the analyser floor the "harmonics" are
+    // just noise, and the 40 dB relative floor inside spectralBundles would still
+    // happily bundle them. Show nothing instead.
+    let peakDb = -Infinity;
+    for (const h of harmonics) if (h.db > peakDb) peakDb = h.db;
+    const bundles = (harmonics.length && peakDb > minDb) ? DSP.spectralBundles(harmonics, { f0 }) : [];
+    state.astcBundles = bundles.length ? bundles : null;
+    _astcScale = { minDb, dbRange, boost };
+    _astcVoicedAt = nowT;
+    updateAstcReadout();
+}
+
+// Unvoiced / no usable pitch: hold the last bundles briefly, then drop them.
+function holdOrClearAstcBundles(nowT) {
+    if (!state.astcBundles) return;
+    if (nowT - _astcVoicedAt <= ASTC_HOLD_MS) return;
+    state.astcBundles = null;
+    _astcScale = null;
+    updateAstcReadout();
+}
+
+// Background: one faint full-height stripe per ASTC band (+ dashed edges).
+function drawAstcBands(width, height) {
+    const bands = astcBandList();
+    if (!bands) return;
+    canvasCtx.save();
+    for (const b of bands) {
+        const x0 = Math.max(0, Math.min(width, freqToX(b.lo, width)));
+        const x1 = Math.max(0, Math.min(width, freqToX(Math.min(b.hi, MAX_FREQ_DISPLAY), width)));
+        if (x1 - x0 < 0.5) continue;
+        canvasCtx.fillStyle = astcRgba(b.key, 0.05);
+        canvasCtx.fillRect(x0, 0, x1 - x0, height);
+    }
+    canvasCtx.setLineDash([3, 4]);
+    canvasCtx.lineWidth = 1;
+    canvasCtx.strokeStyle = 'rgba(0, 0, 0, 0.12)';
+    canvasCtx.beginPath();
+    for (const b of bands) {
+        if (b.lo <= 0) continue;
+        const x = freqToX(b.lo, width);
+        if (x < 1 || x > width - 1) continue;
+        canvasCtx.moveTo(Math.round(x) + 0.5, 0);
+        canvasCtx.lineTo(Math.round(x) + 0.5, height);
+    }
+    canvasCtx.stroke();
+    canvasCtx.setLineDash([]);
+    canvasCtx.restore();
+}
+
+// Vertical geometry of the ASTC band ruler. The canvas backing store is sized to
+// its CSS box (resizeCanvas), so these offsets are CSS pixels:
+//   - the HTML x-axis labels overlay the bottom ~24px,
+//   - on PC the spec-zoom chip (− Full ＋, .wave-zoom: 22px tall, bottom:22px)
+//     floats over the bottom-left, i.e. the band height-44 … height-22.
+// The ruler is lifted clear of whichever of those is present, so it never shares
+// a row with them (and never has to shove its ~u / ~o labels sideways).
+const ASTC_AXIS_LABEL_H = 24;
+const ASTC_ZOOM_CTRL_H = 44;
+function astcStripGeom(width, height) {
+    const stripH = (height < 240 || width < 400) ? 10 : 14;
+    let bottom = height - ASTC_AXIS_LABEL_H;
+    if (els.specZoom && els.specZoom.offsetParent !== null) {
+        bottom = Math.min(bottom, height - ASTC_ZOOM_CTRL_H - 4);
+    }
+    return { stripH, top: bottom - stripH, bottom };
+}
+
+// Foreground: the opaque band ruler above the frequency axis labels.
+function drawAstcLabelStrip(width, height) {
+    const bands = astcBandList();
+    if (!bands || height < 80) return;
+    const { stripH, top: stripTop } = astcStripGeom(width, height);
+    canvasCtx.save();
+    canvasCtx.textAlign = 'center';
+    canvasCtx.textBaseline = 'middle';
+    canvasCtx.font = `${stripH <= 10 ? 8 : 9}px Inter, sans-serif`;
+    for (const b of bands) {
+        const x0 = Math.max(0, Math.min(width, freqToX(b.lo, width)));
+        const x1 = Math.max(0, Math.min(width, freqToX(Math.min(b.hi, MAX_FREQ_DISPLAY), width)));
+        const w = x1 - x0;
+        if (w < 0.5) continue;
+        canvasCtx.fillStyle = astcRgba(b.key, 0.35);
+        canvasCtx.fillRect(x0, stripTop, w, stripH);
+        if (w >= 22) {
+            canvasCtx.fillStyle = 'rgba(30, 30, 30, 0.85)';
+            canvasCtx.fillText(b.label, x0 + w / 2, stripTop + stripH / 2 + 0.5);
+        }
+    }
+    canvasCtx.strokeStyle = 'rgba(0, 0, 0, 0.18)';
+    canvasCtx.lineWidth = 1;
+    canvasCtx.strokeRect(0.5, stripTop + 0.5, width - 1, stripH - 1);
+    canvasCtx.restore();
+}
+
+// Foreground: a bracket + vowel label over every spectral bundle.
+function drawAstcBundles(width, height) {
+    const bundles = state.astcBundles;
+    if (!bundles || !bundles.length || !_astcScale || height < 80) return;
+    const { minDb, dbRange, boost } = _astcScale;
+    const small = width < 400;
+    // Lowest bracket line allowed: clear of the ASTC ruler (its 5px end ticks
+    // included) and never below the previous fixed floor.
+    const yMax = Math.min(height - 62, astcStripGeom(width, height).top - 8);
+    canvasCtx.save();
+    canvasCtx.textAlign = 'center';
+    canvasCtx.textBaseline = 'alphabetic';
+    canvasCtx.font = `bold ${small ? 9 : 11}px Inter, sans-serif`;
+    for (const bd of bundles) {
+        const x0 = freqToX(bd.freqFrom, width);
+        const x1 = freqToX(bd.freqTo, width);
+        if (x1 < -24 || x0 > width + 24) continue;
+        const norm = dbRange > 0 ? Math.max(0, (bd.peakDb - minDb) / dbRange) : 0;
+        const peakY = height - Math.pow(norm, boost) * height * 0.9;
+        // 24 px above the tallest harmonic of the bundle (the Hn labels sit at y-8),
+        // pushed below the roughness strips when those occupy the top of the canvas.
+        let y = peakY - 24;
+        if (state.roughnessVisible && y < 64) y = 64;
+        if (y < 14) y = 14;
+        if (y > yMax) y = yMax;
+        const color = bd.astc ? astcRgba(bd.astc.key, 0.95) : 'rgba(90, 90, 90, 0.95)';
+        const xa = Math.max(0, Math.min(width, x0));
+        const xb = Math.max(0, Math.min(width, x1));
+
+        // Bracket  ⌐───¬
+        canvasCtx.strokeStyle = color;
+        canvasCtx.lineWidth = 1.5;
+        canvasCtx.beginPath();
+        canvasCtx.moveTo(xa, y + 5);
+        canvasCtx.lineTo(xa, y);
+        canvasCtx.lineTo(xb, y);
+        canvasCtx.lineTo(xb, y + 5);
+        canvasCtx.stroke();
+
+        // Centroid tick ▼
+        const xc = Math.max(0, Math.min(width, freqToX(bd.centroid, width)));
+        canvasCtx.fillStyle = color;
+        canvasCtx.beginPath();
+        canvasCtx.moveTo(xc - 3.5, y + 1);
+        canvasCtx.lineTo(xc + 3.5, y + 1);
+        canvasCtx.lineTo(xc, y + 6);
+        canvasCtx.closePath();
+        canvasCtx.fill();
+
+        // Label:  <o ×3   /   <o(wb) ×2
+        const txt = `${bd.label}${bd.weakBridge ? '(wb)' : ''} ×${bd.complexity}`;
+        const tw = canvasCtx.measureText(txt).width;
+        const tx = Math.max(tw / 2 + 2, Math.min(width - tw / 2 - 2, (xa + xb) / 2));
+        canvasCtx.fillStyle = 'rgba(255, 255, 255, 0.82)';
+        canvasCtx.fillRect(tx - tw / 2 - 3, y - (small ? 12 : 14), tw + 6, small ? 11 : 13);
+        canvasCtx.fillStyle = color;
+        canvasCtx.fillText(txt, tx, y - 4);
+    }
+    canvasCtx.restore();
+}
 
 // Generate an audio buffer filled with white noise
 function createNoiseBuffer(ctx) {
@@ -5376,11 +5603,13 @@ function drawVisualizer() {
             pbClar = _yinClarity;
         }
         state.cachedMicPitch = pbHz;
+        _lastPitchClarity = pbClar || 0;
         pushPitchSample(pbHz, pbClar);
     } else if (analysisActive() && micAnalyser) {
         if (!state.isMicPaused) {
             const micPitch = detectPitchFromMic();
             state.cachedMicPitch = micPitch;
+            _lastPitchClarity = _yinClarity;
             pushPitchSample(micPitch, _yinClarity);
         }
     } else if (state.vibratoAnalysis.pitchBuf.length) {
@@ -5540,6 +5769,9 @@ function drawVisualizer() {
             canvasCtx.fillText(label, x, height - 2);
         }
     }
+
+    // ASTC tone-color bands (background): drawn after the grid, under every spectrum
+    if (state.astcVisible) drawAstcBands(width, height);
 
     const nyquist = audioCtx ? audioCtx.sampleRate / 2 : 24000;
 
@@ -6463,6 +6695,11 @@ function drawVisualizer() {
                 canvasCtx.fillText(HARMONIC_LABEL(h), x, y - 8);
             }
         }
+
+        // ASTC spectral bundles from the synthesized spectrum (throttled to 10 Hz)
+        if (state.astcVisible) {
+            updateAstcBundles(dataArray, nyquist, f0, minDb, dbRange, 1.5, nowT);
+        }
     }
 
     // 2. Draw Live Microphone / Playback Spectrum (Green, outline only)
@@ -6480,6 +6717,19 @@ function drawVisualizer() {
         }
 
         drawSpectrum(micAnalyser, 'rgba(79, 150, 80, 0.95)', null, 1.2, state.cachedMicData);
+
+        // ASTC spectral bundles from the mic / playback spectrum (throttled to 10 Hz).
+        // Only while the detected pitch is trustworthy; an unvoiced stretch keeps the
+        // last bundles for ASTC_HOLD_MS and then drops them. While the synth is also
+        // playing its own (earlier) update wins the 100 ms slot.
+        if (state.astcVisible) {
+            if (state.cachedMicData && state.cachedMicPitch > 0 && _lastPitchClarity > 0.5) {
+                updateAstcBundles(state.cachedMicData, audioCtx.sampleRate / 2, state.cachedMicPitch,
+                    micAnalyser.minDecibels, micAnalyser.maxDecibels - micAnalyser.minDecibels, 1.2, nowT);
+            } else {
+                holdOrClearAstcBundles(nowT);
+            }
+        }
 
         // --- Mic spectrum peak Hz labels ---
         // Find local maxima in the mic spectrum and label each with its Hz.
@@ -6916,6 +7166,12 @@ function drawVisualizer() {
                 canvasCtx.restore();
             }
         }
+    }
+
+    // ASTC foreground: the band ruler above the frequency axis + the bundle vowels
+    if (state.astcVisible) {
+        drawAstcLabelStrip(width, height);
+        drawAstcBundles(width, height);
     }
 
     // Parametric playback EQ overlay (desktop, recording playback only) — drawn on top.
@@ -9382,7 +9638,7 @@ if (window.RecordingsDB) {
 })();
 
 // App version — bottom-right corner + faint header suffix (bump on each release)
-const APP_VERSION = 'v1.56.0';
+const APP_VERSION = 'v1.57.0';
 (() => {
     // The #app-version element is parsed AFTER this script tag, so on first run
     // getElementById returns null. Defer to DOMContentLoaded if the DOM isn't ready.
@@ -9896,6 +10152,35 @@ if (els.btnRoughness) {
         state.roughnessVisible = !state.roughnessVisible;
         els.btnRoughness.classList.toggle('roughness-active', state.roughnessVisible);
         updateRoughnessReadout();
+    });
+}
+
+// ASTC overlay toggle: show/hide the tone-color legend + the live bundle readout.
+// Both elements are optional (PC and mobile markup), so every access is guarded.
+function updateAstcReadout() {
+    const visible = state.astcVisible;
+    if (els.astcLegend) {
+        els.astcLegend.style.display = visible ? '' : 'none';
+    }
+    if (!visible || !els.astcLegend) return;
+    const out = els.astcLegend.querySelector('#astc-bundle-readout');
+    if (!out) return;
+    const bundles = state.astcBundles;
+    const txt = (bundles && bundles.length)
+        ? bundles.map(b => `${b.label}${b.weakBridge ? '(wb)' : ''} ×${b.complexity}`).join(' · ')
+        : '— ▶ Play または マイク入力中に表示されます';
+    setTextIfChanged(out, txt);
+}
+
+if (els.btnAstc) {
+    els.btnAstc.addEventListener('click', () => {
+        state.astcVisible = !state.astcVisible;
+        els.btnAstc.classList.toggle('astc-active', state.astcVisible);
+        if (!state.astcVisible) {
+            state.astcBundles = null;
+            _astcScale = null;
+        }
+        updateAstcReadout();
     });
 }
 

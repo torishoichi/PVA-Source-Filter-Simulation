@@ -2919,3 +2919,119 @@ body.spectrum-collapsed .spectrum-slope-row {
     border-bottom-right-radius: 10px;
 }
 
+
+/* ============================================================================
+   ASTC overlay (Absolute Spectral Tone Color — Howell 2016)
+   Compact port of the PC .astc-legend, derived from .roughness-legend.
+   ============================================================================ */
+.inline-toggle-btn.astc-active {
+    background: #7b4bd8;
+    border-color: #7b4bd8;
+    color: #fff;
+}
+
+/* The spectrum toolbar now carries 4 controls (Vol / Slope / Rough / ASTC).
+   Let that one row wrap instead of squeezing the Volume slider down to ~36px
+   on a 390px phone. Scoped with :has() so the mic / slope rows are untouched;
+   browsers without :has() simply keep the previous single-row behaviour. */
+.spectrum-toolbar:has(#astc-toggle) {
+    flex-wrap: wrap;
+    row-gap: 8px;
+}
+/* .toolbar-item is flex:1 1 0, so it would shrink to nothing before the row ever
+   wrapped — give the Volume item a real basis so the ASTC pill wraps instead. */
+.spectrum-toolbar:has(#astc-toggle) .toolbar-item:not(.toolbar-item-fit) {
+    flex: 1 1 150px;
+}
+
+.astc-legend {
+    margin: 4px 0 2px;
+    padding: 10px 12px;
+    background: var(--bg-soft);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    font-size: 0.74rem;
+    color: var(--text-primary);
+}
+.al-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 8px;
+    margin-bottom: 6px;
+    padding-bottom: 5px;
+    border-bottom: 1px dashed var(--glass-border);
+}
+.al-title {
+    font-weight: 700;
+    font-size: 0.78rem;
+}
+.al-src {
+    font-size: 0.64rem;
+    color: var(--text-secondary);
+}
+.al-bands {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 3px 8px;
+    margin-bottom: 7px;
+}
+.al-band {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.72rem;
+    font-weight: 700;
+    min-width: 0;
+}
+.al-band em {
+    font-style: normal;
+    font-weight: 400;
+    font-size: 0.64rem;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.al-chip {
+    width: 9px;
+    height: 9px;
+    border-radius: 2px;
+    display: inline-block;
+    flex: 0 0 auto;
+    background: #888;
+}
+.al-band[data-astc="u"]        .al-chip { background: rgb(156, 60, 217); }
+.al-band[data-astc="o"]        .al-chip { background: rgb(33, 150, 243); }
+.al-band[data-astc="open-o"]   .al-chip { background: rgb(0, 172, 193); }
+.al-band[data-astc="script-a"] .al-chip { background: rgb(46, 156, 100); }
+.al-band[data-astc="a"]        .al-chip { background: rgb(139, 195, 74); }
+.al-band[data-astc="ae"]       .al-chip { background: rgb(222, 178, 32); }
+.al-band[data-astc="i"]        .al-chip { background: rgb(230, 139, 48); }
+.al-band[data-astc="iB"]       .al-chip { background: rgb(210, 69, 69); }
+.al-readout-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 5px;
+}
+.al-readout-label {
+    font-size: 0.68rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+.al-readout {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-weight: 700;
+    font-size: 0.8rem;
+    color: #7b4bd8;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.al-note {
+    font-size: 0.66rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}

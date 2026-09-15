@@ -1568,6 +1568,195 @@
     return outF;
   }
 
+  // ----------------------------------------------------------------------------
+  // ASTC — Absolute Spectral Tone Color (Howell 2016) + local spectral coherence
+  // ("bundle vowels").
+  //
+  //   Ian Howell, "Parsing the Spectral Envelope: Toward a General Theory of
+  //   Vocal Tone Color" (DMA thesis, New England Conservatory, 2016), Figure 15.
+  //
+  // A simple tone (a lone sine / a single harmonic) carries a vowel quality that
+  // depends ONLY on its frequency. ASTC_BANDS is Howell's Figure 15 scale, with
+  // each band edge taken as the geometric mean of the two adjacent note names.
+  // A spectral peak — a "bundle" of adjacent harmonics bounded on both sides by
+  // lower-amplitude harmonics — is heard as the ASTC of its amplitude-weighted
+  // mean frequency (its spectral centroid), written "<o", "<ɑ", …
+  // ----------------------------------------------------------------------------
+  const ASTC_BANDS = [
+    { key: 'u',  label: '~u',        lo: 0,      hi: 538.6,  notes: '≤C5' },
+    { key: 'o',  label: '~o',        lo: 538.6,  hi: 761.7,  notes: 'C♯5–F♯5' },
+    { key: 'ɔ',  label: '~ɔ',        lo: 761.7,  hi: 1141.2, notes: 'G5–C♯6' },
+    { key: 'ɑ',  label: '~ɑ',        lo: 1141.2, hi: 1523.3, notes: 'D6–F♯6' },
+    { key: 'a',  label: '~a',        lo: 1523.3, hi: 2282.4, notes: 'G6–C♯7' },
+    { key: 'æ',  label: '~æ/ɛ/e',    lo: 2282.4, hi: 2875.7, notes: 'D7–F7' },
+    { key: 'i',  label: '~i',        lo: 2875.7, hi: 6093.4, notes: 'G♭7–F♯8' },
+    { key: 'iB', label: '~bright i', lo: 6093.4, hi: Infinity, notes: 'G8↑' },
+  ];
+  for (let i = 0; i < ASTC_BANDS.length; i++) {
+    ASTC_BANDS[i].index = i;
+    Object.freeze(ASTC_BANDS[i]);
+  }
+  Object.freeze(ASTC_BANDS);
+
+  // 0..7, or -1 for a non-positive / non-finite frequency.
+  function astcIndex(freqHz) {
+    const f = +freqHz;
+    if (!(f > 0) || !isFinite(f)) return -1;
+    for (let i = 0; i < ASTC_BANDS.length; i++) {
+      if (f >= ASTC_BANDS[i].lo && f < ASTC_BANDS[i].hi) return i;
+    }
+    return -1;
+  }
+
+  // The (frozen) band object for this frequency, or null.
+  function astcOf(freqHz) {
+    const i = astcIndex(freqHz);
+    return i < 0 ? null : ASTC_BANDS[i];
+  }
+
+  // Bundle label: "~o" → "<o", "~æ/ɛ/e" → "<æ/ɛ/e", "~bright i" → "<bright i".
+  function astcBundleLabel(band) {
+    return band ? '<' + band.label.slice(1) : '';
+  }
+
+  // Glasberg & Moore (1990) ERB at centre frequency f (Hz). Mirrors main.js.
+  function erbHz(f) {
+    return 24.7 * (4.37 * f / 1000 + 1);
+  }
+
+  /*
+   * spectralBundles(harmonics, opts) — group measured harmonics into spectral
+   * peaks ("bundles") and give each one its perceived ASTC vowel.
+   *
+   *   harmonics: [{ n, freq, db }]  — db is any consistent relative dB scale;
+   *              missing harmonics are simply absent (neighbours stay adjacent).
+   *   opts:      { f0, floorDb = 40, minTroughDb = 3, maxHarmonics = 40 }
+   *
+   * Returns bundles in ascending frequency order:
+   *   { astc, label, centroid, weakBridge, complexity, rough, isFundamental,
+   *     peakDb, peakN, peakFreq, nFrom, nTo, freqFrom, freqTo, harmonics }
+   */
+  function spectralBundles(harmonics, opts) {
+    opts = opts || {};
+    const floorDb = opts.floorDb != null ? opts.floorDb : 40;
+    const minTroughDb = opts.minTroughDb != null ? opts.minTroughDb : 3;
+    const maxHarmonics = opts.maxHarmonics != null ? opts.maxHarmonics : 40;
+    const f0 = opts.f0 != null ? +opts.f0 : 0;
+    if (!harmonics || !harmonics.length) return [];
+
+    // (1) sanitize → ascending by frequency → cap count → drop the noise floor
+    let hs = [];
+    for (let i = 0; i < harmonics.length; i++) {
+      const h = harmonics[i];
+      if (!h) continue;
+      const freq = +h.freq, db = +h.db;
+      if (!isFinite(freq) || freq <= 0 || !isFinite(db)) continue;
+      hs.push({ n: h.n, freq, db });
+    }
+    if (!hs.length) return [];
+    hs.sort((a, b) => a.freq - b.freq);
+    if (hs.length > maxHarmonics) hs = hs.slice(0, maxHarmonics);
+    let maxDb = -Infinity;
+    for (let i = 0; i < hs.length; i++) if (hs[i].db > maxDb) maxDb = hs[i].db;
+    hs = hs.filter((h) => h.db >= maxDb - floorDb);
+    if (!hs.length) return [];
+
+    // (2) linear amplitude weights
+    for (let i = 0; i < hs.length; i++) hs[i].amp = Math.pow(10, hs[i].db / 20);
+
+    // (3) trough detection — a local minimum whose NEAREST local maxima on both
+    //     sides stand at least minTroughDb above it splits the series. Shallow
+    //     dips inside one broad peak do not split.
+    const N = hs.length;
+    const splitAfter = new Array(N).fill(false);
+    for (let k = 1; k < N - 1; k++) {
+      const v = hs[k].db;
+      if (!(v <= hs[k - 1].db && v <= hs[k + 1].db)) continue;
+      if (v === hs[k - 1].db && v === hs[k + 1].db) continue; // flat run, no trough
+      let left = -Infinity;
+      for (let i = k - 1; i >= 0; i--) {
+        if (hs[i].db >= left) left = hs[i].db; else break;    // stop past the nearest peak
+      }
+      let right = -Infinity;
+      for (let i = k + 1; i < N; i++) {
+        if (hs[i].db >= right) right = hs[i].db; else break;
+      }
+      if (left >= v + minTroughDb && right >= v + minTroughDb) splitAfter[k] = true;
+    }
+
+    // Build the contiguous groups (the trough harmonic closes the lower bundle).
+    let groups = [];
+    let cur = [hs[0]];
+    for (let k = 1; k < N; k++) {
+      if (splitAfter[k - 1]) { groups.push(cur); cur = []; }
+      cur.push(hs[k]);
+    }
+    groups.push(cur);
+
+    // (4) a lone harmonic that is not H1 cannot be a bundle → merge it into the
+    //     louder neighbour (tie → the upper one). H1 may stand alone (Howell's
+    //     "obvious true fundamental").
+    const hasFundamental = (g) => g.some((h) => h.n === 1);
+    const groupPeakDb = (g) => g.reduce((m, h) => Math.max(m, h.db), -Infinity);
+    let merged = true;
+    while (merged && groups.length > 1) {
+      merged = false;
+      for (let gi = 0; gi < groups.length; gi++) {
+        if (groups[gi].length !== 1 || hasFundamental(groups[gi])) continue;
+        const lo = gi > 0 ? groups[gi - 1] : null;
+        const hi = gi < groups.length - 1 ? groups[gi + 1] : null;
+        let target = -1;
+        if (lo && hi) target = groupPeakDb(hi) >= groupPeakDb(lo) ? gi + 1 : gi - 1;
+        else if (hi) target = gi + 1;
+        else if (lo) target = gi - 1;
+        if (target < 0) continue;
+        const a = Math.min(gi, target), b = Math.max(gi, target);
+        groups[a] = groups[a].concat(groups[b]);
+        groups.splice(b, 1);
+        merged = true;
+        break;
+      }
+    }
+
+    // (5) describe every bundle
+    const out = [];
+    for (let gi = 0; gi < groups.length; gi++) {
+      const g = groups[gi];
+      let sw = 0, swf = 0, peakDb = -Infinity, peak = g[0];
+      for (let i = 0; i < g.length; i++) {
+        sw += g[i].amp;
+        swf += g[i].amp * g[i].freq;
+        if (g[i].db > peakDb) { peakDb = g[i].db; peak = g[i]; }
+      }
+      const centroid = sw > 0 ? swf / sw : g[0].freq;
+      const astc = astcOf(centroid);
+      let inBand = 0, rough = 0;
+      for (let i = 0; i < g.length; i++) {
+        if (astc && g[i].freq >= astc.lo && g[i].freq < astc.hi) inBand++;
+        if (f0 > 0 && f0 < erbHz(g[i].freq)) rough++;
+      }
+      out.push({
+        astc,
+        label: astcBundleLabel(astc),
+        centroid,
+        weakBridge: inBand === 0,
+        complexity: g.length,
+        rough,
+        isFundamental: hasFundamental(g),
+        peakDb,
+        peakN: peak.n,
+        peakFreq: peak.freq,
+        nFrom: g[0].n,
+        nTo: g[g.length - 1].n,
+        freqFrom: g[0].freq,
+        freqTo: g[g.length - 1].freq,
+        harmonics: g.map((h) => ({ n: h.n, freq: h.freq, db: h.db })),
+      });
+    }
+    out.sort((a, b) => a.freqFrom - b.freqFrom);
+    return out;
+  }
+
   const api = {
     fftRadix2, nextPow2, hann,
     burgLPC, durandKerner, lpcFormants, decimate,
@@ -1578,6 +1767,7 @@
     envelopeBeat,
     analyzeVibrato,
     synthVowel,
+    ASTC_BANDS, astcOf, astcIndex, astcBundleLabel, erbHz, spectralBundles,
   };
 
   if (typeof module !== 'undefined' && module.exports) {
